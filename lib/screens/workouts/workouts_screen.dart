@@ -45,36 +45,77 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
   }
 
-  void _showAddWorkoutDialog(BuildContext context) {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Nuova scheda'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(
-            labelText: 'Nome scheda',
-            hintText: 'Es. Push A, Gambe, Full Body...',
-            border: OutlineInputBorder(),
+void _showAddWorkoutDialog(BuildContext context) {
+  final controller = TextEditingController();
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(ctx).viewInsets.bottom,
+        left: 16,
+        right: 16,
+        top: 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
           ),
-          onSubmitted: (_) => _saveWorkout(context, controller.text),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annulla'),
+          const SizedBox(height: 16),
+          Text('Nuova scheda',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 16),
+          TextField(
+            controller: controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Nome scheda',
+              hintText: 'Es. Push A, Gambe, Full Body...',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (_) {
+              Navigator.pop(ctx);
+              _saveWorkout(context, controller.text);
+            },
           ),
-          FilledButton(
-            onPressed: () => _saveWorkout(context, controller.text),
-            child: const Text('Crea'),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Annulla'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _saveWorkout(context, controller.text);
+                },
+                child: const Text('Crea'),
+              ),
+            ],
           ),
+          const SizedBox(height: 16),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   void _saveWorkout(BuildContext context, String name) async {
     if (name.trim().isEmpty) return;
@@ -158,33 +199,77 @@ class _WorkoutCard extends StatelessWidget {
       );
     } else if (value == 'rename') {
       final controller = TextEditingController(text: workout.name);
-      showDialog(
+      showModalBottomSheet(
         context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Rinomina scheda'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 16,
+            right: 16,
+            top: 16,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Annulla'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (controller.text.trim().isNotEmpty) {
-                  context
-                      .read<WorkoutProvider>()
-                      .renameWorkout(workout.key, controller.text.trim());
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('Salva'),
-            ),
-          ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('Rinomina scheda',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Nome scheda',
+                ),
+                onSubmitted: (_) {
+                  if (controller.text.trim().isNotEmpty) {
+                    context.read<WorkoutProvider>().renameWorkout(
+                        workout.key, controller.text.trim());
+                  }
+                  Navigator.pop(ctx);
+                },
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Annulla'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () {
+                      if (controller.text.trim().isNotEmpty) {
+                        context.read<WorkoutProvider>().renameWorkout(
+                            workout.key, controller.text.trim());
+                      }
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text('Salva'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       );
     }
