@@ -1,0 +1,30 @@
+name: app1
+description: "GymApp - Traccia i tuoi allenamenti"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  provider: ^6.1.2
+  fl_chart: ^0.69.0
+  shared_preferences: ^2.3.3
+  audioplayers: ^6.1.0
+  cupertino_icons: ^1.0.8
+  path_provider: ^2.1.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.9
+
+flutter:
+  uses-material-design: true
+  
