@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 'use strict';
 
 self.addEventListener('install', () => {
@@ -30,7 +29,6 @@ self.addEventListener('activate', (event) => {
     })()
   );
 });
-=======
 'use strict';
 
 self.addEventListener('install', () => {
@@ -62,4 +60,3 @@ self.addEventListener('activate', (event) => {
     })()
   );
 });
->>>>>>> 45d0292 (update web app)
