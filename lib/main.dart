@@ -330,7 +330,7 @@ class _MainShellState extends State<MainShell> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      extendBody: false,
+      extendBody: true,
 
       body: PageView(
         controller: _pageController,
@@ -347,32 +347,33 @@ class _MainShellState extends State<MainShell> {
       ),
 
       bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.only(
-          left: 12,
-          right: 12,
-          bottom: 12,
-        ),
+        child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
         child: SnakeNavigationBar.color(
+
           height: 72,
+
+          showSelectedLabels: true,
+          showUnselectedLabels: true,
+
           behaviour: SnakeBarBehaviour.floating,
+
           snakeShape: SnakeShape.circle,
 
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
-          ),
+          snakeViewColor:
+            Theme.of(context).colorScheme.primary,
 
-          elevation: 8,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(32),
+          ),
 
           padding: const EdgeInsets.symmetric(
-            horizontal: 6,
-            vertical: 8,
+            horizontal: 2,
+            vertical: 10,
           ),
 
-          snakeViewColor:
-              Theme.of(context).colorScheme.primary,
-
           backgroundColor: isDark
-              ? const Color(0xFF1F1F1F)
+              ? Colors.grey.shade900
               : Colors.white,
 
           selectedItemColor: Colors.white,
@@ -390,8 +391,8 @@ class _MainShellState extends State<MainShell> {
 
             _pageController.animateToPage(
               index,
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOutCubic,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
             );
           },
 
@@ -418,8 +419,8 @@ class _MainShellState extends State<MainShell> {
             ),
           ],
         ),
-      ));
-  
+      ),
+    ));
   }
 }
 
