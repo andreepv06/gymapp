@@ -238,6 +238,15 @@ class _MainShellState extends State<MainShell> {
     super.dispose();
   }
 
+  void _onNavTap(int index) {
+    context.read<NavigationNotifier>().navigateTo(index);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentIndex = context.watch<NavigationNotifier>().currentIndex;
@@ -261,14 +270,12 @@ class _MainShellState extends State<MainShell> {
       }
     });
 
-    // Colori navbar in base al tema
-    final navBg = isDark
-        ? const Color(0xFF1C1C1E)
-        : Colors.white;
-    final snakeColor = cs.primary;
-    final unselectedColor = isDark
-        ? Colors.grey.shade500
-        : Colors.grey.shade600;
+    final navBg = isDark ? const Color(0xFF1C1C1E) : Colors.white;
+    final unselectedColor =
+        isDark ? Colors.grey.shade500 : Colors.grey.shade600;
+
+    // Altezza safe area bottom
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -286,63 +293,62 @@ class _MainShellState extends State<MainShell> {
           SettingsScreen(),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: SizedBox(
-            height: 64,
-            child: SnakeNavigationBar.color(
-              height: 64,
-              showSelectedLabels: true,
-              showUnselectedLabels: true,
-              behaviour: SnakeBarBehaviour.floating,
-              snakeShape: SnakeShape.circle,
-              snakeViewColor: snakeColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(36),
-              ),
-              // Padding interno ridotto per centrare icone nel cerchio
-              padding: const EdgeInsets.symmetric(
-                horizontal: 4,
-                vertical: 6,
-              ),
-              elevation: 8,
-              backgroundColor: navBg,
-              selectedItemColor: Colors.white,
-              unselectedItemColor: unselectedColor,
-              currentIndex: currentIndex,
-              onTap: (index) {
-                context.read<NavigationNotifier>().navigateTo(index);
-                _pageController.animateToPage(
-                  index,
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                );
-              },
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.home_rounded, size: 22),
-                  label: 'Home',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.list_alt_rounded, size: 22),
-                  label: 'Schede',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.play_circle_fill_rounded, size: 22),
-                  label: 'Sessione',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.bar_chart_rounded, size: 22),
-                  label: 'Storico',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.settings_rounded, size: 22),
-                  label: 'Impostazioni',
-                ),
-              ],
-            ),
+      bottomNavigationBar: Padding(
+        // Rispetta la safe area bottom (notch iPhone) + margine visivo
+        padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding + 12),
+        child: SnakeNavigationBar.color(
+          // Altezza fissa della pill
+          height: 60,
+
+          behaviour: SnakeBarBehaviour.floating,
+          snakeShape: SnakeShape.circle,
+
+          // Il cerchio indicatore usa il colore primary
+          snakeViewColor: cs.primary,
+
+          // Forma pill arrotondata
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(40),
           ),
+
+          // Padding ZERO — lascia che la libreria gestisca l'allineamento
+          padding: EdgeInsets.zero,
+
+          elevation: 12,
+          backgroundColor: navBg,
+
+          // Icona selezionata: bianca (sul cerchio colorato)
+          selectedItemColor: Colors.white,
+          unselectedItemColor: unselectedColor,
+
+          showSelectedLabels: false,
+          showUnselectedLabels: false,
+
+          currentIndex: currentIndex,
+          onTap: _onNavTap,
+
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_rounded, size: 24),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.list_alt_rounded, size: 24),
+              label: 'Schede',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.play_circle_fill_rounded, size: 24),
+              label: 'Sessione',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.bar_chart_rounded, size: 24),
+              label: 'Storico',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings_rounded, size: 24),
+              label: 'Impostazioni',
+            ),
+          ],
         ),
       ),
     );
