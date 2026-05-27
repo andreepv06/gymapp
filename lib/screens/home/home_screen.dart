@@ -34,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 140,
+            expandedHeight: 130,
             floating: false,
             pinned: true,
             backgroundColor: cs.surface,
@@ -77,18 +77,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-
-                // Bottone ALLENATI in evidenza — grande e prominente
+                // Bottone principale ALLENATI
                 _MainActionButton(
                   onTap: () =>
                       context.read<NavigationNotifier>().navigateTo(2),
                 ),
                 const SizedBox(height: 12),
 
-                // Azioni secondarie: Schede e Storico
+                // Azioni secondarie
                 Row(
                   children: [
                     Expanded(
@@ -97,8 +96,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         label: 'Schede',
                         color: cs.primaryContainer,
                         iconColor: cs.onPrimaryContainer,
-                        onTap: () =>
-                            context.read<NavigationNotifier>().navigateTo(1),
+                        onTap: () => context
+                            .read<NavigationNotifier>()
+                            .navigateTo(1),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -108,15 +108,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         label: 'Storico',
                         color: cs.tertiaryContainer,
                         iconColor: cs.onTertiaryContainer,
-                        onTap: () =>
-                            context.read<NavigationNotifier>().navigateTo(3),
+                        onTap: () => context
+                            .read<NavigationNotifier>()
+                            .navigateTo(3),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
 
-                // Esercizi recenti
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -163,7 +163,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// Bottone principale ALLENATI — grande e prominente
 class _MainActionButton extends StatelessWidget {
   final VoidCallback onTap;
   const _MainActionButton({required this.onTap});
@@ -171,28 +170,37 @@ class _MainActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Usa secondaryContainer in tema scuro, primary in tema chiaro
+    // così il contrasto è sempre garantito
+    final bgColor = isDark ? cs.secondaryContainer : cs.primary;
+    final fgColor = isDark ? cs.onSecondaryContainer : cs.onPrimary;
+    final iconBgColor = isDark
+        ? cs.secondary.withOpacity(0.3)
+        : Colors.white.withOpacity(0.2);
 
     return Material(
-      color: cs.primary,
+      color: bgColor,
       borderRadius: BorderRadius.circular(20),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
           child: Row(
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: 54,
+                height: 54,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: iconBgColor,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.play_circle_filled_rounded,
-                  color: Colors.white,
-                  size: 34,
+                  color: fgColor,
+                  size: 32,
                 ),
               ),
               const SizedBox(width: 18),
@@ -202,8 +210,11 @@ class _MainActionButton extends StatelessWidget {
                   children: [
                     Text(
                       'Inizia allenamento',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: Colors.white,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(
+                            color: fgColor,
                             fontWeight: FontWeight.w800,
                           ),
                     ),
@@ -211,7 +222,7 @@ class _MainActionButton extends StatelessWidget {
                     Text(
                       'Seleziona una scheda e allenati',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.8),
+                        color: fgColor.withOpacity(0.75),
                         fontSize: 13,
                       ),
                     ),
@@ -220,8 +231,8 @@ class _MainActionButton extends StatelessWidget {
               ),
               Icon(
                 Icons.arrow_forward_ios_rounded,
-                color: Colors.white.withOpacity(0.7),
-                size: 18,
+                color: fgColor.withOpacity(0.6),
+                size: 17,
               ),
             ],
           ),
@@ -231,7 +242,6 @@ class _MainActionButton extends StatelessWidget {
   }
 }
 
-// Card secondaria per Schede e Storico
 class _SecondaryActionCard extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -260,7 +270,7 @@ class _SecondaryActionCard extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 22, color: iconColor),
+              Icon(icon, size: 20, color: iconColor),
               const SizedBox(width: 8),
               Text(
                 label,
@@ -320,7 +330,8 @@ class _ExercisesPreview extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
               ),
               if (i < preview.length - 1)
-                Divider(height: 1, indent: 56, color: cs.outlineVariant),
+                Divider(
+                    height: 1, indent: 56, color: cs.outlineVariant),
             ],
           );
         }).toList(),

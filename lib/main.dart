@@ -38,9 +38,7 @@ void main() async {
 
 class NavigationNotifier extends ChangeNotifier {
   int _currentIndex = 0;
-
   int get currentIndex => _currentIndex;
-
   void navigateTo(int index) {
     _currentIndex = index;
     notifyListeners();
@@ -83,35 +81,20 @@ class MyApp extends StatelessWidget {
     return ThemeData(
       colorScheme: colorScheme,
       useMaterial3: true,
-
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.5,
-        ),
-        headlineMedium: TextStyle(
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.5,
-        ),
-        headlineSmall: TextStyle(
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.3,
-        ),
+        headlineLarge: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineMedium: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineSmall: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
         titleLarge: TextStyle(fontWeight: FontWeight.w600),
         titleMedium: TextStyle(fontWeight: FontWeight.w600),
         bodyLarge: TextStyle(letterSpacing: 0.1),
       ),
-
       scaffoldBackgroundColor: colorScheme.surface,
-
       cardTheme: CardThemeData(
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         surfaceTintColor: colorScheme.surfaceTint,
       ),
-
       appBarTheme: AppBarTheme(
         elevation: 0,
         scrolledUnderElevation: 1,
@@ -125,91 +108,53 @@ class MyApp extends StatelessWidget {
           letterSpacing: -0.3,
         ),
       ),
-
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.4),
-
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
-
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: colorScheme.outlineVariant,
-            width: 1,
-          ),
+          borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),
         ),
-
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: colorScheme.primary,
-            width: 2,
-          ),
+          borderSide: BorderSide(color: colorScheme.primary, width: 2),
         ),
-
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: colorScheme.error,
-            width: 1,
-          ),
+          borderSide: BorderSide(color: colorScheme.error, width: 1),
         ),
-
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
-
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(double.infinity, 50),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          textStyle: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
-
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          textStyle: const TextStyle(
-            fontWeight: FontWeight.w600,
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
-
       dialogTheme: DialogThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         elevation: 0,
       ),
-
       bottomSheetTheme: const BottomSheetThemeData(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(24),
-          ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         elevation: 0,
       ),
-
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -244,15 +189,11 @@ class _AppEntryState extends State<AppEntry> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.fitness_center,
-                size: 48,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+              Icon(Icons.fitness_center,
+                  size: 48, color: Theme.of(context).colorScheme.primary),
               const SizedBox(height: 16),
               CircularProgressIndicator(
-                color: Theme.of(context).colorScheme.primary,
-              ),
+                  color: Theme.of(context).colorScheme.primary),
             ],
           ),
         ),
@@ -265,9 +206,7 @@ class _AppEntryState extends State<AppEntry> {
       return LoginScreen(
         onLoginSuccess: () {
           context.read<AuthProvider>().setLoggedIn(
-                context.read<AuthProvider>().userEmail ?? '',
-              );
-
+              context.read<AuthProvider>().userEmail ?? '');
           setState(() {});
         },
       );
@@ -301,21 +240,15 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex =
-        context.watch<NavigationNotifier>().currentIndex;
+    final currentIndex = context.watch<NavigationNotifier>().currentIndex;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
 
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
-
-    SystemChrome.setSystemUIOverlayStyle(
-      SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness:
-            isDark ? Brightness.light : Brightness.dark,
-        statusBarBrightness:
-            isDark ? Brightness.dark : Brightness.light,
-      ),
-    );
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+    ));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_pageController.hasClients &&
@@ -328,10 +261,18 @@ class _MainShellState extends State<MainShell> {
       }
     });
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      extendBody: true,
+    // Colori navbar in base al tema
+    final navBg = isDark
+        ? const Color(0xFF1C1C1E)
+        : Colors.white;
+    final snakeColor = cs.primary;
+    final unselectedColor = isDark
+        ? Colors.grey.shade500
+        : Colors.grey.shade600;
 
+    return Scaffold(
+      backgroundColor: cs.surface,
+      extendBody: true,
       body: PageView(
         controller: _pageController,
         onPageChanged: (index) {
@@ -345,82 +286,65 @@ class _MainShellState extends State<MainShell> {
           SettingsScreen(),
         ],
       ),
-
       bottomNavigationBar: SafeArea(
         child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-        child: SnakeNavigationBar.color(
-
-          height: 72,
-
-          showSelectedLabels: true,
-          showUnselectedLabels: true,
-
-          behaviour: SnakeBarBehaviour.floating,
-
-          snakeShape: SnakeShape.circle,
-
-          snakeViewColor:
-            Theme.of(context).colorScheme.primary,
-
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(32),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: SizedBox(
+            height: 64,
+            child: SnakeNavigationBar.color(
+              height: 64,
+              showSelectedLabels: true,
+              showUnselectedLabels: true,
+              behaviour: SnakeBarBehaviour.floating,
+              snakeShape: SnakeShape.circle,
+              snakeViewColor: snakeColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(36),
+              ),
+              // Padding interno ridotto per centrare icone nel cerchio
+              padding: const EdgeInsets.symmetric(
+                horizontal: 4,
+                vertical: 6,
+              ),
+              elevation: 8,
+              backgroundColor: navBg,
+              selectedItemColor: Colors.white,
+              unselectedItemColor: unselectedColor,
+              currentIndex: currentIndex,
+              onTap: (index) {
+                context.read<NavigationNotifier>().navigateTo(index);
+                _pageController.animateToPage(
+                  index,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              },
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home_rounded, size: 22),
+                  label: 'Home',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.list_alt_rounded, size: 22),
+                  label: 'Schede',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.play_circle_fill_rounded, size: 22),
+                  label: 'Sessione',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.bar_chart_rounded, size: 22),
+                  label: 'Storico',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.settings_rounded, size: 22),
+                  label: 'Impostazioni',
+                ),
+              ],
+            ),
           ),
-
-          padding: const EdgeInsets.symmetric(
-            horizontal: 2,
-            vertical: 10,
-          ),
-
-          backgroundColor: isDark
-              ? Colors.grey.shade900
-              : Colors.white,
-
-          selectedItemColor: Colors.white,
-
-          unselectedItemColor: isDark
-              ? Colors.grey.shade400
-              : Colors.grey.shade700,
-
-          currentIndex: currentIndex,
-
-          onTap: (index) {
-            context
-                .read<NavigationNotifier>()
-                .navigateTo(index);
-
-            _pageController.animateToPage(
-              index,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-            );
-          },
-
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_rounded),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.list_alt_rounded),
-              label: 'Schede',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.play_circle_fill_rounded),
-              label: 'Sessione',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart_rounded),
-              label: 'Storico',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings_rounded),
-              label: 'Settings',
-            ),
-          ],
         ),
       ),
-    ));
+    );
   }
 }
-
