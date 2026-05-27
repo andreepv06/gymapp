@@ -346,17 +346,25 @@ class _MainShellState extends State<MainShell> {
         ],
       ),
 
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
         child: SnakeNavigationBar.color(
+
+          showSelectedLabels: true,
+          showUnselectedLabels: true,
+
           behaviour: SnakeBarBehaviour.floating,
           snakeShape: SnakeShape.circle,
 
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(32),
           ),
 
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 12,
+          ),
 
           backgroundColor: isDark
               ? Colors.grey.shade900
@@ -409,6 +417,6 @@ class _MainShellState extends State<MainShell> {
           ],
         ),
       ),
-    );
+    ));
   }
 }
