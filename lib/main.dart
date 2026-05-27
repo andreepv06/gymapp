@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_snake_navigationbar/flutter_snake_navigationbar.dart';
 
 import 'db/hive_database.dart';
 import 'providers/exercise_provider.dart';
@@ -77,7 +76,6 @@ class MyApp extends StatelessWidget {
       seedColor: const Color(0xFF6750A4),
       brightness: brightness,
     );
-
     return ThemeData(
       colorScheme: colorScheme,
       useMaterial3: true,
@@ -270,13 +268,6 @@ class _MainShellState extends State<MainShell> {
       }
     });
 
-    final navBg = isDark ? const Color(0xFF1C1C1E) : Colors.white;
-    final unselectedColor =
-        isDark ? Colors.grey.shade500 : Colors.grey.shade600;
-
-    // Altezza safe area bottom
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-
     return Scaffold(
       backgroundColor: cs.surface,
       extendBody: true,
@@ -293,63 +284,136 @@ class _MainShellState extends State<MainShell> {
           SettingsScreen(),
         ],
       ),
-      bottomNavigationBar: Padding(
-        // Rispetta la safe area bottom (notch iPhone) + margine visivo
-        padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding + 12),
-        child: SnakeNavigationBar.color(
-          // Altezza fissa della pill
-          height: 60,
+      bottomNavigationBar: _FloatingNavBar(
+        currentIndex: currentIndex,
+        onTap: _onNavTap,
+        isDark: isDark,
+      ),
+    );
+  }
+}
 
-          behaviour: SnakeBarBehaviour.floating,
-          snakeShape: SnakeShape.circle,
+// ---- Navbar floating completamente custom ----
 
-          // Il cerchio indicatore usa il colore primary
-          snakeViewColor: cs.primary,
+class _FloatingNavBar extends StatelessWidget {
+  final int currentIndex;
+  final void Function(int) onTap;
+  final bool isDark;
 
-          // Forma pill arrotondata
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(40),
-          ),
+  const _FloatingNavBar({
+    required this.currentIndex,
+    required this.onTap,
+    required this.isDark,
+  });
 
-          // Padding ZERO — lascia che la libreria gestisca l'allineamento
-          padding: EdgeInsets.zero,
+  static const _items = [
+    _NavItem(icon: Icons.home_rounded, label: 'Home'),
+    _NavItem(icon: Icons.list_alt_rounded, label: 'Schede'),
+    _NavItem(icon: Icons.play_circle_fill_rounded, label: 'Sessione'),
+    _NavItem(icon: Icons.bar_chart_rounded, label: 'Storico'),
+    _NavItem(icon: Icons.settings_rounded, label: 'Impostazioni'),
+  ];
 
-          elevation: 12,
-          backgroundColor: navBg,
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
-          // Icona selezionata: bianca (sul cerchio colorato)
-          selectedItemColor: Colors.white,
-          unselectedItemColor: unselectedColor,
+    final navBg = isDark ? const Color(0xFF1C1C1E) : Colors.white;
 
-          showSelectedLabels: false,
-          showUnselectedLabels: false,
-
-          currentIndex: currentIndex,
-          onTap: _onNavTap,
-
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_rounded, size: 24),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.list_alt_rounded, size: 24),
-              label: 'Schede',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.play_circle_fill_rounded, size: 24),
-              label: 'Sessione',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart_rounded, size: 24),
-              label: 'Storico',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings_rounded, size: 24),
-              label: 'Impostazioni',
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding + 14),
+      child: Container(
+        height: 64,
+        decoration: BoxDecoration(
+          color: navBg,
+          borderRadius: BorderRadius.circular(36),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.4 : 0.12),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
+        child: Row(
+          children: List.generate(_items.length, (i) {
+            final selected = i == currentIndex;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => onTap(i),
+                behavior: HitTestBehavior.opaque,
+                child: _NavItemWidget(
+                  item: _items[i],
+                  selected: selected,
+                  isDark: isDark,
+                  primaryColor: cs.primary,
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem {
+  final IconData icon;
+  final String label;
+  const _NavItem({required this.icon, required this.label});
+}
+
+class _NavItemWidget extends StatelessWidget {
+  final _NavItem item;
+  final bool selected;
+  final bool isDark;
+  final Color primaryColor;
+
+  const _NavItemWidget({
+    required this.item,
+    required this.selected,
+    required this.isDark,
+    required this.primaryColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final unselectedColor =
+        isDark ? Colors.grey.shade500 : Colors.grey.shade500;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            width: selected ? 48 : 0,
+            height: selected ? 36 : 0,
+            decoration: BoxDecoration(
+              color: selected ? primaryColor : Colors.transparent,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: selected
+                ? Icon(item.icon, color: Colors.white, size: 22)
+                : const SizedBox.shrink(),
+          ),
+          if (!selected) ...[
+            Icon(item.icon, color: unselectedColor, size: 22),
+            const SizedBox(height: 2),
+            Text(
+              item.label,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w500,
+                color: unselectedColor,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

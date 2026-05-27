@@ -23,21 +23,34 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     final provider = context.watch<WorkoutProvider>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Le mie schede')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddWorkoutDialog(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Nuova scheda'),
+      appBar: AppBar(
+        title: const Text('Le mie schede'),
+        actions: [
+          // Bottone aggiungi sempre visibile in alto a destra
+          IconButton(
+            onPressed: () => _showAddWorkoutDialog(context),
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Nuova scheda',
+          ),
+        ],
       ),
       body: provider.workouts.isEmpty
-          ? const _EmptyState()
+          ? _EmptyState(onAdd: () => _showAddWorkoutDialog(context))
           : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
               itemCount: provider.workouts.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (_, i) =>
                   _WorkoutCard(workout: provider.workouts[i]),
             ),
+      // FAB solo quando ci sono già schede
+      floatingActionButton: provider.workouts.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: () => _showAddWorkoutDialog(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Nuova scheda'),
+            )
+          : null,
     );
   }
 
@@ -76,11 +89,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
               const SizedBox(height: 4),
               Text(
                 'Dai un nome alla tua scheda di allenamento',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(
-                        color: Theme.of(context).colorScheme.outline),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline),
               ),
               const SizedBox(height: 20),
               TextField(
@@ -164,8 +174,8 @@ class _WorkoutCard extends StatelessWidget {
             color: cs.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
-          child:
-              Icon(Icons.list_alt, color: cs.onPrimaryContainer, size: 22),
+          child: Icon(Icons.list_alt,
+              color: cs.onPrimaryContainer, size: 22),
         ),
         title: Text(workout.name,
             style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -228,8 +238,7 @@ class _WorkoutCard extends StatelessWidget {
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Annulla')),
             FilledButton(
-              style:
-                  FilledButton.styleFrom(backgroundColor: Colors.red),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
               onPressed: () {
                 context.read<WorkoutProvider>().deleteWorkout(workout.key);
                 Navigator.pop(context);
@@ -319,9 +328,9 @@ class _WorkoutCard extends StatelessWidget {
   }
 }
 
-// Empty state — solo testo, nessun bottone (c'è il FAB)
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  final VoidCallback onAdd;
+  const _EmptyState({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
@@ -352,12 +361,22 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Premi + in basso per creare\nla tua prima scheda',
+              'Crea la tua prima scheda\nper iniziare ad allenarti',
               textAlign: TextAlign.center,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
                   ?.copyWith(color: cs.outline),
+            ),
+            const SizedBox(height: 28),
+            // Bottone centrale — unico pulsante per creare
+            FilledButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add),
+              label: const Text('Crea scheda'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(200, 50),
+              ),
             ),
           ],
         ),
