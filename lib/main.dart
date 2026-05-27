@@ -272,7 +272,7 @@ class _MainShellState extends State<MainShell> {
         ],
       ),
       bottomNavigationBar: NavigationBar(
-        height: 72,
+        height: 85,
         selectedIndex: currentIndex,
         onDestinationSelected: (i) {
           context.read<NavigationNotifier>().navigateTo(i);
