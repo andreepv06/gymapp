@@ -15,8 +15,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() =>
-        context.read<WorkoutProvider>().loadWorkouts());
+    Future.microtask(() => context.read<WorkoutProvider>().loadWorkouts());
   }
 
   @override
@@ -26,6 +25,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Le mie schede'),
+        // centerTitle ereditato dal tema globale (true)
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddWorkoutDialog(context),
@@ -33,102 +33,112 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         label: const Text('Nuova scheda'),
       ),
       body: provider.workouts.isEmpty
-          ? const _EmptyState()
+          ? _EmptyState(onAdd: () => _showAddWorkoutDialog(context))
           : ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
               itemCount: provider.workouts.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (_, i) => _WorkoutCard(
-                workout: provider.workouts[i],
-              ),
+              itemBuilder: (_, i) => _WorkoutCard(workout: provider.workouts[i]),
             ),
     );
   }
 
-void _showAddWorkoutDialog(BuildContext context) {
-  final controller = TextEditingController();
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (ctx) => Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(ctx).viewInsets.bottom,
-        left: 16,
-        right: 16,
-        top: 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+  void _showAddWorkoutDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, _) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 20,
+            right: 20,
+            top: 20,
           ),
-          const SizedBox(height: 16),
-          Text('Nuova scheda',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 16),
-          TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Nome scheda',
-              hintText: 'Es. Push A, Gambe, Full Body...',
-              border: OutlineInputBorder(),
-            ),
-            onSubmitted: (_) {
-              Navigator.pop(ctx);
-              _saveWorkout(context, controller.text);
-            },
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Annulla'),
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: () {
+              const SizedBox(height: 20),
+              Text('Nuova scheda',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 4),
+              Text('Dai un nome alla tua scheda di allenamento',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.outline)),
+              const SizedBox(height: 20),
+              TextField(
+                controller: controller,
+                autofocus: false,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Nome scheda',
+                  hintText: 'Es. Push A, Gambe, Full Body...',
+                  prefixIcon: Icon(Icons.edit_outlined),
+                ),
+                onSubmitted: (_) {
                   Navigator.pop(ctx);
                   _saveWorkout(context, controller.text);
                 },
-                child: const Text('Crea'),
               ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Annulla'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _saveWorkout(context, controller.text);
+                      },
+                      child: const Text('Crea'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
             ],
           ),
-          const SizedBox(height: 16),
-        ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   void _saveWorkout(BuildContext context, String name) async {
     if (name.trim().isEmpty) return;
     final provider = context.read<WorkoutProvider>();
     final id = await provider.addWorkout(name.trim());
     if (context.mounted) {
-      Navigator.pop(context);
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => WorkoutDetailScreen(workoutId: id, workoutName: name.trim()),
+          builder: (_) =>
+              WorkoutDetailScreen(workoutId: id, workoutName: name.trim()),
         ),
-      );
+      ).then((_) {
+        if (context.mounted) {
+          context.read<WorkoutProvider>().loadWorkouts();
+        }
+      });
     }
   }
 }
@@ -139,19 +149,41 @@ class _WorkoutCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Card(
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: cs.primaryContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(Icons.list_alt, color: cs.onPrimaryContainer, size: 22),
+        ),
         title: Text(workout.name,
-            style: const TextStyle(fontWeight: FontWeight.w500)),
-        subtitle: Text(_formatDate(workout.createdAt)),
-        leading: const CircleAvatar(child: Icon(Icons.list_alt)),
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(_formatDate(workout.createdAt),
+            style: TextStyle(fontSize: 12, color: cs.outline)),
         trailing: PopupMenuButton<String>(
           onSelected: (value) => _handleMenu(context, value),
+          icon: Icon(Icons.more_vert, color: cs.outline),
           itemBuilder: (_) => [
-            const PopupMenuItem(value: 'rename', child: Text('Rinomina')),
             const PopupMenuItem(
+                value: 'rename',
+                child: Row(children: [
+                  Icon(Icons.edit_outlined, size: 18),
+                  SizedBox(width: 8),
+                  Text('Rinomina'),
+                ])),
+            PopupMenuItem(
               value: 'delete',
-              child: Text('Elimina', style: TextStyle(color: Colors.red)),
+              child: Row(children: [
+                Icon(Icons.delete_outline, size: 18, color: cs.error),
+                const SizedBox(width: 8),
+                Text('Elimina', style: TextStyle(color: cs.error)),
+              ]),
             ),
           ],
         ),
@@ -163,7 +195,11 @@ class _WorkoutCard extends StatelessWidget {
               workoutName: workout.name,
             ),
           ),
-        ),
+        ).then((_) {
+          if (context.mounted) {
+            context.read<WorkoutProvider>().loadWorkouts();
+          }
+        }),
       ),
     );
   }
@@ -183,16 +219,15 @@ class _WorkoutCard extends StatelessWidget {
           content: Text('Vuoi eliminare "${workout.name}"?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Annulla'),
-            ),
-            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Annulla')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
               onPressed: () {
                 context.read<WorkoutProvider>().deleteWorkout(workout.key);
                 Navigator.pop(context);
               },
-              child: const Text('Elimina',
-                  style: TextStyle(color: Colors.red)),
+              child: const Text('Elimina'),
             ),
           ],
         ),
@@ -202,19 +237,16 @@ class _WorkoutCard extends StatelessWidget {
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
+        useSafeArea: true,
         builder: (ctx) => Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            left: 16,
-            right: 16,
-            top: 16,
+            left: 20,
+            right: 20,
+            top: 20,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(
                 child: Container(
@@ -226,18 +258,18 @@ class _WorkoutCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              Text('Rinomina scheda',
-                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Rinomina scheda',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
-                autofocus: true,
+                autofocus: false,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Nome scheda',
-                ),
+                decoration: const InputDecoration(labelText: 'Nome scheda'),
                 onSubmitted: (_) {
                   if (controller.text.trim().isNotEmpty) {
                     context.read<WorkoutProvider>().renameWorkout(
@@ -248,26 +280,29 @@ class _WorkoutCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Annulla'),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Annulla'),
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () {
-                      if (controller.text.trim().isNotEmpty) {
-                        context.read<WorkoutProvider>().renameWorkout(
-                            workout.key, controller.text.trim());
-                      }
-                      Navigator.pop(ctx);
-                    },
-                    child: const Text('Salva'),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () {
+                        if (controller.text.trim().isNotEmpty) {
+                          context.read<WorkoutProvider>().renameWorkout(
+                              workout.key, controller.text.trim());
+                        }
+                        Navigator.pop(ctx);
+                      },
+                      child: const Text('Salva'),
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -276,31 +311,56 @@ class _WorkoutCard extends StatelessWidget {
   }
 }
 
+// Empty state con bottone per creare la prima scheda
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({super.key});
+  final VoidCallback onAdd;
+  const _EmptyState({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.list_alt_outlined,
-              size: 64,
-              color: Theme.of(context).colorScheme.outline),
-          const SizedBox(height: 16),
-          Text('Nessuna scheda ancora',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text(
-            'Crea la tua prima scheda di allenamento',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-          ),
-          const SizedBox(height: 24),
-          
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: cs.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.list_alt_outlined,
+                  size: 40, color: cs.onPrimaryContainer),
+            ),
+            const SizedBox(height: 20),
+            Text('Nessuna scheda ancora',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text(
+              'Crea la tua prima scheda\nper iniziare ad allenarti',
+              textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: cs.outline),
+            ),
+            const SizedBox(height: 28),
+            FilledButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add),
+              label: const Text('Crea scheda'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(200, 50),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

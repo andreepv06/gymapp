@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/exercise_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../main.dart';
 import '../exercises/exercises_screen.dart';
 
@@ -15,76 +16,145 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() =>
-        context.read<ExerciseProvider>().loadExercises());
+    Future.microtask(
+        () => context.read<ExerciseProvider>().loadExercises());
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
+    final auth = context.watch<AuthProvider>();
+    final account = auth.currentAccount;
+
+    final greeting = _getGreeting();
+    final name =
+      account?.firstName ?? account?.displayName;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('MarkFit'),
-        actions: [
-          IconButton(
-            tooltip: 'Catalogo esercizi',
-            icon: const Icon(Icons.fitness_center_outlined),
-            onPressed: () => _showExercisesDialog(context),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(
-            'Buon allenamento!',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Cosa vuoi fare oggi?',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.outline,
-                ),
-          ),
-          const SizedBox(height: 32),
-          _BigActionCard(
-            icon: Icons.list_alt,
-            title: 'Le mie schede',
-            subtitle: 'Crea e gestisci i tuoi allenamenti',
-            color: colorScheme.primaryContainer,
-            onTap: () =>
-                context.read<NavigationNotifier>().navigateTo(1),
-          ),
-          const SizedBox(height: 16),
-          _BigActionCard(
-            icon: Icons.play_circle_outline,
-            title: 'Inizia sessione',
-            subtitle: 'Seleziona una scheda e allenati',
-            color: colorScheme.secondaryContainer,
-            onTap: () =>
-                context.read<NavigationNotifier>().navigateTo(2),
-          ),
-          const SizedBox(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Esercizi recenti',
-                  style: Theme.of(context).textTheme.titleMedium),
-              TextButton(
+      backgroundColor: cs.surfaceContainerLowest,
+      body: CustomScrollView(
+        slivers: [
+          // SliverAppBar con effetto stretch
+          SliverAppBar(
+            expandedHeight: 140,
+            floating: false,
+            pinned: true,
+            backgroundColor: cs.surface,
+            surfaceTintColor: cs.surfaceTint,
+            actions: [
+              IconButton(
+                tooltip: 'Catalogo esercizi',
+                icon: const Icon(Icons.fitness_center_outlined),
                 onPressed: () => _showExercisesDialog(context),
-                child: const Text('Vedi tutti'),
               ),
             ],
+            flexibleSpace: FlexibleSpaceBar(
+              titlePadding: const EdgeInsets.fromLTRB(20, 0, 0, 14),
+              title: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name != null && name.isNotEmpty
+                      ? '$greeting, $name!'
+                      : '$greeting!',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  Text(
+                    'Cosa vuoi fare oggi?',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.outline,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 8),
-          const _ExercisesPreview(),
+
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                // Quick actions
+                Row(
+                  children: [
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: Icons.list_alt_rounded,
+                        label: 'Schede',
+                        color: cs.primaryContainer,
+                        iconColor: cs.onPrimaryContainer,
+                        onTap: () => context
+                            .read<NavigationNotifier>()
+                            .navigateTo(1),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: Icons.play_circle_rounded,
+                        label: 'Allenati',
+                        color: cs.secondaryContainer,
+                        iconColor: cs.onSecondaryContainer,
+                        onTap: () => context
+                            .read<NavigationNotifier>()
+                            .navigateTo(2),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: Icons.bar_chart_rounded,
+                        label: 'Storico',
+                        color: cs.tertiaryContainer,
+                        iconColor: cs.onTertiaryContainer,
+                        onTap: () => context
+                            .read<NavigationNotifier>()
+                            .navigateTo(3),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Esercizi recenti
+                Row(
+                  mainAxisAlignment:
+                      MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Esercizi',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium),
+                    TextButton(
+                      onPressed: () =>
+                          _showExercisesDialog(context),
+                      child: const Text('Vedi tutti'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const _ExercisesPreview(),
+              ]),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Buongiorno';
+    if (hour < 18) return 'Buon pomeriggio';
+    return 'Buonasera';
   }
 
   void _showExercisesDialog(BuildContext context) {
@@ -105,51 +175,45 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _BigActionCard extends StatelessWidget {
+
+class _QuickActionCard extends StatelessWidget {
   final IconData icon;
-  final String title;
-  final String subtitle;
+  final String label;
   final Color color;
+  final Color iconColor;
   final VoidCallback onTap;
 
-  const _BigActionCard({
+  const _QuickActionCard({
     required this.icon,
-    required this.title,
-    required this.subtitle,
+    required this.label,
     required this.color,
+    required this.iconColor,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Material(
       color: color,
-      elevation: 0,
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
+          padding: const EdgeInsets.symmetric(
+              vertical: 18, horizontal: 12),
+          child: Column(
             children: [
-              Icon(icon, size: 36),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(subtitle,
-                        style: Theme.of(context).textTheme.bodySmall),
-                  ],
+              Icon(icon, size: 28, color: iconColor),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: iconColor,
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios, size: 16),
             ],
           ),
         ),
@@ -163,19 +227,56 @@ class _ExercisesPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final exercises = context.watch<ExerciseProvider>().exercises;
-    final preview = exercises.take(4).toList();
+    final cs = Theme.of(context).colorScheme;
+    final exercises =
+        context.watch<ExerciseProvider>().exercises;
+    final preview = exercises.take(5).toList();
     if (preview.isEmpty) return const SizedBox.shrink();
-    return Column(
-      children: preview
-          .map((e) => ListTile(
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: preview.asMap().entries.map((entry) {
+          final i = entry.key;
+          final e = entry.value;
+          return Column(
+            children: [
+              ListTile(
                 dense: true,
-                leading: const Icon(Icons.fitness_center, size: 18),
-                title: Text(e.name),
-                subtitle: Text(e.muscleGroup),
-                contentPadding: EdgeInsets.zero,
-              ))
-          .toList(),
+                leading: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.fitness_center,
+                      size: 16,
+                      color: cs.onPrimaryContainer),
+                ),
+                title: Text(e.name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14)),
+                subtitle: Text(e.muscleGroup,
+                    style: TextStyle(
+                        fontSize: 11, color: cs.outline)),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 2),
+              ),
+              if (i < preview.length - 1)
+                Divider(
+                  height: 1,
+                  indent: 56,
+                  color: cs.outlineVariant,
+                ),
+            ],
+          );
+        }).toList(),
+      ),
     );
   }
 }

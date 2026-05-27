@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'db/hive_database.dart';
 import 'providers/exercise_provider.dart';
@@ -16,6 +17,11 @@ import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+  ));
   await HiveDatabase.instance.init();
   await NotificationService.instance.init();
   runApp(const MyApp());
@@ -48,23 +54,105 @@ class MyApp extends StatelessWidget {
         builder: (_, themeProvider, __) => MaterialApp(
           title: 'MarkFit',
           debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.deepPurple,
-              brightness: Brightness.light,
-            ),
-            useMaterial3: true,
-          ),
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.deepPurple,
-              brightness: Brightness.dark,
-            ),
-            useMaterial3: true,
-          ),
+          theme: _buildTheme(Brightness.light),
+          darkTheme: _buildTheme(Brightness.dark),
           themeMode: themeProvider.themeMode,
           home: const AppEntry(),
         ),
+      ),
+    );
+  }
+
+  ThemeData _buildTheme(Brightness brightness) {
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF6750A4),
+      brightness: brightness,
+    );
+    return ThemeData(
+      colorScheme: colorScheme,
+      useMaterial3: true,
+      textTheme: const TextTheme(
+        headlineLarge: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineMedium: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineSmall: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
+        titleLarge: TextStyle(fontWeight: FontWeight.w600),
+        titleMedium: TextStyle(fontWeight: FontWeight.w600),
+        bodyLarge: TextStyle(letterSpacing: 0.1),
+      ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        surfaceTintColor: colorScheme.surfaceTint,
+      ),
+      appBarTheme: AppBarTheme(
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        centerTitle: true, // ← TITOLI CENTRATI
+        backgroundColor: colorScheme.surface,
+        surfaceTintColor: colorScheme.surfaceTint,
+        titleTextStyle: TextStyle(
+          color: colorScheme.onSurface,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.3,
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        elevation: 0,
+        backgroundColor: colorScheme.surface,
+        surfaceTintColor: colorScheme.surfaceTint,
+        indicatorColor: colorScheme.secondaryContainer,
+        labelTextStyle: WidgetStateProperty.all(
+          const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.4),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.primary, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.error, width: 1),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(double.infinity, 50),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 0,
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        elevation: 0,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -93,8 +181,21 @@ class _AppEntryState extends State<AppEntry> {
   @override
   Widget build(BuildContext context) {
     if (!_checked) {
-      return const Scaffold(
-          body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.fitness_center,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.primary),
+              const SizedBox(height: 16),
+              CircularProgressIndicator(
+                  color: Theme.of(context).colorScheme.primary),
+            ],
+          ),
+        ),
+      );
     }
     final isLoggedIn = context.watch<AuthProvider>().isLoggedIn;
     if (!isLoggedIn) {
@@ -110,26 +211,77 @@ class _AppEntryState extends State<AppEntry> {
   }
 }
 
-class MainShell extends StatelessWidget {
+class MainShell extends StatefulWidget {
   const MainShell({super.key});
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  late PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex =
-        context.watch<NavigationNotifier>().currentIndex;
-      final screens = [
-        HomeScreen(),
-        WorkoutsScreen(),
-        SessionSelectorScreen(),
-        HistoryScreen(),
-        SettingsScreen(),
-      ];
+    final currentIndex = context.watch<NavigationNotifier>().currentIndex;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+    ));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pageController.hasClients &&
+          _pageController.page?.round() != currentIndex) {
+        _pageController.animateToPage(
+          currentIndex,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+
     return Scaffold(
-      body: IndexedStack(index: currentIndex, children: screens),
+      // FIX striscia bianca: backgroundColor esplicito che segue il tema
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      extendBody: false, // ← false per evitare striscia bianca con swipe
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
+          context.read<NavigationNotifier>().navigateTo(index);
+        },
+        children: [
+          HomeScreen(),
+          WorkoutsScreen(),
+          SessionSelectorScreen(),
+          HistoryScreen(),
+          SettingsScreen(),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
+        height: 72,
         selectedIndex: currentIndex,
-        onDestinationSelected: (i) =>
-            context.read<NavigationNotifier>().navigateTo(i),
+        onDestinationSelected: (i) {
+          context.read<NavigationNotifier>().navigateTo(i);
+          _pageController.animateToPage(
+            i,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),

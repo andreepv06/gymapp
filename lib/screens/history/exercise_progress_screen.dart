@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import '../../db/hive_database.dart';
-import '../../models/hive_models.dart';
 import '../../providers/exercise_provider.dart';
 
 class ExerciseProgressScreen extends StatefulWidget {
@@ -13,8 +12,7 @@ class ExerciseProgressScreen extends StatefulWidget {
       _ExerciseProgressScreenState();
 }
 
-class _ExerciseProgressScreenState
-    extends State<ExerciseProgressScreen> {
+class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
   dynamic _selectedExerciseKey;
   String _selectedExerciseName = '';
   List<Map<String, dynamic>> _history = [];
@@ -27,8 +25,7 @@ class _ExerciseProgressScreenState
       _selectedExerciseName = name;
       _loading = true;
     });
-    final history =
-        HiveDatabase.instance.getExerciseHistory(exerciseKey);
+    final history = HiveDatabase.instance.getExerciseHistory(exerciseKey);
     final sessions = HiveDatabase.instance.getSessions();
     final sessionMap = {for (final s in sessions) s.key: s};
 
@@ -52,6 +49,7 @@ class _ExerciseProgressScreenState
   @override
   Widget build(BuildContext context) {
     final exercises = context.watch<ExerciseProvider>().exercises;
+    final cs = Theme.of(context).colorScheme;
 
     final muscleGroups = [
       'Tutti',
@@ -60,20 +58,23 @@ class _ExerciseProgressScreenState
 
     final filteredExercises = _muscleFilter == 'Tutti'
         ? exercises
-        : exercises
-            .where((e) => e.muscleGroup == _muscleFilter)
-            .toList();
+        : exercises.where((e) => e.muscleGroup == _muscleFilter).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Progressi per esercizio')),
+      // FIX striscia bianca: backgroundColor esplicito
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      appBar: AppBar(
+        title: const Text('Progressi'),
+        backgroundColor: Theme.of(context).colorScheme.surface,
+      ),
       body: Column(
         children: [
           SizedBox(
             height: 48,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemCount: muscleGroups.length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (_, i) {
@@ -85,8 +86,8 @@ class _ExerciseProgressScreenState
                     _muscleFilter = g;
                     if (_selectedExerciseKey != null && g != 'Tutti') {
                       try {
-                        final ex = exercises.firstWhere(
-                            (e) => e.key == _selectedExerciseKey);
+                        final ex = exercises
+                            .firstWhere((e) => e.key == _selectedExerciseKey);
                         if (ex.muscleGroup != g) {
                           _selectedExerciseKey = null;
                           _history = [];
@@ -108,20 +109,18 @@ class _ExerciseProgressScreenState
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Seleziona esercizio',
-                border: OutlineInputBorder(),
                 isDense: true,
               ),
               items: filteredExercises
                   .map((e) => DropdownMenuItem<dynamic>(
                         value: e.key,
-                        child: Text(e.name,
-                            overflow: TextOverflow.ellipsis),
+                        child:
+                            Text(e.name, overflow: TextOverflow.ellipsis),
                       ))
                   .toList(),
               onChanged: (key) {
                 if (key == null) return;
-                final ex =
-                    exercises.firstWhere((e) => e.key == key);
+                final ex = exercises.firstWhere((e) => e.key == key);
                 _loadHistory(key, ex.name);
               },
             ),
@@ -136,8 +135,7 @@ class _ExerciseProgressScreenState
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.show_chart,
-                        size: 48,
-                        color: Theme.of(context).colorScheme.outline),
+                        size: 48, color: cs.outline),
                     const SizedBox(height: 12),
                     Text(
                       _muscleFilter == 'Tutti'
@@ -154,8 +152,10 @@ class _ExerciseProgressScreenState
               child: Center(
                 child: Text(
                   'Nessun dato per $_selectedExerciseName',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.outline),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: cs.outline),
                 ),
               ),
             )
@@ -183,8 +183,7 @@ class _ProgressChart extends StatelessWidget {
   final List<Map<String, dynamic>> history;
   final String exerciseName;
 
-  const _ProgressChart(
-      {required this.history, required this.exerciseName});
+  const _ProgressChart({required this.history, required this.exerciseName});
 
   @override
   Widget build(BuildContext context) {
@@ -231,12 +230,9 @@ class _ProgressChart extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '${weight % 1 == 0 ? weight.toInt() : weight} kg',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineMedium
-                    ?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.bold),
               ),
               Text('${dt.day}/${dt.month}/${dt.year}',
                   style: TextStyle(
@@ -256,22 +252,13 @@ class _ProgressChart extends StatelessWidget {
     final spots = sortedKeys
         .asMap()
         .entries
-        .map((e) =>
-            FlSpot(e.key.toDouble(), maxBySession[e.value]!))
+        .map((e) => FlSpot(e.key.toDouble(), maxBySession[e.value]!))
         .toList();
-    final maxY =
-        spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
-    final minY =
-        spots.map((s) => s.y).reduce((a, b) => a < b ? a : b);
+    final maxY = spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
+    final minY = spots.map((s) => s.y).reduce((a, b) => a < b ? a : b);
     final xLabels = sortedKeys.map((k) {
       final dt = DateTime.parse(k);
-      final sameDay = sortedKeys
-              .where((o) => o.substring(0, 10) == k.substring(0, 10))
-              .length >
-          1;
-      return sameDay
-          ? '${dt.day}/${dt.month}\n${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
-          : '${dt.day}/${dt.month}';
+      return '${dt.day}/${dt.month}';
     }).toList();
 
     return Card(
@@ -307,13 +294,11 @@ class _ProgressChart extends StatelessWidget {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 44,
-                      getTitlesWidget: (v, _) => Text(
-                          '${v.toInt()} kg',
+                      getTitlesWidget: (v, _) => Text('${v.toInt()} kg',
                           style: TextStyle(
                               fontSize: 9,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .outline)),
+                              color:
+                                  Theme.of(context).colorScheme.outline)),
                     ),
                   ),
                   bottomTitles: AxisTitles(
@@ -394,8 +379,7 @@ class _HistoryTable extends StatelessWidget {
       final date = (s['date'] as String).substring(0, 10);
       byDate.putIfAbsent(date, () => []).add(s);
     }
-    final sortedDates = byDate.keys.toList()
-      ..sort((a, b) => b.compareTo(a));
+    final sortedDates = byDate.keys.toList()..sort((a, b) => b.compareTo(a));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -417,24 +401,20 @@ class _HistoryTable extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             child: ExpansionTile(
               title: Text('${dt.day}/${dt.month}/${dt.year}',
-                  style:
-                      const TextStyle(fontWeight: FontWeight.w500)),
+                  style: const TextStyle(fontWeight: FontWeight.w500)),
               subtitle: Text(
                   'Max: ${maxWeight % 1 == 0 ? maxWeight.toInt() : maxWeight} kg · ${sets.length} serie',
                   style: TextStyle(
                       fontSize: 12,
                       color: Theme.of(context).colorScheme.outline)),
               children: sets.map((s) {
-                final weight =
-                    (s['weight'] as num?)?.toDouble() ?? 0.0;
+                final weight = (s['weight'] as num?)?.toDouble() ?? 0.0;
                 final reps = (s['reps'] as num?)?.toInt() ?? 0;
-                final setNum =
-                    (s['set_number'] as num?)?.toInt() ?? 0;
-                final completed =
-                    (s['completed'] as num?)?.toInt() == 1;
+                final setNum = (s['set_number'] as num?)?.toInt() ?? 0;
+                final completed = (s['completed'] as num?)?.toInt() == 1;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   child: Row(
                     children: [
                       SizedBox(
@@ -458,9 +438,7 @@ class _HistoryTable extends StatelessWidget {
                           size: 16,
                           color: completed
                               ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .outline),
+                              : Theme.of(context).colorScheme.outline),
                     ],
                   ),
                 );

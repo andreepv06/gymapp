@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback onLoginSuccess;
@@ -11,7 +12,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController();
+  final _identifierCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
@@ -20,7 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
+    _identifierCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
   }
@@ -32,121 +33,143 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
 
-    final prefs = await SharedPreferences.getInstance();
-    final email = _emailCtrl.text.trim().toLowerCase();
-    final password = _passwordCtrl.text;
+    final auth = context.read<AuthProvider>();
+    String? error;
 
     if (_isRegister) {
-      final existing = prefs.getString('user_email');
-      if (existing != null) {
-        setState(() {
-          _error = 'Esiste già un account. Effettua il login.';
-          _loading = false;
-        });
-        return;
-      }
-      await prefs.setString('user_email', email);
-      await prefs.setString('user_password', password);
-      await prefs.setBool('is_logged_in', true);
-      widget.onLoginSuccess();
+      error = await auth.register(
+        identifier: _identifierCtrl.text,
+        password: _passwordCtrl.text,
+      );
     } else {
-      final savedEmail = prefs.getString('user_email');
-      final savedPassword = prefs.getString('user_password');
-      if (savedEmail == null) {
-        setState(() {
-          _error = 'Nessun account trovato. Registrati prima.';
-          _loading = false;
-        });
-        return;
-      }
-      if (savedEmail != email || savedPassword != password) {
-        setState(() {
-          _error = 'Email o password errati.';
-          _loading = false;
-        });
-        return;
-      }
-      await prefs.setBool('is_logged_in', true);
-      widget.onLoginSuccess();
+      error = await auth.login(
+        identifier: _identifierCtrl.text,
+        password: _passwordCtrl.text,
+      );
     }
+
+    if (error != null) {
+      setState(() {
+        _error = error;
+        _loading = false;
+      });
+      return;
+    }
+
+    widget.onLoginSuccess();
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
+      backgroundColor: cs.surface,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 28, vertical: 40),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
+              constraints: const BoxConstraints(maxWidth: 420),
               child: Form(
                 key: _formKey,
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    // Logo
                     Container(
-                      width: 80,
-                      height: 80,
+                      width: 88,
+                      height: 88,
                       decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primaryContainer,
+                        gradient: LinearGradient(
+                          colors: [
+                            cs.primary,
+                            cs.secondary,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                         shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: cs.primary.withOpacity(0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
                       ),
-                      child: Icon(Icons.fitness_center,
-                          size: 40,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onPrimaryContainer),
+                      child: const Icon(Icons.fitness_center,
+                          size: 42, color: Colors.white),
                     ),
-                    const SizedBox(height: 24),
-                    Text('MarkFit',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 28),
+
                     Text(
-                      _isRegister ? 'Crea il tuo account' : 'Bentornato!',
+                      'MarkFit',
                       style: Theme.of(context)
                           .textTheme
-                          .bodyMedium
+                          .headlineLarge
                           ?.copyWith(
-                              color:
-                                  Theme.of(context).colorScheme.outline),
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -1,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: Text(
+                        _isRegister
+                            ? 'Crea il tuo account gratuito'
+                            : 'Bentornato! Accedi al tuo account',
+                        key: ValueKey(_isRegister),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyLarge
+                            ?.copyWith(color: cs.outline),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                     const SizedBox(height: 40),
+
+                    // Campo identifier
                     TextFormField(
-                      controller: _emailCtrl,
+                      controller: _identifierCtrl,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        prefixIcon: Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: 'Email o username',
+                        hintText: _isRegister
+                            ? 'mario@email.com oppure mario99'
+                            : 'Inserisci email o username',
+                        prefixIcon:
+                            const Icon(Icons.person_outline),
                       ),
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) {
-                          return 'Inserisci la tua email';
+                          return 'Inserisci email o username';
                         }
-                        if (!v.contains('@')) return 'Email non valida';
+                        if (_isRegister &&
+                            !v.contains('@') &&
+                            v.trim().length < 3) {
+                          return 'Username troppo corto (min 3 caratteri)';
+                        }
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
+
+                    // Password
                     TextFormField(
                       controller: _passwordCtrl,
                       obscureText: _obscure,
                       decoration: InputDecoration(
                         labelText: 'Password',
-                        prefixIcon: const Icon(Icons.lock_outlined),
-                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           icon: Icon(_obscure
                               ? Icons.visibility_outlined
                               : Icons.visibility_off_outlined),
-                          onPressed: () =>
-                              setState(() => _obscure = !_obscure),
+                          onPressed: () => setState(
+                              () => _obscure = !_obscure),
                         ),
                       ),
                       validator: (v) {
@@ -159,51 +182,127 @@ class _LoginScreenState extends State<LoginScreen> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 8),
-                    if (_error != null)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .errorContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(_error!,
-                            style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onErrorContainer)),
-                      ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: FilledButton(
-                        onPressed: _loading ? null : _submit,
-                        child: _loading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white))
-                            : Text(_isRegister
-                                ? 'Registrati'
-                                : 'Accedi'),
-                      ),
+                    const SizedBox(height: 12),
+
+                    // Errore
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 200),
+                      child: _error != null
+                          ? Container(
+                              width: double.infinity,
+                              margin:
+                                  const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: cs.errorContainer,
+                                borderRadius:
+                                    BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.error_outline,
+                                      color: cs.onErrorContainer,
+                                      size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(_error!,
+                                        style: TextStyle(
+                                            color:
+                                                cs.onErrorContainer,
+                                            fontSize: 13)),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : const SizedBox.shrink(),
                     ),
+
                     const SizedBox(height: 16),
-                    TextButton(
-                      onPressed: () => setState(() {
-                        _isRegister = !_isRegister;
-                        _error = null;
-                      }),
-                      child: Text(_isRegister
-                          ? 'Hai già un account? Accedi'
-                          : 'Non hai un account? Registrati'),
+
+                    // Bottone principale
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: SizedBox(
+                        key: ValueKey(_isRegister),
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: _loading ? null : _submit,
+                          child: _loading
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white),
+                                )
+                              : Text(_isRegister
+                                  ? 'Crea account'
+                                  : 'Accedi'),
+                        ),
+                      ),
                     ),
+                    const SizedBox(height: 20),
+
+                    // Switch login/register
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _isRegister
+                              ? 'Hai già un account?'
+                              : 'Non hai un account?',
+                          style: TextStyle(color: cs.outline),
+                        ),
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _isRegister = !_isRegister;
+                            _error = null;
+                            _identifierCtrl.clear();
+                            _passwordCtrl.clear();
+                          }),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8),
+                          ),
+                          child: Text(
+                            _isRegister ? 'Accedi' : 'Registrati',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: cs.primary),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    if (_isRegister) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: cs.primaryContainer
+                              .withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                size: 16,
+                                color: cs.onPrimaryContainer),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Potrai completare il tuo profilo nelle impostazioni dopo la registrazione.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onPrimaryContainer,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
