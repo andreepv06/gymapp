@@ -66,7 +66,8 @@ class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
                       context.read<NavigationNotifier>().navigateTo(1),
                   icon: const Icon(Icons.add),
                   label: const Text('Vai alle schede'),
-                  style: FilledButton.styleFrom(minimumSize: const Size(200, 50)),
+                  style: FilledButton.styleFrom(
+                      minimumSize: const Size(200, 50)),
                 ),
               ],
             ),
@@ -80,68 +81,18 @@ class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Banner "Inizia allenamento" in evidenza
-          Container(
-            margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [cs.primary, cs.secondary],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: cs.primary.withOpacity(0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.play_circle_filled,
-                      color: Colors.white, size: 32),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Inizia allenamento',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Seleziona una scheda qui sotto',
-                        style: TextStyle(
-                            color: Colors.white.withOpacity(0.85),
-                            fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // Header informativo — usa i colori del tema, niente gradiente fisso
+          _SessionHeader(),
 
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-            child: Text('Le tue schede',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: cs.outline, letterSpacing: 0.5)),
+            child: Text(
+              'Scegli la scheda',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: cs.outline,
+                    letterSpacing: 0.5,
+                  ),
+            ),
           ),
 
           Expanded(
@@ -159,7 +110,8 @@ class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ActiveSessionScreen(workout: workout),
+                        builder: (_) =>
+                            ActiveSessionScreen(workout: workout),
                       ),
                     );
                   },
@@ -173,10 +125,68 @@ class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
   }
 }
 
+// Header informativo con colori dal tema — funziona bene sia in chiaro che scuro
+class _SessionHeader extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cs.secondaryContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: cs.secondary,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.fitness_center_rounded,
+              color: cs.onSecondary,
+              size: 26,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pronto ad allenarti?',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: cs.onSecondaryContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Scegli una scheda per iniziare',
+                  style: TextStyle(
+                    color: cs.onSecondaryContainer.withOpacity(0.75),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _WorkoutSessionCard extends StatelessWidget {
   final HiveWorkout workout;
   final VoidCallback onTap;
-  const _WorkoutSessionCard({required this.workout, required this.onTap});
+  const _WorkoutSessionCard(
+      {required this.workout, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -209,7 +219,8 @@ class _WorkoutSessionCard extends StatelessWidget {
                             fontWeight: FontWeight.w600, fontSize: 15)),
                     const SizedBox(height: 2),
                     Text(_formatDate(workout.createdAt),
-                        style: TextStyle(fontSize: 12, color: cs.outline)),
+                        style:
+                            TextStyle(fontSize: 12, color: cs.outline)),
                   ],
                 ),
               ),
