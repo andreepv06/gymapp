@@ -330,7 +330,7 @@ class _MainShellState extends State<MainShell> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      extendBody: true,
+      extendBody: false,
 
       body: PageView(
         controller: _pageController,
@@ -347,31 +347,33 @@ class _MainShellState extends State<MainShell> {
       ),
 
       bottomNavigationBar: SafeArea(
-        child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+        minimum: const EdgeInsets.only(
+          left: 12,
+          right: 12,
+          bottom: 12,
+        ),
         child: SnakeNavigationBar.color(
-
-          showSelectedLabels: true,
-          showUnselectedLabels: true,
-
+          height: 72,
           behaviour: SnakeBarBehaviour.floating,
           snakeShape: SnakeShape.circle,
 
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(32),
+            borderRadius: BorderRadius.circular(22),
           ),
+
+          elevation: 8,
 
           padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 12,
+            horizontal: 6,
+            vertical: 8,
           ),
-
-          backgroundColor: isDark
-              ? Colors.grey.shade900
-              : Colors.white,
 
           snakeViewColor:
               Theme.of(context).colorScheme.primary,
+
+          backgroundColor: isDark
+              ? const Color(0xFF1F1F1F)
+              : Colors.white,
 
           selectedItemColor: Colors.white,
 
@@ -388,35 +390,36 @@ class _MainShellState extends State<MainShell> {
 
             _pageController.animateToPage(
               index,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
             );
           },
 
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.home),
+              icon: Icon(Icons.home_rounded),
               label: 'Home',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.list_alt),
+              icon: Icon(Icons.list_alt_rounded),
               label: 'Schede',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.play_circle),
+              icon: Icon(Icons.play_circle_fill_rounded),
               label: 'Sessione',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart),
+              icon: Icon(Icons.bar_chart_rounded),
               label: 'Storico',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
+              icon: Icon(Icons.settings_rounded),
               label: 'Settings',
             ),
           ],
         ),
-      ),
-    ));
+      ));
+  
   }
 }
+
