@@ -26,7 +26,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       appBar: AppBar(
         title: const Text('Le mie schede'),
         actions: [
-          // Bottone aggiungi sempre visibile in alto a destra
           IconButton(
             onPressed: () => _showAddWorkoutDialog(context),
             icon: const Icon(Icons.add_rounded),
@@ -34,23 +33,13 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           ),
         ],
       ),
+      // Niente FAB — bottone sempre in basso centrato dentro il body
       body: provider.workouts.isEmpty
           ? _EmptyState(onAdd: () => _showAddWorkoutDialog(context))
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-              itemCount: provider.workouts.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (_, i) =>
-                  _WorkoutCard(workout: provider.workouts[i]),
+          : _WorkoutList(
+              workouts: provider.workouts,
+              onAdd: () => _showAddWorkoutDialog(context),
             ),
-      // FAB solo quando ci sono già schede
-      floatingActionButton: provider.workouts.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: () => _showAddWorkoutDialog(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Nuova scheda'),
-            )
-          : null,
     );
   }
 
@@ -89,8 +78,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
               const SizedBox(height: 4),
               Text(
                 'Dai un nome alla tua scheda di allenamento',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.outline),
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Theme.of(context).colorScheme.outline),
               ),
               const SizedBox(height: 20),
               TextField(
@@ -156,6 +147,45 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 }
 
+// ─── Lista schede con bottone centrato in fondo ───
+class _WorkoutList extends StatelessWidget {
+  final List<HiveWorkout> workouts;
+  final VoidCallback onAdd;
+
+  const _WorkoutList({required this.workouts, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            itemCount: workouts.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (_, i) => _WorkoutCard(workout: workouts[i]),
+          ),
+        ),
+
+        // Bottone centrato in fondo, sopra la navbar
+        Padding(
+          padding: EdgeInsets.fromLTRB(32, 8, 32, bottomPadding + 100),
+          child: FilledButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add),
+            label: const Text('Nuova scheda'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(double.infinity, 50),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _WorkoutCard extends StatelessWidget {
   final HiveWorkout workout;
   const _WorkoutCard({required this.workout});
@@ -174,8 +204,7 @@ class _WorkoutCard extends StatelessWidget {
             color: cs.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(Icons.list_alt,
-              color: cs.onPrimaryContainer, size: 22),
+          child: Icon(Icons.list_alt, color: cs.onPrimaryContainer, size: 22),
         ),
         title: Text(workout.name,
             style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -285,12 +314,12 @@ class _WorkoutCard extends StatelessWidget {
                 controller: controller,
                 autofocus: false,
                 textCapitalization: TextCapitalization.sentences,
-                decoration:
-                    const InputDecoration(labelText: 'Nome scheda'),
+                decoration: const InputDecoration(labelText: 'Nome scheda'),
                 onSubmitted: (_) {
                   if (controller.text.trim().isNotEmpty) {
-                    context.read<WorkoutProvider>().renameWorkout(
-                        workout.key, controller.text.trim());
+                    context
+                        .read<WorkoutProvider>()
+                        .renameWorkout(workout.key, controller.text.trim());
                   }
                   Navigator.pop(ctx);
                 },
@@ -328,6 +357,7 @@ class _WorkoutCard extends StatelessWidget {
   }
 }
 
+// ─── Empty state con bottone centrato ───
 class _EmptyState extends StatelessWidget {
   final VoidCallback onAdd;
   const _EmptyState({required this.onAdd});
@@ -369,7 +399,6 @@ class _EmptyState extends StatelessWidget {
                   ?.copyWith(color: cs.outline),
             ),
             const SizedBox(height: 28),
-            // Bottone centrale — unico pulsante per creare
             FilledButton.icon(
               onPressed: onAdd,
               icon: const Icon(Icons.add),

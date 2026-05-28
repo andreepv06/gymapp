@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -20,7 +21,6 @@ import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -28,10 +28,8 @@ void main() async {
       statusBarBrightness: Brightness.light,
     ),
   );
-
   await HiveDatabase.instance.init();
   await NotificationService.instance.init();
-
   runApp(const MyApp());
 }
 
@@ -203,8 +201,9 @@ class _AppEntryState extends State<AppEntry> {
     if (!isLoggedIn) {
       return LoginScreen(
         onLoginSuccess: () {
-          context.read<AuthProvider>().setLoggedIn(
-              context.read<AuthProvider>().userEmail ?? '');
+          context
+              .read<AuthProvider>()
+              .setLoggedIn(context.read<AuthProvider>().userEmail ?? '');
           setState(() {});
         },
       );
@@ -240,7 +239,7 @@ class _MainShellState extends State<MainShell> {
     context.read<NavigationNotifier>().navigateTo(index);
     _pageController.animateToPage(
       index,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 320),
       curve: Curves.easeInOut,
     );
   }
@@ -262,7 +261,7 @@ class _MainShellState extends State<MainShell> {
           _pageController.page?.round() != currentIndex) {
         _pageController.animateToPage(
           currentIndex,
-          duration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 320),
           curve: Curves.easeInOut,
         );
       }
@@ -284,7 +283,7 @@ class _MainShellState extends State<MainShell> {
           SettingsScreen(),
         ],
       ),
-      bottomNavigationBar: _FloatingNavBar(
+      bottomNavigationBar: _LiquidGlassNavBar(
         currentIndex: currentIndex,
         onTap: _onNavTap,
         isDark: isDark,
@@ -293,14 +292,16 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-// ---- Navbar floating completamente custom ----
+// ─────────────────────────────────────────────
+// LIQUID GLASS NAVBAR
+// ─────────────────────────────────────────────
 
-class _FloatingNavBar extends StatelessWidget {
+class _LiquidGlassNavBar extends StatelessWidget {
   final int currentIndex;
   final void Function(int) onTap;
   final bool isDark;
 
-  const _FloatingNavBar({
+  const _LiquidGlassNavBar({
     required this.currentIndex,
     required this.onTap,
     required this.isDark,
@@ -319,39 +320,60 @@ class _FloatingNavBar extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
-    final navBg = isDark ? const Color(0xFF1C1C1E) : Colors.white;
+    // Colori glass
+    final glassBg = isDark
+        ? Colors.grey.shade900.withOpacity(0.55)
+        : Colors.white.withOpacity(0.6);
+    final glassBorder = isDark
+        ? Colors.white.withOpacity(0.08)
+        : Colors.white.withOpacity(0.7);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding + 14),
-      child: Container(
-        height: 64,
-        decoration: BoxDecoration(
-          color: navBg,
-          borderRadius: BorderRadius.circular(36),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.4 : 0.12),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          children: List.generate(_items.length, (i) {
-            final selected = i == currentIndex;
-            return Expanded(
-              child: GestureDetector(
-                onTap: () => onTap(i),
-                behavior: HitTestBehavior.opaque,
-                child: _NavItemWidget(
-                  item: _items[i],
-                  selected: selected,
-                  isDark: isDark,
-                  primaryColor: cs.primary,
+      padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding + 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(40),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            height: 66,
+            decoration: BoxDecoration(
+              color: glassBg,
+              borderRadius: BorderRadius.circular(40),
+              border: Border.all(color: glassBorder, width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(isDark ? 0.35 : 0.1),
+                  blurRadius: 32,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 8),
                 ),
-              ),
-            );
-          }),
+                // Highlight superiore effetto vetro
+                BoxShadow(
+                  color: Colors.white.withOpacity(isDark ? 0.04 : 0.6),
+                  blurRadius: 0,
+                  spreadRadius: 0,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Row(
+              children: List.generate(_items.length, (i) {
+                final selected = i == currentIndex;
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => onTap(i),
+                    behavior: HitTestBehavior.opaque,
+                    child: _LiquidNavItem(
+                      item: _items[i],
+                      selected: selected,
+                      isDark: isDark,
+                      primaryColor: cs.primary,
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
         ),
       ),
     );
@@ -364,13 +386,13 @@ class _NavItem {
   const _NavItem({required this.icon, required this.label});
 }
 
-class _NavItemWidget extends StatelessWidget {
+class _LiquidNavItem extends StatelessWidget {
   final _NavItem item;
   final bool selected;
   final bool isDark;
   final Color primaryColor;
 
-  const _NavItemWidget({
+  const _LiquidNavItem({
     required this.item,
     required this.selected,
     required this.isDark,
@@ -379,40 +401,124 @@ class _NavItemWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unselectedColor =
-        isDark ? Colors.grey.shade500 : Colors.grey.shade500;
+    final unselected =
+        isDark ? Colors.white.withOpacity(0.45) : Colors.grey.shade600;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeInOut,
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 220),
+      transitionBuilder: (child, anim) =>
+          FadeTransition(opacity: anim, child: child),
+      child: selected
+          ? _SelectedItem(
+              key: ValueKey('sel_${item.label}'),
+              item: item,
+              primaryColor: primaryColor,
+              isDark: isDark,
+            )
+          : _UnselectedItem(
+              key: ValueKey('unsel_${item.label}'),
+              item: item,
+              color: unselected,
+            ),
+    );
+  }
+}
+
+class _SelectedItem extends StatelessWidget {
+  final _NavItem item;
+  final Color primaryColor;
+  final bool isDark;
+
+  const _SelectedItem({
+    super.key,
+    required this.item,
+    required this.primaryColor,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Pillola interna glass colorata
+    final pillBg = primaryColor;
+    final pillHighlight = Colors.white.withOpacity(0.25);
+
+    return SizedBox(
+      height: 66,
+      child: Center(
+        child: Container(
+          width: 56,
+          height: 40,
+          decoration: BoxDecoration(
+            color: pillBg,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: primaryColor.withOpacity(0.45),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                pillHighlight,
+                Colors.transparent,
+              ],
+            ),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Shine superiore vetro
+              Positioned(
+                top: 3,
+                child: Container(
+                  width: 28,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+              Icon(item.icon, color: Colors.white, size: 22),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UnselectedItem extends StatelessWidget {
+  final _NavItem item;
+  final Color color;
+
+  const _UnselectedItem({
+    super.key,
+    required this.item,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 66,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
-            width: selected ? 48 : 0,
-            height: selected ? 36 : 0,
-            decoration: BoxDecoration(
-              color: selected ? primaryColor : Colors.transparent,
-              borderRadius: BorderRadius.circular(18),
+          Icon(item.icon, color: color, size: 22),
+          const SizedBox(height: 3),
+          Text(
+            item.label,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              color: color,
+              letterSpacing: 0.1,
             ),
-            child: selected
-                ? Icon(item.icon, color: Colors.white, size: 22)
-                : const SizedBox.shrink(),
           ),
-          if (!selected) ...[
-            Icon(item.icon, color: unselectedColor, size: 22),
-            const SizedBox(height: 2),
-            Text(
-              item.label,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w500,
-                color: unselectedColor,
-              ),
-            ),
-          ],
         ],
       ),
     );
