@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -37,19 +38,9 @@ class SettingsScreen extends StatelessWidget {
                 _SectionLabel(title: 'Aspetto'),
                 _SettingsCard(
                   children: [
-                    _SettingsTile(
-                      icon: themeProvider.isDark
-                          ? Icons.dark_mode
-                          : Icons.light_mode_outlined,
-                      iconColor: cs.primary,
-                      title: 'Tema',
-                      subtitle: themeProvider.isDark
-                          ? 'Modalità scura'
-                          : 'Modalità chiara',
-                      trailing: Switch(
-                        value: themeProvider.isDark,
-                        onChanged: (_) => themeProvider.toggle(),
-                      ),
+                    _GlassThemeToggle(
+                      isDark: themeProvider.isDark,
+                      onToggle: themeProvider.toggle,
                     ),
                   ],
                 ),
@@ -982,6 +973,131 @@ class _SectionLabel extends StatelessWidget {
               color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.w700,
             ),
+      ),
+    );
+  }
+}
+class _GlassThemeToggle extends StatelessWidget {
+  final bool isDark;
+  final VoidCallback onToggle;
+
+  const _GlassThemeToggle({required this.isDark, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final activeColor = isDark ? const Color(0xFF1C1C1E) : cs.primary;
+    final borderColor = isDark
+        ? Colors.white.withOpacity(0.12)
+        : Colors.white.withOpacity(0.4);
+
+    return Padding(
+      padding: const EdgeInsets.all(4),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: GestureDetector(
+            onTap: onToggle,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: activeColor.withOpacity(isDark ? 0.7 : 0.9),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor, width: 1),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withOpacity(isDark ? 0.06 : 0.2),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(isDark ? 0.12 : 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      isDark ? Icons.dark_mode : Icons.light_mode_outlined,
+                      color: isDark ? Colors.white : cs.onPrimary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Tema',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : cs.onPrimary,
+                          ),
+                        ),
+                        Text(
+                          isDark ? 'Modalità scura' : 'Modalità chiara',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? Colors.white.withOpacity(0.65)
+                                : cs.onPrimary.withOpacity(0.75),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Toggle pill glass
+                  Container(
+                    width: 52,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(isDark ? 0.15 : 0.3),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: AnimatedAlign(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeInOut,
+                      alignment: isDark
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        margin: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white : cs.onPrimary,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          isDark ? Icons.dark_mode : Icons.light_mode,
+                          size: 12,
+                          color: isDark ? cs.primary : cs.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

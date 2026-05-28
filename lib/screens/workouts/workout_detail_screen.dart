@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/hive_models.dart';
@@ -70,18 +71,15 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final exercises = context.watch<WorkoutProvider>().currentExercises;
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.workoutName)),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddExercisesSheet,
-        tooltip: 'Aggiungi esercizi',
-        child: const Icon(Icons.add),
-      ),
       body: exercises.isEmpty
-          ? _EmptyState()
+          ? _EmptyExercisesState(onAdd: _showAddExercisesSheet)
           : ReorderableListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
               itemCount: exercises.length,
               proxyDecorator: (child, index, animation) {
                 return AnimatedBuilder(
@@ -96,12 +94,10 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
               },
               onReorder: (oldIndex, newIndex) {
                 if (newIndex > oldIndex) newIndex--;
-                final reordered =
-                    List<HiveWorkoutExercise>.from(exercises);
+                final reordered = List<HiveWorkoutExercise>.from(exercises);
                 final item = reordered.removeAt(oldIndex);
                 reordered.insert(newIndex, item);
-                _workoutProvider.reorderExercises(
-                    widget.workoutId, reordered);
+                _workoutProvider.reorderExercises(widget.workoutId, reordered);
               },
               itemBuilder: (_, i) {
                 final we = exercises[i];
@@ -110,40 +106,156 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                   index: i,
                   workoutExercise: we,
                   onEdit: () => _showEditSheet(we),
-                  onDelete: () =>
-                      _workoutProvider.removeExerciseFromWorkout(
+                  onDelete: () => _workoutProvider.removeExerciseFromWorkout(
                     we.key,
                     widget.workoutId,
                   ),
                 );
               },
             ),
+      // Bottone aggiungi esercizi — glass style, centrato in fondo
+      bottomNavigationBar: exercises.isNotEmpty
+          ? Padding(
+              padding: EdgeInsets.fromLTRB(
+                  24, 8, 24, MediaQuery.of(context).padding.bottom + 16),
+              child: _GlassButton(
+                onTap: _showAddExercisesSheet,
+                icon: Icons.add_rounded,
+                label: 'Aggiungi esercizi',
+                isDark: isDark,
+              ),
+            )
+          : null,
     );
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({super.key});
+// ── Empty state corretto: parla di esercizi, non di schede ──
+class _EmptyExercisesState extends StatelessWidget {
+  final VoidCallback onAdd;
+  const _EmptyExercisesState({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.list_alt_outlined,
-              size: 64,
-              color: Theme.of(context).colorScheme.outline),
-          const SizedBox(height: 16),
-          Text('Nessuna scheda ancora',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text(
-            'Usa il + in basso per aggiungere una scheda',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.outline),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: cs.secondaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.fitness_center_outlined,
+                  size: 40, color: cs.onSecondaryContainer),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Nessun esercizio',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Aggiungi il primo esercizio\na questa scheda',
+              textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: cs.outline),
+            ),
+            const SizedBox(height: 28),
+            _GlassButton(
+              onTap: onAdd,
+              icon: Icons.add_rounded,
+              label: 'Aggiungi esercizi',
+              isDark: isDark,
+              minWidth: 220,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Glass Button riusabile ──
+class _GlassButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final IconData icon;
+  final String label;
+  final bool isDark;
+  final double? minWidth;
+
+  const _GlassButton({
+    required this.onTap,
+    required this.icon,
+    required this.label,
+    required this.isDark,
+    this.minWidth,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final baseColor = cs.primary;
+    final borderColor = Colors.white.withOpacity(isDark ? 0.12 : 0.35);
+    final glassOverlay = Colors.white.withOpacity(isDark ? 0.07 : 0.2);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: Container(
+              width: minWidth != null ? minWidth : double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+              decoration: BoxDecoration(
+                color: baseColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderColor, width: 1.2),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [glassOverlay, Colors.transparent],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: baseColor.withOpacity(0.35),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: cs.onPrimary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(label,
+                      style: TextStyle(
+                        color: cs.onPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      )),
+                ],
+              ),
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -166,6 +278,8 @@ class _ExerciseRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final we = workoutExercise;
+    final cs = Theme.of(context).colorScheme;
+
     return ReorderableDelayedDragStartListener(
       index: index,
       child: Card(
@@ -178,16 +292,13 @@ class _ExerciseRow extends StatelessWidget {
               Text(
                 we.exerciseName,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 15),
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
               ),
               const SizedBox(height: 2),
               Text(
                 we.muscleGroup,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.outline),
+                style: TextStyle(fontSize: 12, color: cs.outline),
               ),
               if (we.notes != null && we.notes!.isNotEmpty)
                 Padding(
@@ -198,7 +309,7 @@ class _ExerciseRow extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 11,
                         fontStyle: FontStyle.italic,
-                        color: Theme.of(context).colorScheme.outline),
+                        color: cs.outline),
                   ),
                 ),
               const SizedBox(height: 8),
@@ -222,11 +333,9 @@ class _ExerciseRow extends StatelessWidget {
                   TextButton.icon(
                     onPressed: onEdit,
                     icon: const Icon(Icons.edit, size: 14),
-                    label: const Text('Modifica',
-                        style: TextStyle(fontSize: 12)),
+                    label: const Text('Modifica', style: TextStyle(fontSize: 12)),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -234,14 +343,11 @@ class _ExerciseRow extends StatelessWidget {
                   const SizedBox(width: 8),
                   TextButton.icon(
                     onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline,
-                        size: 14, color: Colors.red),
+                    icon: const Icon(Icons.delete_outline, size: 14, color: Colors.red),
                     label: const Text('Elimina',
-                        style:
-                            TextStyle(fontSize: 12, color: Colors.red)),
+                        style: TextStyle(fontSize: 12, color: Colors.red)),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -276,13 +382,13 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
+// ── Selezione esercizi con checkbox multipli ──
 class _SelectExercisesScreen extends StatefulWidget {
   final dynamic workoutId;
   const _SelectExercisesScreen({required this.workoutId});
 
   @override
-  State<_SelectExercisesScreen> createState() =>
-      _SelectExercisesScreenState();
+  State<_SelectExercisesScreen> createState() => _SelectExercisesScreenState();
 }
 
 class _SelectExercisesScreenState extends State<_SelectExercisesScreen> {
@@ -311,8 +417,7 @@ class _SelectExercisesScreenState extends State<_SelectExercisesScreen> {
       final selected = _selected.toList();
       final toAdd = <HiveWorkoutExercise>[];
       for (int i = 0; i < selected.length; i++) {
-        final matches =
-            allExercises.where((e) => e.key == selected[i]);
+        final matches = allExercises.where((e) => e.key == selected[i]);
         if (matches.isEmpty) continue;
         final ex = matches.first;
         toAdd.add(HiveWorkoutExercise(
@@ -364,8 +469,7 @@ class _SelectExercisesScreenState extends State<_SelectExercisesScreen> {
                     child: SizedBox(
                         width: 20,
                         height: 20,
-                        child:
-                            CircularProgressIndicator(strokeWidth: 2)),
+                        child: CircularProgressIndicator(strokeWidth: 2)),
                   )
                 : TextButton(
                     onPressed: _confirmAdd,
@@ -381,7 +485,6 @@ class _SelectExercisesScreenState extends State<_SelectExercisesScreen> {
               decoration: const InputDecoration(
                 hintText: 'Cerca esercizio...',
                 prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
                 isDense: true,
               ),
               onChanged: (v) => setState(() => _search = v),
@@ -399,8 +502,7 @@ class _SelectExercisesScreenState extends State<_SelectExercisesScreen> {
                 return ChoiceChip(
                   label: Text(g),
                   selected: _muscleFilter == g,
-                  onSelected: (_) =>
-                      setState(() => _muscleFilter = g),
+                  onSelected: (_) => setState(() => _muscleFilter = g),
                   visualDensity: VisualDensity.compact,
                 );
               },
@@ -429,7 +531,8 @@ class _SelectExercisesScreenState extends State<_SelectExercisesScreen> {
           ),
           if (_selected.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              padding: EdgeInsets.fromLTRB(
+                  16, 8, 16, MediaQuery.of(context).padding.bottom + 16),
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
@@ -468,8 +571,7 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
   void initState() {
     super.initState();
     final we = widget.workoutExercise;
-    _restCtrl =
-        TextEditingController(text: we.restSeconds?.toString() ?? '');
+    _restCtrl = TextEditingController(text: we.restSeconds?.toString() ?? '');
     _notesCtrl = TextEditingController(text: we.notes ?? '');
     _series = List.generate(
       we.sets,
@@ -489,8 +591,7 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
       final last = _series.isNotEmpty ? _series.last : null;
       _series.add(_SerieRow(
         reps: last?.reps ?? widget.workoutExercise.targetReps,
-        weight:
-            last?.weight ?? widget.workoutExercise.targetWeight ?? 0,
+        weight: last?.weight ?? widget.workoutExercise.targetWeight ?? 0,
       ));
     });
   }
@@ -502,8 +603,7 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-    final firstWeight =
-        _series.isNotEmpty ? _series.first.weight : 0.0;
+    final firstWeight = _series.isNotEmpty ? _series.first.weight : 0.0;
     final firstReps = _series.isNotEmpty
         ? _series.first.reps
         : widget.workoutExercise.targetReps;
@@ -518,15 +618,11 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
       targetReps: firstReps,
       targetWeight: firstWeight > 0 ? firstWeight : null,
       restSeconds: int.tryParse(_restCtrl.text),
-      notes: _notesCtrl.text.trim().isEmpty
-          ? null
-          : _notesCtrl.text.trim(),
+      notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       sortOrder: we.sortOrder,
     );
 
-    context
-        .read<WorkoutProvider>()
-        .updateExerciseInWorkout(we.key, updated);
+    context.read<WorkoutProvider>().updateExerciseInWorkout(we.key, updated);
     Navigator.pop(context);
   }
 
@@ -551,8 +647,7 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).colorScheme.outlineVariant,
+                    color: Theme.of(context).colorScheme.outlineVariant,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -568,7 +663,6 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
                 controller: _restCtrl,
                 decoration: const InputDecoration(
                   labelText: 'Recupero sec (opz.)',
-                  border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
               ),
@@ -578,22 +672,19 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
                 decoration: const InputDecoration(
                   labelText: 'Note (opz.)',
                   hintText: 'Es. presa prona, ROM completo...',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 20),
               Row(
                 children: [
-                  Text('Serie',
-                      style: Theme.of(context).textTheme.titleSmall),
+                  Text('Serie', style: Theme.of(context).textTheme.titleSmall),
                   const Spacer(),
                   TextButton.icon(
                     onPressed: _addSerie,
                     icon: const Icon(Icons.add, size: 16),
                     label: const Text('Aggiungi serie'),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -611,17 +702,13 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
                             textAlign: TextAlign.center,
                             style: TextStyle(
                                 fontSize: 11,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outline))),
+                                color: Theme.of(context).colorScheme.outline))),
                     Expanded(
                         child: Text('Reps',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                                 fontSize: 11,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outline))),
+                                color: Theme.of(context).colorScheme.outline))),
                     const SizedBox(width: 32),
                   ],
                 ),
@@ -637,8 +724,7 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
                   onDelete: () => _removeSerie(i),
                   onChanged: (weight, reps) {
                     setState(() {
-                      _series[i] =
-                          _SerieRow(weight: weight, reps: reps);
+                      _series[i] = _SerieRow(weight: weight, reps: reps);
                     });
                   },
                 );
@@ -693,10 +779,8 @@ class _SerieEditRowState extends State<_SerieEditRow> {
   void initState() {
     super.initState();
     _weightCtrl = TextEditingController(
-        text:
-            widget.serie.weight > 0 ? widget.serie.weight.toString() : '');
-    _repsCtrl =
-        TextEditingController(text: widget.serie.reps.toString());
+        text: widget.serie.weight > 0 ? widget.serie.weight.toString() : '');
+    _repsCtrl = TextEditingController(text: widget.serie.reps.toString());
   }
 
   @override
@@ -731,8 +815,8 @@ class _SerieEditRowState extends State<_SerieEditRow> {
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: '0',
-                  contentPadding: const EdgeInsets.symmetric(
-                      vertical: 8, horizontal: 8),
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8)),
                 ),
@@ -755,15 +839,14 @@ class _SerieEditRowState extends State<_SerieEditRow> {
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: '8',
-                  contentPadding: const EdgeInsets.symmetric(
-                      vertical: 8, horizontal: 8),
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8)),
                 ),
                 onChanged: (v) {
                   widget.onChanged(
-                    double.tryParse(_weightCtrl.text) ??
-                        widget.serie.weight,
+                    double.tryParse(_weightCtrl.text) ?? widget.serie.weight,
                     int.tryParse(v) ?? widget.serie.reps,
                   );
                 },

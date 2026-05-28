@@ -11,6 +11,10 @@ class NotificationService {
   Future<void> init() async {
     try {
       _audioPlayer = AudioPlayer();
+      // Pre-carica su web per evitare ritardi
+      if (kIsWeb) {
+        await _audioPlayer!.setSource(AssetSource('sounds/rest_done.mp3'));
+      }
     } catch (e) {
       debugPrint('Audio init error: $e');
     }
@@ -18,15 +22,16 @@ class NotificationService {
 
   Future<void> playRestDone() async {
     try {
-      if (_audioPlayer == null) await init();
+      _audioPlayer ??= AudioPlayer();
       await _audioPlayer!.stop();
       await _audioPlayer!.play(AssetSource('sounds/rest_done.mp3'));
     } catch (e) {
-      debugPrint('Audio error: $e');
+      debugPrint('Audio playback error: $e');
     }
   }
 
   void dispose() {
     _audioPlayer?.dispose();
+    _audioPlayer = null;
   }
 }

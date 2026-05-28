@@ -91,7 +91,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     final streak = _computeStreak();
     final weekDays = _currentWeekDays();
-    const dayLabels = ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
 
     return Scaffold(
       appBar: AppBar(
@@ -115,23 +114,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
       body: RefreshIndicator(
         onRefresh: _loadData,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
           children: [
-            // Stats sempre visibile se ci sono sessioni
-            if (_sessions.isNotEmpty) ...[
-              _StatsCard(
-                  totalSessions: _sessions.length, streak: streak),
-              const SizedBox(height: 16),
-            ],
+            // ── Compact Stats Bar ──
+            if (_sessions.isNotEmpty)
+              _CompactStatsBar(
+                totalSessions: _sessions.length,
+                streak: streak,
+                weekDays: weekDays,
+              ),
+            if (_sessions.isNotEmpty) const SizedBox(height: 14),
 
-            if (streak > 0) ...[
-              _StreakCard(
-                  streak: streak,
-                  weekDays: weekDays,
-                  dayLabels: dayLabels),
-              const SizedBox(height: 16),
-            ],
-
+            // ── Calendario ──
             _CalendarCard(
               focusedMonth: _focusedMonth,
               sessionsByDate: _sessionsByDate,
@@ -177,9 +171,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               .textTheme
                               .bodySmall
                               ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .outline)),
+                                  color:
+                                      Theme.of(context).colorScheme.outline)),
                     ],
                   ),
                 ),
@@ -203,8 +196,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               .map((s) => ListTile(
                     leading: const Icon(Icons.fitness_center),
                     title: Text(s.workoutName),
-                    trailing:
-                        const Icon(Icons.arrow_forward_ios, size: 14),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                     contentPadding: EdgeInsets.zero,
                     onTap: () {
                       Navigator.pop(context);
@@ -242,137 +234,110 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
-class _StatsCard extends StatelessWidget {
+// ── Compact Stats Bar — piccola, sopra il calendario ──
+class _CompactStatsBar extends StatelessWidget {
   final int totalSessions;
   final int streak;
-  const _StatsCard({required this.totalSessions, required this.streak});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surfaceContainer,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              children: [
-                Icon(Icons.fitness_center, color: cs.primary, size: 28),
-                const SizedBox(height: 6),
-                Text('$totalSessions',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800, color: cs.primary)),
-                Text('Allenamenti',
-                    style: TextStyle(fontSize: 11, color: cs.outline)),
-              ],
-            ),
-          ),
-          Container(width: 1, height: 48, color: cs.outlineVariant),
-          Expanded(
-            child: Column(
-              children: [
-                Text('🔥',
-                    style: const TextStyle(fontSize: 26)),
-                const SizedBox(height: 6),
-                Text('$streak',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800, color: cs.primary)),
-                Text('${streak == 1 ? 'Settimana' : 'Settimane'}',
-                    style: TextStyle(fontSize: 11, color: cs.outline)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StreakCard extends StatelessWidget {
-  final int streak;
   final List<bool> weekDays;
-  final List<String> dayLabels;
 
-  const _StreakCard({
+  const _CompactStatsBar({
+    required this.totalSessions,
     required this.streak,
     required this.weekDays,
-    required this.dayLabels,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: Theme.of(context).colorScheme.primaryContainer,
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text('🔥', style: TextStyle(fontSize: 24)),
-                const SizedBox(width: 8),
-                Text(
-                  '$streak ${streak == 1 ? 'settimana' : 'settimane'} di fila!',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onPrimaryContainer),
+    final cs = Theme.of(context).colorScheme;
+    const dayLabels = ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          // Totale allenamenti
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$totalSessions',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: cs.primary,
+                  height: 1,
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            LayoutBuilder(builder: (context, constraints) {
-              final dotSize =
-                  (constraints.maxWidth / 7 * 0.6).clamp(20.0, 36.0);
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: List.generate(7, (i) {
-                  final done = weekDays[i];
-                  return Column(
-                    children: [
-                      Text(dayLabels[i],
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onPrimaryContainer
-                                .withOpacity(0.7),
-                          )),
-                      const SizedBox(height: 4),
-                      Container(
-                        width: dotSize,
-                        height: dotSize,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: done
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .onPrimaryContainer
-                                  .withOpacity(0.1),
-                        ),
-                        child: done
-                            ? Icon(Icons.check,
-                                size: dotSize * 0.55,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onPrimary)
-                            : null,
+              ),
+              Text('allenamenti',
+                  style: TextStyle(fontSize: 10, color: cs.outline)),
+            ],
+          ),
+          const SizedBox(width: 12),
+
+          // Divider
+          Container(width: 1, height: 36, color: cs.outlineVariant),
+          const SizedBox(width: 12),
+
+          // Streak
+          Text('🔥', style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: 4),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$streak',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: cs.primary,
+                  height: 1,
+                ),
+              ),
+              Text(streak == 1 ? 'settimana' : 'settimane',
+                  style: TextStyle(fontSize: 10, color: cs.outline)),
+            ],
+          ),
+          const SizedBox(width: 12),
+
+          // Divider
+          Container(width: 1, height: 36, color: cs.outlineVariant),
+          const SizedBox(width: 12),
+
+          // Week dots — compatti
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: List.generate(7, (i) {
+                final done = weekDays[i];
+                return Column(
+                  children: [
+                    Text(dayLabels[i],
+                        style: TextStyle(
+                            fontSize: 8,
+                            color: cs.outline,
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 3),
+                    Container(
+                      width: 16,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: done ? cs.primary : cs.outlineVariant,
                       ),
-                    ],
-                  );
-                }),
-              );
-            }),
-          ],
-        ),
+                      child: done
+                          ? Icon(Icons.check, size: 10, color: cs.onPrimary)
+                          : null,
+                    ),
+                  ],
+                );
+              }),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -467,17 +432,19 @@ class _CalendarCard extends StatelessWidget {
                       ),
                       itemCount: startOffset + daysInMonth,
                       itemBuilder: (_, index) {
-                        if (index < startOffset) return const SizedBox.shrink();
+                        if (index < startOffset)
+                          return const SizedBox.shrink();
                         final day = index - startOffset + 1;
-                        final date =
-                            DateTime(focusedMonth.year, focusedMonth.month, day);
+                        final date = DateTime(
+                            focusedMonth.year, focusedMonth.month, day);
                         final dateStr =
                             '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
                         final sessions = sessionsByDate[dateStr] ?? [];
                         final hasSession = sessions.isNotEmpty;
-                        final isToday = date.year == DateTime.now().year &&
-                            date.month == DateTime.now().month &&
-                            date.day == DateTime.now().day;
+                        final isToday =
+                            date.year == DateTime.now().year &&
+                                date.month == DateTime.now().month &&
+                                date.day == DateTime.now().day;
 
                         return _DayCell(
                           day: day,
@@ -486,8 +453,9 @@ class _CalendarCard extends StatelessWidget {
                           sessions: sessions,
                           circleSize: circleSize,
                           fontSize: fontSize,
-                          onTap:
-                              hasSession ? () => onDayTapped(dateStr, sessions) : null,
+                          onTap: hasSession
+                              ? () => onDayTapped(dateStr, sessions)
+                              : null,
                         );
                       },
                     ),
@@ -541,8 +509,7 @@ class _DayCellState extends State<_DayCell> {
           elevation: 6,
           borderRadius: BorderRadius.circular(10),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             constraints: const BoxConstraints(maxWidth: 200),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
@@ -560,8 +527,7 @@ class _DayCellState extends State<_DayCell> {
                           children: [
                             Icon(Icons.fitness_center,
                                 size: 13,
-                                color:
-                                    Theme.of(context).colorScheme.primary),
+                                color: Theme.of(context).colorScheme.primary),
                             const SizedBox(width: 6),
                             Flexible(
                               child: Text(s.workoutName,
