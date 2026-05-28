@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/hive_models.dart';
@@ -33,7 +34,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           ),
         ],
       ),
-      // Niente FAB — bottone sempre in basso centrato dentro il body
       body: provider.workouts.isEmpty
           ? _EmptyState(onAdd: () => _showAddWorkoutDialog(context))
           : _WorkoutList(
@@ -147,7 +147,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 }
 
-// ─── Lista schede con bottone centrato in fondo ───
+// ── Lista schede con bottone glass in fondo ──
 class _WorkoutList extends StatelessWidget {
   final List<HiveWorkout> workouts;
   final VoidCallback onAdd;
@@ -157,6 +157,7 @@ class _WorkoutList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
       children: [
@@ -168,20 +169,90 @@ class _WorkoutList extends StatelessWidget {
             itemBuilder: (_, i) => _WorkoutCard(workout: workouts[i]),
           ),
         ),
-
-        // Bottone centrato in fondo, sopra la navbar
         Padding(
           padding: EdgeInsets.fromLTRB(32, 8, 32, bottomPadding + 100),
-          child: FilledButton.icon(
-            onPressed: onAdd,
-            icon: const Icon(Icons.add),
-            label: const Text('Nuova scheda'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(double.infinity, 50),
+          child: _WorkoutGlassButton(onTap: onAdd, isDark: isDark),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Glass button per nuova scheda ──
+class _WorkoutGlassButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final bool isDark;
+
+  const _WorkoutGlassButton({required this.onTap, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    // Colore base: secondaryContainer in chiaro (non troppo chiaro),
+    // surfaceContainerHigh in scuro (non troppo cupo)
+    final baseColor =
+        isDark ? cs.surfaceContainerHigh : cs.secondaryContainer;
+    final fgColor =
+        isDark ? cs.onSurface : cs.onSecondaryContainer;
+    final borderColor = isDark
+        ? Colors.white.withOpacity(0.1)
+        : cs.secondary.withOpacity(0.2);
+    final glassOverlay = isDark
+        ? Colors.white.withOpacity(0.04)
+        : Colors.white.withOpacity(0.35);
+    final shadowColor = isDark
+        ? Colors.black.withOpacity(0.3)
+        : cs.secondary.withOpacity(0.2);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+              decoration: BoxDecoration(
+                color: baseColor.withOpacity(isDark ? 0.85 : 0.95),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderColor, width: 1.2),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [glassOverlay, Colors.transparent],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: shadowColor,
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_rounded, color: fgColor, size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Nuova scheda',
+                    style: TextStyle(
+                      color: fgColor,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -317,9 +388,8 @@ class _WorkoutCard extends StatelessWidget {
                 decoration: const InputDecoration(labelText: 'Nome scheda'),
                 onSubmitted: (_) {
                   if (controller.text.trim().isNotEmpty) {
-                    context
-                        .read<WorkoutProvider>()
-                        .renameWorkout(workout.key, controller.text.trim());
+                    context.read<WorkoutProvider>().renameWorkout(
+                        workout.key, controller.text.trim());
                   }
                   Navigator.pop(ctx);
                 },
@@ -357,7 +427,7 @@ class _WorkoutCard extends StatelessWidget {
   }
 }
 
-// ─── Empty state con bottone centrato ───
+// ── Empty state ──
 class _EmptyState extends StatelessWidget {
   final VoidCallback onAdd;
   const _EmptyState({required this.onAdd});
@@ -365,6 +435,8 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -399,14 +471,7 @@ class _EmptyState extends StatelessWidget {
                   ?.copyWith(color: cs.outline),
             ),
             const SizedBox(height: 28),
-            FilledButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add),
-              label: const Text('Crea scheda'),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(200, 50),
-              ),
-            ),
+            _WorkoutGlassButton(onTap: onAdd, isDark: isDark),
           ],
         ),
       ),
