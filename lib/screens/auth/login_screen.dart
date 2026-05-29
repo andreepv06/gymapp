@@ -534,50 +534,62 @@ class _GlassTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
     final fieldBg = isDark
         ? Colors.white.withOpacity(0.07)
         : Colors.white.withOpacity(0.6);
+
     final borderColor = isDark
         ? Colors.white.withOpacity(0.12)
         : Colors.white.withOpacity(0.7);
+
     final labelColor =
         isDark ? Colors.white.withOpacity(0.7) : cs.onSurfaceVariant;
+
     final textColor = isDark ? Colors.white : cs.onSurface;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
         child: TextFormField(
           controller: controller,
           obscureText: obscure,
           keyboardType: keyboardType,
-          style: TextStyle(color: textColor, fontSize: 15),
+          style: TextStyle(
+            color: textColor,
+            fontSize: 15,
+          ),
           validator: validator,
+
           decoration: InputDecoration(
             labelText: label,
             hintText: hint,
-          
+
             floatingLabelBehavior: FloatingLabelBehavior.auto,
+
             floatingLabelStyle: TextStyle(
               color: isDark
-                  ? Colors.white.withOpacity(0.9)
+                  ? Colors.white.withOpacity(0.95)
                   : cs.primary,
               fontSize: 14,
               fontWeight: FontWeight.w600,
+              backgroundColor: fieldBg,
             ),
-          
+
             labelStyle: TextStyle(
               color: labelColor,
               fontSize: 14,
             ),
-          
+
             hintStyle: TextStyle(
               color: isDark
                   ? Colors.white.withOpacity(0.3)
                   : cs.outline.withOpacity(0.6),
             ),
-          
+
             prefixIcon: Icon(
               icon,
               color: isDark
@@ -585,24 +597,33 @@ class _GlassTextField extends StatelessWidget {
                   : cs.outline,
               size: 20,
             ),
-          
+
             suffixIcon: suffixIcon,
-          
+
             filled: true,
             fillColor: fieldBg,
-          
+
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 20,
+            ),
+
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: borderColor, width: 1),
-              gapPadding: 8,
+              borderSide: BorderSide(
+                color: borderColor,
+                width: 1,
+              ),
             ),
-          
+
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: borderColor, width: 1),
-              gapPadding: 8,
+              borderSide: BorderSide(
+                color: borderColor,
+                width: 1,
+              ),
             ),
-          
+
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(
@@ -611,18 +632,14 @@ class _GlassTextField extends StatelessWidget {
                     : cs.primary,
                 width: 1.5,
               ),
-              gapPadding: 8,
             ),
-          
+
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: cs.error, width: 1),
-              gapPadding: 8,
-            ),
-          
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 20,
+              borderSide: BorderSide(
+                color: cs.error,
+                width: 1,
+              ),
             ),
           ),
         ),
@@ -630,6 +647,7 @@ class _GlassTextField extends StatelessWidget {
     );
   }
 }
+
 
 // ── Bottone primario glass ──
 class _GlassPrimaryButton extends StatelessWidget {
