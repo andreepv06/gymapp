@@ -548,83 +548,72 @@ class _GlassTextField extends StatelessWidget {
 
     final textColor = isDark ? Colors.white : cs.onSurface;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+    return TextFormField(
+      controller: controller,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      style: TextStyle(
+        color: textColor,
+        fontSize: 15,
+      ),
+      validator: validator,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+
+        labelStyle: TextStyle(
+          color: labelColor,
+          fontSize: 14,
+        ),
+
+        hintStyle: TextStyle(
+          color: isDark
+              ? Colors.white.withOpacity(0.3)
+              : cs.outline.withOpacity(0.6),
+        ),
+
+        prefixIcon: Icon(
+          icon,
+          color: isDark ? Colors.white.withOpacity(0.5) : cs.outline,
+          size: 20,
+        ),
+
+        suffixIcon: suffixIcon,
+
+        filled: true,
+        fillColor: fieldBg,
+
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 18,
+        ),
+
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: borderColor),
+        ),
+
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: borderColor),
+        ),
+
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: isDark ? Colors.white.withOpacity(0.4) : cs.primary,
+            width: 1.5,
           ),
-          child: TextFormField(
-            controller: controller,
-            obscureText: obscure,
-            keyboardType: keyboardType,
-            style: TextStyle(
-              color: textColor,
-              fontSize: 15,
-            ),
-            validator: validator,
-            decoration: InputDecoration(
-              labelText: label,
-              hintText: hint,
-              floatingLabelBehavior: FloatingLabelBehavior.auto,
-              floatingLabelStyle: TextStyle(
-                color: isDark ? Colors.white.withOpacity(0.95) : cs.primary,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                backgroundColor: fieldBg,
-              ),
-              labelStyle: TextStyle(
-                color: labelColor,
-                fontSize: 14,
-              ),
-              hintStyle: TextStyle(
-                color: isDark
-                    ? Colors.white.withOpacity(0.3)
-                    : cs.outline.withOpacity(0.6),
-              ),
-              prefixIcon: Icon(
-                icon,
-                color: isDark ? Colors.white.withOpacity(0.5) : cs.outline,
-                size: 20,
-              ),
-              suffixIcon: suffixIcon,
-              filled: true,
-              fillColor: fieldBg,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 20,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: borderColor, width: 1),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: borderColor, width: 1),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                  color: isDark ? Colors.white.withOpacity(0.4) : cs.primary,
-                  width: 1.5,
-                ),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: cs.error, width: 1),
-              ),
-            ),
-          ),
+        ),
+
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: cs.error),
         ),
       ),
     );
-  
   }
 }
-
-
 // ── Bottone primario glass ──
 class _GlassPrimaryButton extends StatelessWidget {
   final VoidCallback? onTap;

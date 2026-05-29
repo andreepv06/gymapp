@@ -195,8 +195,7 @@ class _WorkoutGlassButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     // Stesso schema colore usato in workout_detail_screen._GlassButton
-    //final baseColor = cs.primary;
-    final baseColor = const Color(0xFF3730A3);
+    final baseColor = cs.primary;
     final borderColor =
         Colors.white.withOpacity(isDark ? 0.12 : 0.35);
     final glassOverlay =
