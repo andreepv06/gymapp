@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/exercise_provider.dart';
@@ -23,6 +24,8 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ExerciseProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -34,9 +37,10 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
               )
             : null,
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddExerciseModal(context),
-        child: const Icon(Icons.add),
+      // FAB glass al posto del FAB standard
+      floatingActionButton: _GlassFab(
+        isDark: isDark,
+        onTap: () => _showAddExerciseModal(context),
       ),
       body: Column(
         children: [
@@ -64,10 +68,74 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => const AddExerciseModal(),
+    );
+  }
+}
+
+// ── FAB glass per aggiungere esercizio ──
+class _GlassFab extends StatelessWidget {
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _GlassFab({required this.isDark, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final baseColor = cs.primary;
+    final borderColor = Colors.white.withOpacity(isDark ? 0.12 : 0.35);
+    final glassOverlay = Colors.white.withOpacity(isDark ? 0.07 : 0.2);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: baseColor,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: borderColor, width: 1.2),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [glassOverlay, Colors.transparent],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: baseColor.withOpacity(0.4),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add_rounded, color: cs.onPrimary, size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Nuovo esercizio',
+                    style: TextStyle(
+                      color: cs.onPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -89,8 +157,8 @@ class _MuscleGroupChips extends StatelessWidget {
       height: 48,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 8),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: groups.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
@@ -120,27 +188,23 @@ class _ExerciseList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Se è selezionato un gruppo specifico, mostra lista piatta
     if (selectedGroup != 'Tutti') {
       return ListView(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 8),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
-          ...defaultExercises
-              .map((e) => _ExerciseCard(exercise: e)),
+          ...defaultExercises.map((e) => _ExerciseCard(exercise: e)),
           if (customExercises.isNotEmpty) ...[
             _GroupHeader(
                 title: 'Personalizzati',
                 color: Theme.of(context).colorScheme.tertiary),
-            ...customExercises
-                .map((e) => _ExerciseCard(exercise: e)),
+            ...customExercises.map((e) => _ExerciseCard(exercise: e)),
           ],
           const SizedBox(height: 80),
         ],
       );
     }
 
-    // Quando "Tutti" è selezionato, raggruppa per muscolo
     final Map<String, List<HiveExercise>> grouped = {};
     for (final e in defaultExercises) {
       grouped.putIfAbsent(e.muscleGroup, () => []).add(e);
@@ -148,22 +212,19 @@ class _ExerciseList extends StatelessWidget {
     final sortedGroups = grouped.keys.toList()..sort();
 
     return ListView(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       children: [
         for (final group in sortedGroups) ...[
           _GroupHeader(
               title: group,
               color: Theme.of(context).colorScheme.primary),
-          ...grouped[group]!
-              .map((e) => _ExerciseCard(exercise: e)),
+          ...grouped[group]!.map((e) => _ExerciseCard(exercise: e)),
         ],
         if (customExercises.isNotEmpty) ...[
           _GroupHeader(
               title: 'Personalizzati',
               color: Theme.of(context).colorScheme.tertiary),
-          ...customExercises
-              .map((e) => _ExerciseCard(exercise: e)),
+          ...customExercises.map((e) => _ExerciseCard(exercise: e)),
         ],
         const SizedBox(height: 80),
       ],
@@ -193,12 +254,11 @@ class _GroupHeader extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             title.toUpperCase(),
-            style:
-                Theme.of(context).textTheme.labelSmall?.copyWith(
-                      letterSpacing: 1.1,
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  letterSpacing: 1.1,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
           ),
         ],
       ),
@@ -274,14 +334,8 @@ class _AddExerciseModalState extends State<AddExerciseModal> {
   bool _isCustom = true;
 
   static const _muscleGroups = [
-    'Petto',
-    'Spalle',
-    'Schiena',
-    'Bicipiti',
-    'Tricipiti',
-    'Lombari',
-    'Gambe',
-    'Addominali',
+    'Petto', 'Spalle', 'Schiena', 'Bicipiti',
+    'Tricipiti', 'Lombari', 'Gambe', 'Addominali',
   ];
 
   @override
@@ -316,9 +370,7 @@ class _AddExerciseModalState extends State<AddExerciseModal> {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .outlineVariant,
+                    color: Theme.of(context).colorScheme.outlineVariant,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -331,7 +383,6 @@ class _AddExerciseModalState extends State<AddExerciseModal> {
                 controller: _nameController,
                 decoration: const InputDecoration(
                   labelText: 'Nome esercizio',
-                  border: OutlineInputBorder(),
                 ),
                 textCapitalization: TextCapitalization.sentences,
                 onChanged: (_) => setState(() {}),
@@ -349,18 +400,15 @@ class _AddExerciseModalState extends State<AddExerciseModal> {
                     children: [
                       Icon(Icons.info_outline,
                           size: 14,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .tertiary),
+                          color: Theme.of(context).colorScheme.tertiary),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           'Esiste già un esercizio con questo nome.',
                           style: TextStyle(
                               fontSize: 12,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .tertiary),
+                              color:
+                                  Theme.of(context).colorScheme.tertiary),
                         ),
                       ),
                     ],
@@ -400,11 +448,9 @@ class _AddExerciseModalState extends State<AddExerciseModal> {
                       ? 'Note (obbligatorie)'
                       : 'Note (opzionale)',
                   hintText: 'Es. grip neutro, cavi alti...',
-                  border: const OutlineInputBorder(),
                 ),
                 validator: (v) {
-                  if (nameExists &&
-                      (v == null || v.trim().isEmpty)) {
+                  if (nameExists && (v == null || v.trim().isEmpty)) {
                     return 'Aggiungi una nota per distinguerlo';
                   }
                   return null;

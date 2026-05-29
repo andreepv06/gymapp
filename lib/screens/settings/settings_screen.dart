@@ -987,22 +987,15 @@ class _GlassThemeToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    // In tema chiaro: sfondo neutro scuro per contrasto testo bianco
-    // In tema scuro: sfondo scuro semi-trasparente
-    final baseColor = isDark
-        ? const Color(0xFF1C1C1E)
-        : cs.primary; // primary garantisce sempre contrasto su onPrimary
-
-    final fgColor = isDark ? Colors.white : cs.onPrimary;
-    final fgSubColor = isDark
-        ? Colors.white.withOpacity(0.65)
-        : cs.onPrimary.withOpacity(0.8);
+    // Tema chiaro: sfondo primary (viola) → testo onPrimary (bianco) ✓
+    // Tema scuro: sfondo quasi nero → testo bianco ✓
+    final baseColor = isDark ? const Color(0xFF2A2A2E) : cs.primary;
+    final fgColor = Colors.white; // sempre bianco su entrambi i fondali
+    final fgSubColor = Colors.white.withOpacity(0.7);
     final borderColor = isDark
-        ? Colors.white.withOpacity(0.12)
-        : Colors.white.withOpacity(0.35);
-    final iconBg = isDark
-        ? Colors.white.withOpacity(0.12)
-        : Colors.white.withOpacity(0.22);
+        ? Colors.white.withOpacity(0.1)
+        : Colors.white.withOpacity(0.3);
+    final iconBg = Colors.white.withOpacity(isDark ? 0.1 : 0.2);
 
     return Padding(
       padding: const EdgeInsets.all(4),
@@ -1016,21 +1009,20 @@ class _GlassThemeToggle extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: baseColor.withOpacity(isDark ? 0.75 : 1.0),
+                color: baseColor,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: borderColor, width: 1),
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Colors.white.withOpacity(isDark ? 0.06 : 0.15),
+                    Colors.white.withOpacity(isDark ? 0.05 : 0.15),
                     Colors.transparent,
                   ],
                 ),
               ),
               child: Row(
                 children: [
-                  // Icona
                   Container(
                     width: 36,
                     height: 36,
@@ -1045,8 +1037,6 @@ class _GlassThemeToggle extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 14),
-
-                  // Testo
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1055,31 +1045,26 @@ class _GlassThemeToggle extends StatelessWidget {
                           'Tema',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: fgColor, // sempre contrastato
+                            color: fgColor,
+                            fontSize: 15,
                           ),
                         ),
                         Text(
                           isDark ? 'Modalità scura' : 'Modalità chiara',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: fgSubColor,
-                          ),
+                          style: TextStyle(fontSize: 12, color: fgSubColor),
                         ),
                       ],
                     ),
                   ),
-
                   // Toggle pill
                   Container(
                     width: 52,
                     height: 28,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(isDark ? 0.15 : 0.25),
+                      color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                        width: 1,
-                      ),
+                          color: Colors.white.withOpacity(0.3), width: 1),
                     ),
                     child: AnimatedAlign(
                       duration: const Duration(milliseconds: 220),
@@ -1092,7 +1077,7 @@ class _GlassThemeToggle extends StatelessWidget {
                         height: 22,
                         margin: const EdgeInsets.all(3),
                         decoration: BoxDecoration(
-                          color: fgColor,
+                          color: Colors.white,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
@@ -1104,7 +1089,7 @@ class _GlassThemeToggle extends StatelessWidget {
                         child: Icon(
                           isDark ? Icons.dark_mode : Icons.light_mode,
                           size: 12,
-                          color: isDark ? const Color(0xFF1C1C1E) : cs.primary,
+                          color: baseColor,
                         ),
                       ),
                     ),

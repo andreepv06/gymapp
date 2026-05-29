@@ -24,16 +24,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     final provider = context.watch<WorkoutProvider>();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Le mie schede'),
-        actions: [
-          IconButton(
-            onPressed: () => _showAddWorkoutDialog(context),
-            icon: const Icon(Icons.add_rounded),
-            tooltip: 'Nuova scheda',
-          ),
-        ],
-      ),
+      // Nessun IconButton + in AppBar
+      appBar: AppBar(title: const Text('Le mie schede')),
       body: provider.workouts.isEmpty
           ? _EmptyState(onAdd: () => _showAddWorkoutDialog(context))
           : _WorkoutList(
@@ -81,7 +73,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
-                    ?.copyWith(color: Theme.of(context).colorScheme.outline),
+                    ?.copyWith(
+                        color: Theme.of(context).colorScheme.outline),
               ),
               const SizedBox(height: 20),
               TextField(
@@ -171,39 +164,42 @@ class _WorkoutList extends StatelessWidget {
         ),
         Padding(
           padding: EdgeInsets.fromLTRB(32, 8, 32, bottomPadding + 100),
-          child: _WorkoutGlassButton(onTap: onAdd, isDark: isDark),
+          child: _WorkoutGlassButton(
+            onTap: onAdd,
+            isDark: isDark,
+            icon: Icons.add_rounded,
+            label: 'Nuova scheda',
+          ),
         ),
       ],
     );
   }
 }
 
-// ── Glass button per nuova scheda ──
+// ── Bottone glass riusabile ──
+// Usa gli stessi colori del bottone "Aggiungi esercizi" in workout_detail_screen
 class _WorkoutGlassButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool isDark;
+  final IconData icon;
+  final String label;
 
-  const _WorkoutGlassButton({required this.onTap, required this.isDark});
+  const _WorkoutGlassButton({
+    required this.onTap,
+    required this.isDark,
+    required this.icon,
+    required this.label,
+  });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
-    // Colore base: secondaryContainer in chiaro (non troppo chiaro),
-    // surfaceContainerHigh in scuro (non troppo cupo)
-    final baseColor =
-        isDark ? cs.surfaceContainerHigh : cs.secondaryContainer;
-    final fgColor =
-        isDark ? cs.onSurface : cs.onSecondaryContainer;
-    final borderColor = isDark
-        ? Colors.white.withOpacity(0.1)
-        : cs.secondary.withOpacity(0.2);
-    final glassOverlay = isDark
-        ? Colors.white.withOpacity(0.04)
-        : Colors.white.withOpacity(0.35);
-    final shadowColor = isDark
-        ? Colors.black.withOpacity(0.3)
-        : cs.secondary.withOpacity(0.2);
+    // Stesso schema colore usato in workout_detail_screen._GlassButton
+    final baseColor = cs.primary;
+    final borderColor =
+        Colors.white.withOpacity(isDark ? 0.12 : 0.35);
+    final glassOverlay =
+        Colors.white.withOpacity(isDark ? 0.07 : 0.2);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -218,7 +214,7 @@ class _WorkoutGlassButton extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
               decoration: BoxDecoration(
-                color: baseColor.withOpacity(isDark ? 0.85 : 0.95),
+                color: baseColor,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: borderColor, width: 1.2),
                 gradient: LinearGradient(
@@ -228,7 +224,7 @@ class _WorkoutGlassButton extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: shadowColor,
+                    color: baseColor.withOpacity(0.35),
                     blurRadius: 16,
                     offset: const Offset(0, 4),
                   ),
@@ -237,12 +233,12 @@ class _WorkoutGlassButton extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.add_rounded, color: fgColor, size: 22),
+                  Icon(icon, color: cs.onPrimary, size: 22),
                   const SizedBox(width: 8),
                   Text(
-                    'Nuova scheda',
+                    label,
                     style: TextStyle(
-                      color: fgColor,
+                      color: cs.onPrimary,
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
                     ),
@@ -275,7 +271,8 @@ class _WorkoutCard extends StatelessWidget {
             color: cs.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(Icons.list_alt, color: cs.onPrimaryContainer, size: 22),
+          child:
+              Icon(Icons.list_alt, color: cs.onPrimaryContainer, size: 22),
         ),
         title: Text(workout.name,
             style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -385,7 +382,8 @@ class _WorkoutCard extends StatelessWidget {
                 controller: controller,
                 autofocus: false,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(labelText: 'Nome scheda'),
+                decoration:
+                    const InputDecoration(labelText: 'Nome scheda'),
                 onSubmitted: (_) {
                   if (controller.text.trim().isNotEmpty) {
                     context.read<WorkoutProvider>().renameWorkout(
@@ -471,7 +469,12 @@ class _EmptyState extends StatelessWidget {
                   ?.copyWith(color: cs.outline),
             ),
             const SizedBox(height: 28),
-            _WorkoutGlassButton(onTap: onAdd, isDark: isDark),
+            _WorkoutGlassButton(
+              onTap: onAdd,
+              isDark: isDark,
+              icon: Icons.add_rounded,
+              label: 'Crea scheda',
+            ),
           ],
         ),
       ),
