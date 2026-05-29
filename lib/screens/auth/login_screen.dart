@@ -557,39 +557,73 @@ class _GlassTextField extends StatelessWidget {
           decoration: InputDecoration(
             labelText: label,
             hintText: hint,
-            labelStyle: TextStyle(color: labelColor, fontSize: 14),
+          
+            floatingLabelBehavior: FloatingLabelBehavior.auto,
+            floatingLabelStyle: TextStyle(
+              color: isDark
+                  ? Colors.white.withOpacity(0.9)
+                  : cs.primary,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          
+            labelStyle: TextStyle(
+              color: labelColor,
+              fontSize: 14,
+            ),
+          
             hintStyle: TextStyle(
-                color: isDark
-                    ? Colors.white.withOpacity(0.3)
-                    : cs.outline.withOpacity(0.6)),
-            prefixIcon: Icon(icon,
-                color: isDark ? Colors.white.withOpacity(0.5) : cs.outline,
-                size: 20),
+              color: isDark
+                  ? Colors.white.withOpacity(0.3)
+                  : cs.outline.withOpacity(0.6),
+            ),
+          
+            prefixIcon: Icon(
+              icon,
+              color: isDark
+                  ? Colors.white.withOpacity(0.5)
+                  : cs.outline,
+              size: 20,
+            ),
+          
             suffixIcon: suffixIcon,
+          
             filled: true,
             fillColor: fieldBg,
+          
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(color: borderColor, width: 1),
+              gapPadding: 8,
             ),
+          
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(color: borderColor, width: 1),
+              gapPadding: 8,
             ),
+          
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(
-                  color: isDark
-                      ? Colors.white.withOpacity(0.4)
-                      : cs.primary,
-                  width: 1.5),
+                color: isDark
+                    ? Colors.white.withOpacity(0.4)
+                    : cs.primary,
+                width: 1.5,
+              ),
+              gapPadding: 8,
             ),
+          
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(color: cs.error, width: 1),
+              gapPadding: 8,
             ),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 20,
+            ),
           ),
         ),
       ),
