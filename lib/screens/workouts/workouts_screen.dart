@@ -1,9 +1,10 @@
-import 'dart:ui';
+//import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/hive_models.dart';
 import '../../providers/workout_provider.dart';
 import 'workout_detail_screen.dart';
+import '../../widgets/glass_button.dart';
 
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
@@ -140,118 +141,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 }
 
-// ── Lista schede con bottone glass in fondo ──
-class _WorkoutList extends StatelessWidget {
-  final List<HiveWorkout> workouts;
-  final VoidCallback onAdd;
-
-  const _WorkoutList({required this.workouts, required this.onAdd});
-
-  @override
-  Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            itemCount: workouts.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (_, i) => _WorkoutCard(workout: workouts[i]),
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(32, 8, 32, bottomPadding + 100),
-          child: _WorkoutGlassButton(
-            onTap: onAdd,
-            isDark: isDark,
-            icon: Icons.add_rounded,
-            label: 'Nuova scheda',
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 // ── Bottone glass riusabile ──
 // Usa gli stessi colori del bottone "Aggiungi esercizi" in workout_detail_screen
-class _WorkoutGlassButton extends StatelessWidget {
-  final VoidCallback onTap;
-  final bool isDark;
-  final IconData icon;
-  final String label;
-
-  const _WorkoutGlassButton({
-    required this.onTap,
-    required this.isDark,
-    required this.icon,
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    // Stesso schema colore usato in workout_detail_screen._GlassButton
-    final baseColor = cs.primary;
-    final borderColor =
-        Colors.white.withOpacity(isDark ? 0.12 : 0.35);
-    final glassOverlay =
-        Colors.white.withOpacity(isDark ? 0.07 : 0.2);
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            child: Container(
-              width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
-              decoration: BoxDecoration(
-                color: baseColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: borderColor, width: 1.2),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [glassOverlay, Colors.transparent],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: baseColor.withOpacity(0.35),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, color: cs.onPrimary, size: 22),
-                  const SizedBox(width: 8),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: cs.onPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _WorkoutCard extends StatelessWidget {
   final HiveWorkout workout;
@@ -469,15 +361,58 @@ class _EmptyState extends StatelessWidget {
                   ?.copyWith(color: cs.outline),
             ),
             const SizedBox(height: 28),
-            _WorkoutGlassButton(
+            GlassButton(
               onTap: onAdd,
-              isDark: isDark,
               icon: Icons.add_rounded,
               label: 'Crea scheda',
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _WorkoutList extends StatelessWidget {
+  final List<HiveWorkout> workouts;
+  final VoidCallback onAdd;
+
+  const _WorkoutList({
+    required this.workouts,
+    required this.onAdd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            itemCount: workouts.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (_, i) {
+              return _WorkoutCard(workout: workouts[i]);
+            },
+          ),
+        ),
+
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            32,
+            8,
+            32,
+            bottomPadding + 100,
+          ),
+          child: GlassButton(
+            onTap: onAdd,
+            icon: Icons.add_rounded,
+            label: 'Nuova scheda',
+          ),
+        ),
+      ],
     );
   }
 }
