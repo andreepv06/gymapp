@@ -990,8 +990,10 @@ class _GlassThemeToggle extends StatelessWidget {
     // Tema chiaro: sfondo primary (viola) → testo onPrimary (bianco) ✓
     // Tema scuro: sfondo quasi nero → testo bianco ✓
     final baseColor = isDark ? const Color(0xFF2A2A2E) : cs.primary;
-    final fgColor = Colors.white; // sempre bianco su entrambi i fondali
-    final fgSubColor = Colors.white.withOpacity(0.7);
+    final fgColor = isDark ? Colors.white : cs.onPrimary;
+    final fgSubColor = isDark
+    ? Colors.white.withOpacity(0.7)
+    : cs.onPrimary.withOpacity(0.75);
     final borderColor = isDark
         ? Colors.white.withOpacity(0.1)
         : Colors.white.withOpacity(0.3);
