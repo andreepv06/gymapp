@@ -64,7 +64,6 @@ class MyApp extends StatelessWidget {
             theme: _buildTheme(Brightness.light),
             darkTheme: _buildTheme(Brightness.dark),
             themeMode: themeProvider.themeMode,
-            // FIX striscia bianca: colore di sfondo durante le transizioni
             builder: (context, child) {
               final cs = Theme.of(context).colorScheme;
               return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -74,7 +73,8 @@ class MyApp extends StatelessWidget {
                       Theme.of(context).brightness == Brightness.dark
                           ? Brightness.light
                           : Brightness.dark,
-                  statusBarBrightness: Theme.of(context).brightness,
+                  statusBarBrightness:
+                      Theme.of(context).brightness,
                 ),
                 child: Container(
                   color: cs.surface,
@@ -97,17 +97,16 @@ class MyApp extends StatelessWidget {
     return ThemeData(
       colorScheme: colorScheme,
       useMaterial3: true,
-      // FIX flash bianco: tutti i colori di sfondo coerenti
       scaffoldBackgroundColor: colorScheme.surface,
       canvasColor: colorScheme.surface,
       dialogBackgroundColor: colorScheme.surface,
       textTheme: const TextTheme(
-        headlineLarge:
-            TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineMedium:
-            TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineSmall:
-            TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
+        headlineLarge: TextStyle(
+            fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineMedium: TextStyle(
+            fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineSmall: TextStyle(
+            fontWeight: FontWeight.w600, letterSpacing: -0.3),
         titleLarge: TextStyle(fontWeight: FontWeight.w600),
         titleMedium: TextStyle(fontWeight: FontWeight.w600),
         bodyLarge: TextStyle(letterSpacing: 0.1),
@@ -147,8 +146,8 @@ class MyApp extends StatelessWidget {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: colorScheme.outlineVariant, width: 1),
+          borderSide: BorderSide(
+              color: colorScheme.outlineVariant, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -157,7 +156,8 @@ class MyApp extends StatelessWidget {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.error, width: 1),
+          borderSide:
+              BorderSide(color: colorScheme.error, width: 1),
         ),
         contentPadding: const EdgeInsets.symmetric(
             horizontal: 16, vertical: 14),
@@ -175,7 +175,8 @@ class MyApp extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+          textStyle:
+              const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       dialogTheme: DialogThemeData(
@@ -201,7 +202,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ── AppEntry ──
 class AppEntry extends StatefulWidget {
   const AppEntry({super.key});
 
@@ -234,7 +234,8 @@ class _AppEntryState extends State<AppEntry> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.fitness_center, size: 48, color: cs.primary),
+              Icon(Icons.fitness_center,
+                  size: 48, color: cs.primary),
               const SizedBox(height: 16),
               CircularProgressIndicator(color: cs.primary),
             ],
@@ -259,7 +260,6 @@ class _AppEntryState extends State<AppEntry> {
   }
 }
 
-// ── MainShell ──
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -299,9 +299,9 @@ class _MainShellState extends State<MainShell> {
         Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
 
-    // FIX striscia bianca: aggiorna system overlay ad ogni rebuild
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      SystemChrome.setSystemUIOverlayStyle(
+          SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness:
             isDark ? Brightness.light : Brightness.dark,
@@ -326,11 +326,9 @@ class _MainShellState extends State<MainShell> {
       extendBody: true,
       body: PageView(
         controller: _pageController,
-        physics: const NeverScrollableScrollPhysics(),
-        // FIX: disabilita swipe orizzontale nel PageView — lo swipe
-        // back iOS/Android viene gestito dal Navigator (CupertinoPageRoute
-        // o swipe sul bordo), non dal PageView. Lasciare physics scrollabili
-        // sul PageView causa conflitti con il back gesture.
+        // RIABILITATO swipe laterale tra tab
+        // FIX: usa ClampingScrollPhysics per evitare conflitti con swipe-back
+        physics: const ClampingScrollPhysics(),
         onPageChanged: (index) {
           context.read<NavigationNotifier>().navigateTo(index);
         },
@@ -370,10 +368,12 @@ class _LiquidGlassNavBar extends StatelessWidget {
     _NavItem(icon: Icons.home_rounded, label: 'Home'),
     _NavItem(icon: Icons.list_alt_rounded, label: 'Schede'),
     _NavItem(
-        icon: Icons.play_circle_fill_rounded, label: 'Sessione'),
+        icon: Icons.play_circle_fill_rounded,
+        label: 'Sessione'),
     _NavItem(icon: Icons.bar_chart_rounded, label: 'Storico'),
     _NavItem(
-        icon: Icons.settings_rounded, label: 'Impostazioni'),
+        icon: Icons.settings_rounded,
+        label: 'Impostazioni'),
   ];
 
   @override

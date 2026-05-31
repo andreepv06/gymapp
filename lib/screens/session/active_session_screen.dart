@@ -458,8 +458,26 @@ class _ExerciseSessionCard extends StatelessWidget {
     final hasNote = ex.sessionNote != null && ex.sessionNote!.isNotEmpty;
     final hasExerciseNote = ex.notes != null && ex.notes!.isNotEmpty;
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Theme.of(context).colorScheme.outlineVariant.withOpacity(0.6)
+              : Theme.of(context).colorScheme.outlineVariant,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(
+                Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -643,6 +661,8 @@ class _ExerciseSessionCard extends StatelessWidget {
         ),
       ),
     );
+  
+  
   }
 }
 

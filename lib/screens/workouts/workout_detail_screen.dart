@@ -66,13 +66,12 @@ class _WorkoutDetailScreenState
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (ctx) => ChangeNotifierProvider.value(
         value: _workoutProvider,
-        child: _EditExerciseSheet(workoutExercise: we),
+        child: _GlassBottomSheet(
+          child: _EditExerciseSheet(workoutExercise: we),
+        ),
       ),
     );
   }
@@ -99,8 +98,8 @@ class _WorkoutDetailScreenState
                 return AnimatedBuilder(
                   animation: animation,
                   builder: (_, __) => Material(
-                    elevation: 6,
-                    borderRadius: BorderRadius.circular(12),
+                    elevation: 8,
+                    borderRadius: BorderRadius.circular(16),
                     shadowColor: Colors.black45,
                     child: child,
                   ),
@@ -122,8 +121,8 @@ class _WorkoutDetailScreenState
                   index: i,
                   workoutExercise: we,
                   onEdit: () => _showEditSheet(we),
-                  onDelete: () => _workoutProvider
-                      .removeExerciseFromWorkout(
+                  onDelete: () =>
+                      _workoutProvider.removeExerciseFromWorkout(
                           we.key, widget.workoutId),
                 );
               },
@@ -142,6 +141,44 @@ class _WorkoutDetailScreenState
               ),
             )
           : null,
+    );
+  }
+}
+
+// ── Wrapper Glass per bottom sheet ──
+class _GlassBottomSheet extends StatelessWidget {
+  final Widget child;
+  const _GlassBottomSheet({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ClipRRect(
+      borderRadius:
+          const BorderRadius.vertical(top: Radius.circular(28)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark
+                ? cs.surface.withOpacity(0.92)
+                : cs.surface.withOpacity(0.96),
+            borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28)),
+            border: Border(
+              top: BorderSide(
+                color: isDark
+                    ? Colors.white.withOpacity(0.1)
+                    : cs.outlineVariant.withOpacity(0.5),
+                width: 1,
+              ),
+            ),
+          ),
+          child: child,
+        ),
+      ),
     );
   }
 }
@@ -219,16 +256,46 @@ class _ExerciseRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final we = workoutExercise;
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return ReorderableDelayedDragStartListener(
       index: index,
-      child: Card(
+      child: Container(
         margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(16),
+          // Bordi visibili per le card esercizi
+          border: Border.all(
+            color: isDark
+                ? cs.outlineVariant.withOpacity(0.6)
+                : cs.outlineVariant,
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black
+                  .withOpacity(isDark ? 0.2 : 0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Drag handle indicator
+              Container(
+                width: 32,
+                height: 3,
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               Text(
                 we.exerciseName,
                 textAlign: TextAlign.center,
@@ -261,28 +328,34 @@ class _ExerciseRow extends StatelessWidget {
                 runSpacing: 4,
                 children: [
                   _InfoChip(label: '${we.sets} serie'),
-                  _InfoChip(label: '${we.targetReps} reps'),
+                  _InfoChip(
+                      label: '${we.targetReps} reps'),
                   if (we.targetWeight != null &&
                       we.targetWeight! > 0)
                     _InfoChip(
-                        label: '${we.targetWeight} kg'),
+                        label:
+                            '${we.targetWeight} kg'),
                   if (we.restSeconds != null)
                     _InfoChip(
-                        label: '${we.restSeconds}s rec.'),
+                        label:
+                            '${we.restSeconds}s rec.'),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisAlignment:
+                    MainAxisAlignment.center,
                 children: [
                   TextButton.icon(
                     onPressed: onEdit,
-                    icon: const Icon(Icons.edit, size: 14),
+                    icon: const Icon(Icons.edit,
+                        size: 14),
                     label: const Text('Modifica',
                         style: TextStyle(fontSize: 12)),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                      padding:
+                          const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                       minimumSize: Size.zero,
                       tapTargetSize:
                           MaterialTapTargetSize.shrinkWrap,
@@ -300,8 +373,9 @@ class _ExerciseRow extends StatelessWidget {
                             fontSize: 12,
                             color: Colors.red)),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                      padding:
+                          const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                       minimumSize: Size.zero,
                       tapTargetSize:
                           MaterialTapTargetSize.shrinkWrap,
@@ -324,8 +398,8 @@ class _InfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+          horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: Theme.of(context)
             .colorScheme
@@ -345,7 +419,8 @@ class _InfoChip extends StatelessWidget {
 // ── Selezione esercizi ──
 class _SelectExercisesScreen extends StatefulWidget {
   final dynamic workoutId;
-  const _SelectExercisesScreen({required this.workoutId});
+  const _SelectExercisesScreen(
+      {required this.workoutId});
 
   @override
   State<_SelectExercisesScreen> createState() =>
@@ -380,8 +455,8 @@ class _SelectExercisesScreenState
       final selected = _selected.toList();
       final toAdd = <HiveWorkoutExercise>[];
       for (int i = 0; i < selected.length; i++) {
-        final matches =
-            allExercises.where((e) => e.key == selected[i]);
+        final matches = allExercises
+            .where((e) => e.key == selected[i]);
         if (matches.isEmpty) continue;
         final ex = matches.first;
         toAdd.add(HiveWorkoutExercise(
@@ -411,14 +486,17 @@ class _SelectExercisesScreenState
     final allExercises =
         context.watch<ExerciseProvider>().exercises;
     final muscleGroups =
-        ({...allExercises.map((e) => e.muscleGroup)}.toList()
+        ({...allExercises.map((e) => e.muscleGroup)}
+            .toList()
           ..sort());
     final groups = ['Tutti', ...muscleGroups];
     final filtered = allExercises.where((e) {
       final matchMuscle = _muscleFilter == 'Tutti' ||
           e.muscleGroup == _muscleFilter;
       final matchSearch = _search.isEmpty ||
-          e.name.toLowerCase().contains(_search.toLowerCase());
+          e.name
+              .toLowerCase()
+              .contains(_search.toLowerCase());
       return matchMuscle && matchSearch;
     }).toList();
 
@@ -447,8 +525,8 @@ class _SelectExercisesScreenState
       body: Column(
         children: [
           Padding(
-            padding:
-                const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(
+                16, 12, 16, 8),
             child: TextField(
               decoration: const InputDecoration(
                 hintText: 'Cerca esercizio...',
@@ -526,10 +604,11 @@ class _SelectExercisesScreenState
   }
 }
 
-// ── Edit Exercise Sheet ──
+// ── Edit Exercise Sheet con Glass UI ──
 class _EditExerciseSheet extends StatefulWidget {
   final HiveWorkoutExercise workoutExercise;
-  const _EditExerciseSheet({required this.workoutExercise});
+  const _EditExerciseSheet(
+      {required this.workoutExercise});
 
   @override
   State<_EditExerciseSheet> createState() =>
@@ -601,7 +680,8 @@ class _EditExerciseSheetState
       muscleGroup: we.muscleGroup,
       sets: _series.length,
       targetReps: firstReps,
-      targetWeight: firstWeight > 0 ? firstWeight : null,
+      targetWeight:
+          firstWeight > 0 ? firstWeight : null,
       restSeconds: int.tryParse(_restCtrl.text),
       notes: _notesCtrl.text.trim().isEmpty
           ? null
@@ -617,34 +697,37 @@ class _EditExerciseSheetState
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 16,
-        right: 16,
-        top: 16,
+        left: 20,
+        right: 20,
+        top: 20,
       ),
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               Center(
                 child: Container(
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .outlineVariant,
-                    borderRadius: BorderRadius.circular(2),
+                    color: cs.outlineVariant,
+                    borderRadius:
+                        BorderRadius.circular(2),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-              Text(widget.workoutExercise.exerciseName,
+              Text(
+                  widget.workoutExercise.exerciseName,
                   style: Theme.of(context)
                       .textTheme
                       .titleMedium),
@@ -653,24 +736,25 @@ class _EditExerciseSheetState
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
-                      ?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .outline)),
+                      ?.copyWith(color: cs.outline)),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _restCtrl,
                 decoration: const InputDecoration(
-                    labelText: 'Recupero sec (opz.)'),
+                    labelText: 'Recupero (secondi)',
+                    prefixIcon:
+                        Icon(Icons.timer_outlined)),
                 keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _notesCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Note (opz.)',
+                  labelText: 'Note',
                   hintText:
                       'Es. presa prona, ROM completo...',
+                  prefixIcon: Icon(
+                      Icons.sticky_note_2_outlined),
                 ),
               ),
               const SizedBox(height: 20),
@@ -683,15 +767,18 @@ class _EditExerciseSheetState
                   const Spacer(),
                   TextButton.icon(
                     onPressed: _addSerie,
-                    icon: const Icon(Icons.add, size: 16),
-                    label:
-                        const Text('Aggiungi serie'),
+                    icon: const Icon(Icons.add,
+                        size: 16),
+                    label: const Text('Aggiungi'),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                      padding:
+                          const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4),
                       minimumSize: Size.zero,
                       tapTargetSize:
-                          MaterialTapTargetSize.shrinkWrap,
+                          MaterialTapTargetSize
+                              .shrinkWrap,
                     ),
                   ),
                 ],
@@ -705,20 +792,18 @@ class _EditExerciseSheetState
                     const SizedBox(width: 32),
                     Expanded(
                         child: Text('Peso kg',
-                            textAlign: TextAlign.center,
+                            textAlign:
+                                TextAlign.center,
                             style: TextStyle(
                                 fontSize: 11,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outline))),
+                                color: cs.outline))),
                     Expanded(
                         child: Text('Reps',
-                            textAlign: TextAlign.center,
+                            textAlign:
+                                TextAlign.center,
                             style: TextStyle(
                                 fontSize: 11,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outline))),
+                                color: cs.outline))),
                     const SizedBox(width: 32),
                   ],
                 ),
@@ -748,7 +833,7 @@ class _EditExerciseSheetState
                   child: const Text('Salva'),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -768,7 +853,8 @@ class _SerieEditRow extends StatefulWidget {
   final _SerieRow serie;
   final bool canDelete;
   final VoidCallback onDelete;
-  final void Function(double weight, int reps) onChanged;
+  final void Function(double weight, int reps)
+      onChanged;
 
   const _SerieEditRow({
     required this.index,
@@ -871,9 +957,11 @@ class _SerieEditRowState extends State<_SerieEditRow> {
                 ),
                 onChanged: (v) {
                   widget.onChanged(
-                    double.tryParse(_weightCtrl.text) ??
+                    double.tryParse(
+                            _weightCtrl.text) ??
                         widget.serie.weight,
-                    int.tryParse(v) ?? widget.serie.reps,
+                    int.tryParse(v) ??
+                        widget.serie.reps,
                   );
                 },
               ),
@@ -884,7 +972,8 @@ class _SerieEditRowState extends State<_SerieEditRow> {
             child: widget.canDelete
                 ? IconButton(
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    constraints:
+                        const BoxConstraints(),
                     icon: const Icon(
                         Icons.remove_circle_outline,
                         size: 18,

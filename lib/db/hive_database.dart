@@ -5,12 +5,15 @@ class HiveDatabase {
   static final HiveDatabase instance = HiveDatabase._internal();
   HiveDatabase._internal();
 
-  static const _exercises = 'exercises';
-  static const _workouts = 'workouts';
-  static const _workoutExercises = 'workout_exercises';
-  static const _sessions = 'sessions';
-  static const _sessionSets = 'session_sets';
-  static const _exerciseNotes = 'exercise_notes';
+  String _userId = 'default';
+
+  // Prefisso per separare i dati per utente
+  String get _exercises => '${_userId}_exercises';
+  String get _workouts => '${_userId}_workouts';
+  String get _workoutExercises => '${_userId}_workout_exercises';
+  String get _sessions => '${_userId}_sessions';
+  String get _sessionSets => '${_userId}_session_sets';
+  String get _exerciseNotes => '${_userId}_exercise_notes';
 
   Future<void> init() async {
     await Hive.initFlutter();
@@ -20,29 +23,51 @@ class HiveDatabase {
     Hive.registerAdapter(HiveSessionAdapter());
     Hive.registerAdapter(HiveSessionSetAdapter());
     Hive.registerAdapter(HiveExerciseNoteAdapter());
+    // Apre le box del guest di default
+    await _openBoxesForUser('default');
+  }
 
-    await Hive.openBox<HiveExercise>(_exercises);
-    await Hive.openBox<HiveWorkout>(_workouts);
-    await Hive.openBox<HiveWorkoutExercise>(_workoutExercises);
-    await Hive.openBox<HiveSession>(_sessions);
-    await Hive.openBox<HiveSessionSet>(_sessionSets);
-    await Hive.openBox<HiveExerciseNote>(_exerciseNotes);
-
+  Future<void> switchUser(String userId) async {
+    // Chiude le box correnti
+    await _closeCurrentBoxes();
+    // Pulisce l'ID
+    _userId = userId.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+    // Apre le box del nuovo utente
+    await _openBoxesForUser(_userId);
+    // Inserisce gli esercizi di default se è la prima volta
     if (Hive.box<HiveExercise>(_exercises).isEmpty) {
       await _insertDefaultExercises();
     }
   }
 
-  Box<HiveExercise> get _exBox =>
-      Hive.box<HiveExercise>(_exercises);
-  Box<HiveWorkout> get _woBox =>
-      Hive.box<HiveWorkout>(_workouts);
+  Future<void> _openBoxesForUser(String prefix) async {
+    final p = prefix.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+    await Hive.openBox<HiveExercise>('${p}_exercises');
+    await Hive.openBox<HiveWorkout>('${p}_workouts');
+    await Hive.openBox<HiveWorkoutExercise>('${p}_workout_exercises');
+    await Hive.openBox<HiveSession>('${p}_sessions');
+    await Hive.openBox<HiveSessionSet>('${p}_session_sets');
+    await Hive.openBox<HiveExerciseNote>('${p}_exercise_notes');
+  }
+
+  Future<void> _closeCurrentBoxes() async {
+    final boxes = [
+      _exercises, _workouts, _workoutExercises,
+      _sessions, _sessionSets, _exerciseNotes,
+    ];
+    for (final name in boxes) {
+      if (Hive.isBoxOpen(name)) {
+        await Hive.box(name).close();
+      }
+    }
+  }
+
+  Box<HiveExercise> get _exBox => Hive.box<HiveExercise>(_exercises);
+  Box<HiveWorkout> get _woBox => Hive.box<HiveWorkout>(_workouts);
   Box<HiveWorkoutExercise> get _weBox =>
       Hive.box<HiveWorkoutExercise>(_workoutExercises);
-  Box<HiveSession> get _seBox =>
-      Hive.box<HiveSession>(_sessions);
-  Box<HiveSessionSet> get _ssBox =>
-      Hive.box<HiveSessionSet>(_sessionSets);
+  Box<HiveSession> get _seBox => Hive.box<HiveSession>(_sessions);
+  Box<HiveSessionSet> get _ssBox => Hive.box<HiveSessionSet>(_sessionSets);
   Box<HiveExerciseNote> get _enBox =>
       Hive.box<HiveExerciseNote>(_exerciseNotes);
 
@@ -66,8 +91,8 @@ class HiveDatabase {
   }
 
   bool exerciseNameExists(String name) {
-    return _exBox.values.any((e) =>
-        e.name.trim().toLowerCase() == name.trim().toLowerCase());
+    return _exBox.values.any(
+        (e) => e.name.trim().toLowerCase() == name.trim().toLowerCase());
   }
 
   // ---- WORKOUTS ----
@@ -105,12 +130,11 @@ class HiveDatabase {
         .where((we) => we.workoutKey == workoutKey)
         .toList();
     list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    // Arricchisce con note dell'esercizio base se non ha note proprie
     for (final we in list) {
       if (we.notes == null) {
         try {
-          final ex = _exBox.values
-              .firstWhere((e) => e.key == we.exerciseKey);
+          final ex =
+              _exBox.values.firstWhere((e) => e.key == we.exerciseKey);
           we.notes = ex.notes;
         } catch (_) {}
       }
@@ -144,7 +168,8 @@ class HiveDatabase {
   Future<int> createSession(
       dynamic workoutKey, String workoutName) async {
     final session = HiveSession(
-      workoutKey: workoutKey is int ? workoutKey : workoutKey as int,
+      workoutKey:
+          workoutKey is int ? workoutKey : workoutKey as int,
       workoutName: workoutName,
       date: DateTime.now().toIso8601String(),
     );

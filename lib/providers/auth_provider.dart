@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import '../db/hive_database.dart';
 
 class UserAccount {
   final String identifier;
@@ -110,6 +111,10 @@ class AuthProvider extends ChangeNotifier {
         prefs.getString('user_email');
     _currentType = prefs.getString('current_type') ?? 'email';
     await _loadAccounts();
+    // Se è loggato, carica le box del suo utente
+    if (_isLoggedIn && _currentIdentifier != null) {
+      await HiveDatabase.instance.switchUser(_currentIdentifier!);
+    }
     notifyListeners();
   }
 
@@ -164,7 +169,8 @@ class AuthProvider extends ChangeNotifier {
 
     final exists = _accounts.any((a) => a.identifier == id);
     if (exists) {
-      return 'Account già esistente con questo ${type == 'email' ? 'indirizzo email' : 'username'}';
+      return 'Account già esistente con questo '
+          '${type == 'email' ? 'indirizzo email' : 'username'}';
     }
 
     _accounts.add(UserAccount(
@@ -202,6 +208,8 @@ class AuthProvider extends ChangeNotifier {
     await prefs.setBool('is_logged_in', true);
     await prefs.setString('current_identifier', identifier);
     await prefs.setString('current_type', type);
+    // Carica le box Hive dell'utente loggato
+    await HiveDatabase.instance.switchUser(identifier);
     notifyListeners();
   }
 
