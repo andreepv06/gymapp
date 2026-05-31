@@ -57,14 +57,34 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
       ],
       child: Consumer<ThemeProvider>(
-        builder: (_, themeProvider, __) => MaterialApp(
-          title: 'MarkFit',
-          debugShowCheckedModeBanner: false,
-          theme: _buildTheme(Brightness.light),
-          darkTheme: _buildTheme(Brightness.dark),
-          themeMode: themeProvider.themeMode,
-          home: const AppEntry(),
-        ),
+        builder: (_, themeProvider, __) {
+          return MaterialApp(
+            title: 'MarkFit',
+            debugShowCheckedModeBanner: false,
+            theme: _buildTheme(Brightness.light),
+            darkTheme: _buildTheme(Brightness.dark),
+            themeMode: themeProvider.themeMode,
+            // FIX striscia bianca: colore di sfondo durante le transizioni
+            builder: (context, child) {
+              final cs = Theme.of(context).colorScheme;
+              return AnnotatedRegion<SystemUiOverlayStyle>(
+                value: SystemUiOverlayStyle(
+                  statusBarColor: Colors.transparent,
+                  statusBarIconBrightness:
+                      Theme.of(context).brightness == Brightness.dark
+                          ? Brightness.light
+                          : Brightness.dark,
+                  statusBarBrightness: Theme.of(context).brightness,
+                ),
+                child: Container(
+                  color: cs.surface,
+                  child: child!,
+                ),
+              );
+            },
+            home: const AppEntry(),
+          );
+        },
       ),
     );
   }
@@ -77,18 +97,26 @@ class MyApp extends StatelessWidget {
     return ThemeData(
       colorScheme: colorScheme,
       useMaterial3: true,
+      // FIX flash bianco: tutti i colori di sfondo coerenti
+      scaffoldBackgroundColor: colorScheme.surface,
+      canvasColor: colorScheme.surface,
+      dialogBackgroundColor: colorScheme.surface,
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineMedium: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineSmall: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
+        headlineLarge:
+            TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineMedium:
+            TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineSmall:
+            TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
         titleLarge: TextStyle(fontWeight: FontWeight.w600),
         titleMedium: TextStyle(fontWeight: FontWeight.w600),
         bodyLarge: TextStyle(letterSpacing: 0.1),
       ),
-      scaffoldBackgroundColor: colorScheme.surface,
       cardTheme: CardThemeData(
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: colorScheme.surface,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
         surfaceTintColor: colorScheme.surfaceTint,
       ),
       appBarTheme: AppBarTheme(
@@ -97,6 +125,11 @@ class MyApp extends StatelessWidget {
         centerTitle: true,
         backgroundColor: colorScheme.surface,
         surfaceTintColor: colorScheme.surfaceTint,
+        systemOverlayStyle: brightness == Brightness.dark
+            ? SystemUiOverlayStyle.light
+                .copyWith(statusBarColor: Colors.transparent)
+            : SystemUiOverlayStyle.dark
+                .copyWith(statusBarColor: Colors.transparent),
         titleTextStyle: TextStyle(
           color: colorScheme.onSurface,
           fontSize: 18,
@@ -106,56 +139,69 @@ class MyApp extends StatelessWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.4),
+        fillColor:
+            colorScheme.surfaceContainerHighest.withOpacity(0.4),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),
+          borderSide:
+              BorderSide(color: colorScheme.outlineVariant, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.primary, width: 2),
+          borderSide:
+              BorderSide(color: colorScheme.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: colorScheme.error, width: 1),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 14),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(double.infinity, 50),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(
+              fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       dialogTheme: DialogThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: colorScheme.surface,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
         elevation: 0,
       ),
-      bottomSheetTheme: const BottomSheetThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colorScheme.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(24)),
         ),
         elevation: 0,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
 }
 
+// ── AppEntry ──
 class AppEntry extends StatefulWidget {
   const AppEntry({super.key});
 
@@ -179,17 +225,18 @@ class _AppEntryState extends State<AppEntry> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     if (!_checked) {
       return Scaffold(
+        backgroundColor: cs.surface,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.fitness_center,
-                  size: 48, color: Theme.of(context).colorScheme.primary),
+              Icon(Icons.fitness_center, size: 48, color: cs.primary),
               const SizedBox(height: 16),
-              CircularProgressIndicator(
-                  color: Theme.of(context).colorScheme.primary),
+              CircularProgressIndicator(color: cs.primary),
             ],
           ),
         ),
@@ -201,9 +248,8 @@ class _AppEntryState extends State<AppEntry> {
     if (!isLoggedIn) {
       return LoginScreen(
         onLoginSuccess: () {
-          context
-              .read<AuthProvider>()
-              .setLoggedIn(context.read<AuthProvider>().userEmail ?? '');
+          context.read<AuthProvider>().setLoggedIn(
+              context.read<AuthProvider>().userEmail ?? '');
           setState(() {});
         },
       );
@@ -213,6 +259,7 @@ class _AppEntryState extends State<AppEntry> {
   }
 }
 
+// ── MainShell ──
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -239,29 +286,36 @@ class _MainShellState extends State<MainShell> {
     context.read<NavigationNotifier>().navigateTo(index);
     _pageController.animateToPage(
       index,
-      duration: const Duration(milliseconds: 320),
+      duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex = context.watch<NavigationNotifier>().currentIndex;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentIndex =
+        context.watch<NavigationNotifier>().currentIndex;
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
 
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-    ));
+    // FIX striscia bianca: aggiorna system overlay ad ogni rebuild
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness:
+            isDark ? Brightness.dark : Brightness.light,
+      ));
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_pageController.hasClients &&
           _pageController.page?.round() != currentIndex) {
         _pageController.animateToPage(
           currentIndex,
-          duration: const Duration(milliseconds: 320),
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );
       }
@@ -272,6 +326,11 @@ class _MainShellState extends State<MainShell> {
       extendBody: true,
       body: PageView(
         controller: _pageController,
+        physics: const NeverScrollableScrollPhysics(),
+        // FIX: disabilita swipe orizzontale nel PageView — lo swipe
+        // back iOS/Android viene gestito dal Navigator (CupertinoPageRoute
+        // o swipe sul bordo), non dal PageView. Lasciare physics scrollabili
+        // sul PageView causa conflitti con il back gesture.
         onPageChanged: (index) {
           context.read<NavigationNotifier>().navigateTo(index);
         },
@@ -310,9 +369,11 @@ class _LiquidGlassNavBar extends StatelessWidget {
   static const _items = [
     _NavItem(icon: Icons.home_rounded, label: 'Home'),
     _NavItem(icon: Icons.list_alt_rounded, label: 'Schede'),
-    _NavItem(icon: Icons.play_circle_fill_rounded, label: 'Sessione'),
+    _NavItem(
+        icon: Icons.play_circle_fill_rounded, label: 'Sessione'),
     _NavItem(icon: Icons.bar_chart_rounded, label: 'Storico'),
-    _NavItem(icon: Icons.settings_rounded, label: 'Impostazioni'),
+    _NavItem(
+        icon: Icons.settings_rounded, label: 'Impostazioni'),
   ];
 
   @override
@@ -320,7 +381,6 @@ class _LiquidGlassNavBar extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
-    // Colori glass
     final glassBg = isDark
         ? Colors.grey.shade900.withOpacity(0.55)
         : Colors.white.withOpacity(0.6);
@@ -329,7 +389,8 @@ class _LiquidGlassNavBar extends StatelessWidget {
         : Colors.white.withOpacity(0.7);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding + 16),
+      padding:
+          EdgeInsets.fromLTRB(20, 0, 20, bottomPadding + 16),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(40),
         child: BackdropFilter(
@@ -342,14 +403,15 @@ class _LiquidGlassNavBar extends StatelessWidget {
               border: Border.all(color: glassBorder, width: 1.2),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.35 : 0.1),
+                  color: Colors.black
+                      .withOpacity(isDark ? 0.35 : 0.1),
                   blurRadius: 32,
                   spreadRadius: -4,
                   offset: const Offset(0, 8),
                 ),
-                // Highlight superiore effetto vetro
                 BoxShadow(
-                  color: Colors.white.withOpacity(isDark ? 0.04 : 0.6),
+                  color: Colors.white
+                      .withOpacity(isDark ? 0.04 : 0.6),
                   blurRadius: 0,
                   spreadRadius: 0,
                   offset: const Offset(0, 1),
@@ -401,8 +463,9 @@ class _LiquidNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unselected =
-        isDark ? Colors.white.withOpacity(0.45) : Colors.grey.shade600;
+    final unselected = isDark
+        ? Colors.white.withOpacity(0.45)
+        : Colors.grey.shade600;
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
@@ -413,7 +476,6 @@ class _LiquidNavItem extends StatelessWidget {
               key: ValueKey('sel_${item.label}'),
               item: item,
               primaryColor: primaryColor,
-              isDark: isDark,
             )
           : _UnselectedItem(
               key: ValueKey('unsel_${item.label}'),
@@ -427,21 +489,15 @@ class _LiquidNavItem extends StatelessWidget {
 class _SelectedItem extends StatelessWidget {
   final _NavItem item;
   final Color primaryColor;
-  final bool isDark;
 
   const _SelectedItem({
     super.key,
     required this.item,
     required this.primaryColor,
-    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Pillola interna glass colorata
-    final pillBg = primaryColor;
-    final pillHighlight = Colors.white.withOpacity(0.25);
-
     return SizedBox(
       height: 66,
       child: Center(
@@ -449,7 +505,7 @@ class _SelectedItem extends StatelessWidget {
           width: 56,
           height: 40,
           decoration: BoxDecoration(
-            color: pillBg,
+            color: primaryColor,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
@@ -462,7 +518,7 @@ class _SelectedItem extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                pillHighlight,
+                Colors.white.withOpacity(0.25),
                 Colors.transparent,
               ],
             ),
@@ -470,7 +526,6 @@ class _SelectedItem extends StatelessWidget {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Shine superiore vetro
               Positioned(
                 top: 3,
                 child: Container(

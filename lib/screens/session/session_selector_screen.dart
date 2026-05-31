@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/workout_provider.dart';
 import '../../models/hive_models.dart';
 import '../../main.dart';
+import '../../widgets/glass_button.dart';
 import 'active_session_screen.dart';
 
 class SessionSelectorScreen extends StatefulWidget {
@@ -13,22 +14,28 @@ class SessionSelectorScreen extends StatefulWidget {
       _SessionSelectorScreenState();
 }
 
-class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
+class _SessionSelectorScreenState
+    extends State<SessionSelectorScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => context.read<WorkoutProvider>().loadWorkouts());
+    Future.microtask(
+        () => context.read<WorkoutProvider>().loadWorkouts());
   }
 
   @override
   Widget build(BuildContext context) {
-    final workoutProvider = context.watch<WorkoutProvider>();
+    final workoutProvider =
+        context.watch<WorkoutProvider>();
     final workouts = workoutProvider.workouts;
     final cs = Theme.of(context).colorScheme;
 
     if (workouts.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Sessione')),
+        backgroundColor: cs.surface,
+        appBar: AppBar(
+            backgroundColor: cs.surface,
+            title: const Text('Sessione')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -43,17 +50,21 @@ class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(Icons.fitness_center,
-                      size: 40, color: cs.onSecondaryContainer),
+                      size: 40,
+                      color: cs.onSecondaryContainer),
                 ),
                 const SizedBox(height: 20),
-                Text('Nessuna scheda disponibile',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w700)),
+                Text(
+                  'Nessuna scheda disponibile',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(
+                          fontWeight: FontWeight.w700),
+                ),
                 const SizedBox(height: 8),
                 Text(
-                  'Crea prima una scheda di allenamento\nper iniziare una sessione',
+                  'Crea prima una scheda\nper iniziare una sessione',
                   textAlign: TextAlign.center,
                   style: Theme.of(context)
                       .textTheme
@@ -61,13 +72,13 @@ class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
                       ?.copyWith(color: cs.outline),
                 ),
                 const SizedBox(height: 28),
-                FilledButton.icon(
-                  onPressed: () =>
-                      context.read<NavigationNotifier>().navigateTo(1),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Vai alle schede'),
-                  style: FilledButton.styleFrom(
-                      minimumSize: const Size(200, 50)),
+                GlassButton(
+                  onTap: () => context
+                      .read<NavigationNotifier>()
+                      .navigateTo(1),
+                  icon: Icons.list_alt_rounded,
+                  label: 'Vai alle schede',
+                  minWidth: 200,
                 ),
               ],
             ),
@@ -77,41 +88,48 @@ class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sessione')),
+      backgroundColor: cs.surface,
+      appBar: AppBar(
+          backgroundColor: cs.surface,
+          title: const Text('Sessione')),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header informativo — usa i colori del tema, niente gradiente fisso
           _SessionHeader(),
-
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+            padding:
+                const EdgeInsets.fromLTRB(20, 12, 20, 8),
             child: Text(
               'Scegli la scheda',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              style: Theme.of(context)
+                  .textTheme
+                  .titleSmall
+                  ?.copyWith(
                     color: cs.outline,
                     letterSpacing: 0.5,
                   ),
             ),
           ),
-
           Expanded(
             child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+              padding:
+                  const EdgeInsets.fromLTRB(16, 0, 16, 100),
               itemCount: workouts.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (_, __) =>
+                  const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final workout = workouts[index];
                 return _WorkoutSessionCard(
                   workout: workout,
                   onTap: () async {
-                    workoutProvider.loadWorkoutExercises(workout.key);
+                    workoutProvider
+                        .loadWorkoutExercises(workout.key);
                     if (!context.mounted) return;
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) =>
-                            ActiveSessionScreen(workout: workout),
+                        builder: (_) => ActiveSessionScreen(
+                            workout: workout),
                       ),
                     );
                   },
@@ -125,7 +143,6 @@ class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
   }
 }
 
-// Header informativo con colori dal tema — funziona bene sia in chiaro che scuro
 class _SessionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -147,11 +164,8 @@ class _SessionHeader extends StatelessWidget {
               color: cs.secondary,
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              Icons.fitness_center_rounded,
-              color: cs.onSecondary,
-              size: 26,
-            ),
+            child: Icon(Icons.fitness_center_rounded,
+                color: cs.onSecondary, size: 26),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -160,7 +174,10 @@ class _SessionHeader extends StatelessWidget {
               children: [
                 Text(
                   'Pronto ad allenarti?',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(
                         color: cs.onSecondaryContainer,
                         fontWeight: FontWeight.w700,
                       ),
@@ -169,7 +186,8 @@ class _SessionHeader extends StatelessWidget {
                 Text(
                   'Scegli una scheda per iniziare',
                   style: TextStyle(
-                    color: cs.onSecondaryContainer.withOpacity(0.75),
+                    color: cs.onSecondaryContainer
+                        .withOpacity(0.75),
                     fontSize: 13,
                   ),
                 ),
@@ -207,20 +225,24 @@ class _WorkoutSessionCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(Icons.list_alt,
-                    color: cs.onPrimaryContainer, size: 24),
+                    color: cs.onPrimaryContainer,
+                    size: 24),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Text(workout.name,
                         style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 15)),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15)),
                     const SizedBox(height: 2),
                     Text(_formatDate(workout.createdAt),
-                        style:
-                            TextStyle(fontSize: 12, color: cs.outline)),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: cs.outline)),
                   ],
                 ),
               ),

@@ -8,47 +8,67 @@ class NotificationService {
   NotificationService._internal();
 
   AudioPlayer? _audioPlayer;
+  bool _isPlaying = false;
 
   Future<void> init() async {
     try {
-      _audioPlayer = AudioPlayer();
-      debugPrint('Audio initialized');
+      if (!kIsWeb) {
+        _audioPlayer = AudioPlayer();
+      }
+      debugPrint('NotificationService initialized');
     } catch (e) {
       debugPrint('Audio init error: $e');
     }
   }
 
   Future<void> playRestDone() async {
-    // 1. Vibrazione — funziona sia su mobile che su PWA installata
-    try {
-      await HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 200));
-      await HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 200));
-      await HapticFeedback.heavyImpact();
-    } catch (_) {}
+    if (_isPlaying) return;
+    _isPlaying = true;
 
-    // 2. Audio — su web richiede interazione utente precedente (policy browser)
+    // 1. Vibrazione — tripla, funziona su mobile e PWA installata
+    _vibrate();
+
+    // 2. Audio
     try {
       if (kIsWeb) {
-        // Su web ricrea sempre il player: evita problemi di stato
-        await _audioPlayer?.dispose();
+        // Su web: ricrea sempre il player per bypassare stato bloccato
+        // NOTA: su Safari/iOS la prima riproduzione richiede interazione utente
+        try {
+          await _audioPlayer?.dispose();
+        } catch (_) {}
         _audioPlayer = AudioPlayer();
         await _audioPlayer!.setVolume(1.0);
         await _audioPlayer!.play(AssetSource('sounds/rest_done.mp3'));
+        debugPrint('Audio played (web)');
       } else {
+        // Mobile: riusa il player
         _audioPlayer ??= AudioPlayer();
-        await _audioPlayer!.stop();
+        try {
+          await _audioPlayer!.stop();
+        } catch (_) {}
         await _audioPlayer!.play(AssetSource('sounds/rest_done.mp3'));
+        debugPrint('Audio played (mobile)');
       }
-      debugPrint('Audio played');
     } catch (e) {
       debugPrint('Audio playback error: $e');
+    } finally {
+      _isPlaying = false;
     }
+  }
+
+  void _vibrate() async {
+    try {
+      await HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 180));
+      await HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 180));
+      await HapticFeedback.heavyImpact();
+    } catch (_) {}
   }
 
   void dispose() {
     _audioPlayer?.dispose();
     _audioPlayer = null;
+    _isPlaying = false;
   }
 }

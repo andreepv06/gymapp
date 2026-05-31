@@ -63,108 +63,110 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor:
+          isDark ? const Color(0xFF0D0D1A) : cs.surface,
       body: Stack(
         children: [
-          // Sfondo con gradiente
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDark
-                    ? [
-                        const Color(0xFF0D0D1A),
-                        const Color(0xFF1A1025),
-                        const Color(0xFF0D1A1A),
-                      ]
-                    : [
-                        cs.primary.withOpacity(0.15),
-                        cs.secondary.withOpacity(0.1),
-                        cs.tertiary.withOpacity(0.08),
-                      ],
+          // Sfondo gradiente
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [
+                          const Color(0xFF0D0D1A),
+                          const Color(0xFF1A1025),
+                          const Color(0xFF0D1A1A),
+                        ]
+                      : [
+                          cs.primary.withOpacity(0.1),
+                          cs.secondary.withOpacity(0.07),
+                          cs.surface,
+                        ],
+                ),
               ),
             ),
           ),
 
-          // Cerchi decorativi sfocati
+          // Cerchi decorativi sfumati
           Positioned(
-            top: -80,
-            right: -60,
+            top: -100,
+            right: -80,
             child: Container(
-              width: 280,
-              height: 280,
+              width: 300,
+              height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: cs.primary.withOpacity(isDark ? 0.15 : 0.12),
+                color:
+                    cs.primary.withOpacity(isDark ? 0.12 : 0.08),
               ),
             ),
           ),
           Positioned(
-            bottom: -60,
-            left: -40,
+            bottom: -80,
+            left: -60,
             child: Container(
-              width: 220,
-              height: 220,
+              width: 240,
+              height: 240,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: cs.secondary.withOpacity(isDark ? 0.12 : 0.1),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 200,
-            left: -80,
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: cs.tertiary.withOpacity(isDark ? 0.08 : 0.07),
+                color: cs.secondary
+                    .withOpacity(isDark ? 0.1 : 0.07),
               ),
             ),
           ),
 
-          // Contenuto
+          // Contenuto scrollabile
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 32),
+                    horizontal: 24, vertical: 24),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
+                  constraints:
+                      const BoxConstraints(maxWidth: 420),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.center,
                     children: [
-                      // Logo glass
-                      _GlassLogo(cs: cs, isDark: isDark),
+                      // Logo
+                      _buildLogo(cs, isDark, context),
                       const SizedBox(height: 32),
 
-                      // Card glass principale
-                      _GlassCard(
+                      // Card form glass
+                      _buildGlassCard(
                         isDark: isDark,
                         child: Form(
                           key: _formKey,
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
                             children: [
-                              // Titolo
+                              // Titolo animato
                               AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 200),
+                                duration: const Duration(
+                                    milliseconds: 200),
                                 child: Column(
                                   key: ValueKey(_isRegister),
                                   crossAxisAlignment:
                                       CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      _isRegister ? 'Crea account' : 'Bentornato',
+                                      _isRegister
+                                          ? 'Crea account'
+                                          : 'Bentornato',
                                       style: Theme.of(context)
                                           .textTheme
                                           .headlineSmall
                                           ?.copyWith(
-                                            fontWeight: FontWeight.w800,
+                                            fontWeight:
+                                                FontWeight.w800,
                                             color: isDark
                                                 ? Colors.white
                                                 : cs.onSurface,
@@ -174,12 +176,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                     const SizedBox(height: 4),
                                     Text(
                                       _isRegister
-                                          ? 'Inizia il tuo percorso fitness'
+                                          ? 'Inizia il tuo percorso'
                                           : 'Accedi al tuo account',
                                       style: TextStyle(
                                         fontSize: 14,
                                         color: isDark
-                                            ? Colors.white.withOpacity(0.6)
+                                            ? Colors.white
+                                                .withOpacity(0.55)
                                             : cs.outline,
                                       ),
                                     ),
@@ -188,33 +191,39 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(height: 28),
 
-                              // Campo email/username
-                              _GlassTextField(
+                              // Campo identifier
+                              // FIX label troncata: usa InputDecoration
+                              // senza ClipRRect, contentPadding generoso
+                              _buildField(
+                                context: context,
                                 controller: _identifierCtrl,
                                 label: 'Email o username',
                                 hint: _isRegister
                                     ? 'mario@email.com o mario99'
                                     : 'Inserisci email o username',
-                                icon: Icons.person_outline_rounded,
+                                icon:
+                                    Icons.person_outline_rounded,
                                 isDark: isDark,
                                 keyboardType:
                                     TextInputType.emailAddress,
                                 validator: (v) {
-                                  if (v == null || v.trim().isEmpty) {
+                                  if (v == null ||
+                                      v.trim().isEmpty) {
                                     return 'Campo obbligatorio';
                                   }
                                   if (_isRegister &&
                                       !v.contains('@') &&
                                       v.trim().length < 3) {
-                                    return 'Username troppo corto';
+                                    return 'Username min 3 caratteri';
                                   }
                                   return null;
                                 },
                               ),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 16),
 
                               // Campo password
-                              _GlassTextField(
+                              _buildField(
+                                context: context,
                                 controller: _passwordCtrl,
                                 label: 'Password',
                                 icon: Icons.lock_outline_rounded,
@@ -224,20 +233,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                   icon: Icon(
                                     _obscure
                                         ? Icons.visibility_outlined
-                                        : Icons.visibility_off_outlined,
+                                        : Icons
+                                            .visibility_off_outlined,
                                     size: 20,
                                     color: isDark
-                                        ? Colors.white.withOpacity(0.5)
+                                        ? Colors.white
+                                            .withOpacity(0.5)
                                         : cs.outline,
                                   ),
-                                  onPressed: () =>
-                                      setState(() => _obscure = !_obscure),
+                                  onPressed: () => setState(() =>
+                                      _obscure = !_obscure),
                                 ),
                                 validator: (v) {
                                   if (v == null || v.isEmpty) {
                                     return 'Campo obbligatorio';
                                   }
-                                  if (_isRegister && v.length < 6) {
+                                  if (_isRegister &&
+                                      v.length < 6) {
                                     return 'Minimo 6 caratteri';
                                   }
                                   return null;
@@ -246,33 +258,45 @@ class _LoginScreenState extends State<LoginScreen> {
 
                               // Errore
                               AnimatedSize(
-                                duration: const Duration(milliseconds: 200),
+                                duration: const Duration(
+                                    milliseconds: 200),
                                 child: _error != null
                                     ? Container(
                                         margin:
-                                            const EdgeInsets.only(top: 12),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 14, vertical: 10),
+                                            const EdgeInsets.only(
+                                                top: 12),
+                                        padding: const EdgeInsets
+                                            .symmetric(
+                                            horizontal: 14,
+                                            vertical: 10),
                                         decoration: BoxDecoration(
-                                          color:
-                                              cs.errorContainer.withOpacity(0.8),
+                                          color: cs.errorContainer
+                                              .withOpacity(0.9),
                                           borderRadius:
-                                              BorderRadius.circular(10),
+                                              BorderRadius.circular(
+                                                  10),
                                           border: Border.all(
-                                              color: cs.error.withOpacity(0.3)),
+                                              color: cs.error
+                                                  .withOpacity(
+                                                      0.3)),
                                         ),
                                         child: Row(
                                           children: [
-                                            Icon(Icons.error_outline,
-                                                color: cs.onErrorContainer,
+                                            Icon(
+                                                Icons.error_outline,
+                                                color: cs
+                                                    .onErrorContainer,
                                                 size: 16),
-                                            const SizedBox(width: 8),
+                                            const SizedBox(
+                                                width: 8),
                                             Expanded(
-                                              child: Text(_error!,
-                                                  style: TextStyle(
-                                                      color:
-                                                          cs.onErrorContainer,
-                                                      fontSize: 13)),
+                                              child: Text(
+                                                _error!,
+                                                style: TextStyle(
+                                                    color: cs
+                                                        .onErrorContainer,
+                                                    fontSize: 13),
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -282,22 +306,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
                               const SizedBox(height: 24),
 
-                              // Bottone principale glass
-                              _GlassPrimaryButton(
-                                onTap: _loading ? null : _submit,
-                                label: _isRegister
-                                    ? 'Crea account'
-                                    : 'Accedi',
-                                loading: _loading,
-                                isDark: isDark,
-                                cs: cs,
-                              ),
+                              // Bottone principale
+                              _buildPrimaryButton(cs),
 
                               const SizedBox(height: 20),
 
                               // Switch login/register
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
                                 children: [
                                   Text(
                                     _isRegister
@@ -306,7 +323,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: isDark
-                                          ? Colors.white.withOpacity(0.6)
+                                          ? Colors.white
+                                              .withOpacity(0.55)
                                           : cs.outline,
                                     ),
                                   ),
@@ -318,11 +336,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                       _passwordCtrl.clear();
                                     }),
                                     style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8),
+                                      padding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 8),
                                     ),
                                     child: Text(
-                                      _isRegister ? 'Accedi' : 'Registrati',
+                                      _isRegister
+                                          ? 'Accedi'
+                                          : 'Registrati',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 13,
@@ -338,28 +359,34 @@ class _LoginScreenState extends State<LoginScreen> {
                               if (_isRegister) ...[
                                 const SizedBox(height: 8),
                                 Container(
-                                  padding: const EdgeInsets.all(12),
+                                  padding:
+                                      const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: cs.primary.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(10),
+                                    color:
+                                        cs.primary.withOpacity(0.1),
+                                    borderRadius:
+                                        BorderRadius.circular(10),
                                     border: Border.all(
-                                        color: cs.primary.withOpacity(0.2)),
+                                        color: cs.primary
+                                            .withOpacity(0.2)),
                                   ),
                                   child: Row(
                                     children: [
                                       Icon(Icons.info_outline,
                                           size: 14,
                                           color: isDark
-                                              ? Colors.white.withOpacity(0.7)
+                                              ? Colors.white
+                                                  .withOpacity(0.7)
                                               : cs.primary),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          'Completa il profilo nelle impostazioni dopo la registrazione.',
+                                          'Completa il profilo nelle impostazioni.',
                                           style: TextStyle(
                                             fontSize: 11,
                                             color: isDark
-                                                ? Colors.white.withOpacity(0.6)
+                                                ? Colors.white
+                                                    .withOpacity(0.55)
                                                 : cs.onSurfaceVariant,
                                           ),
                                         ),
@@ -382,105 +409,82 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-}
 
-// ── Logo glass ──
-class _GlassLogo extends StatelessWidget {
-  final ColorScheme cs;
-  final bool isDark;
-  const _GlassLogo({required this.cs, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
+  // ── Logo ──
+  Widget _buildLogo(
+      ColorScheme cs, bool isDark, BuildContext context) {
     return Column(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Container(
-              width: 90,
-              height: 90,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    cs.primary,
-                    cs.secondary,
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: cs.primary.withOpacity(0.4),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Positioned(
-                    top: 8,
-                    left: 10,
-                    right: 10,
-                    child: Container(
-                      height: 1,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.4),
-                        borderRadius: BorderRadius.circular(1),
-                      ),
-                    ),
-                  ),
-                  const Icon(Icons.fitness_center,
-                      size: 44, color: Colors.white),
-                ],
-              ),
+        Container(
+          width: 86,
+          height: 86,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [cs.primary, cs.secondary],
             ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+                color: Colors.white.withOpacity(0.3), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: cs.primary.withOpacity(0.4),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned(
+                top: 8,
+                left: 10,
+                right: 10,
+                child: Container(
+                  height: 1,
+                  color: Colors.white.withOpacity(0.35),
+                ),
+              ),
+              const Icon(Icons.fitness_center,
+                  size: 42, color: Colors.white),
+            ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         Text(
           'MarkFit',
           style: TextStyle(
-            fontSize: 30,
+            fontSize: 28,
             fontWeight: FontWeight.w800,
             letterSpacing: -1,
-            color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+            color:
+                isDark ? Colors.white : const Color(0xFF1A1A2E),
           ),
         ),
         Text(
           'Il tuo compagno di allenamento',
           style: TextStyle(
             fontSize: 13,
-            color: isDark ? Colors.white.withOpacity(0.5) : Colors.grey.shade600,
+            color: isDark
+                ? Colors.white.withOpacity(0.45)
+                : Colors.grey.shade600,
           ),
         ),
       ],
     );
   }
-}
 
-// ── Card glass contenitore form ──
-class _GlassCard extends StatelessWidget {
-  final Widget child;
-  final bool isDark;
-  const _GlassCard({required this.child, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
+  // ── Card glass ──
+  Widget _buildGlassCard(
+      {required bool isDark, required Widget child}) {
     final glassBg = isDark
-        ? Colors.white.withOpacity(0.06)
-        : Colors.white.withOpacity(0.65);
+        ? Colors.white.withOpacity(0.07)
+        : Colors.white.withOpacity(0.72);
     final glassBorder = isDark
         ? Colors.white.withOpacity(0.1)
-        : Colors.white.withOpacity(0.8);
+        : Colors.white.withOpacity(0.9);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
@@ -494,8 +498,9 @@ class _GlassCard extends StatelessWidget {
             border: Border.all(color: glassBorder, width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
-                blurRadius: 32,
+                color:
+                    Colors.black.withOpacity(isDark ? 0.25 : 0.05),
+                blurRadius: 30,
                 offset: const Offset(0, 8),
               ),
             ],
@@ -505,133 +510,100 @@ class _GlassCard extends StatelessWidget {
       ),
     );
   }
-}
 
-// ── TextField glass ──
-class _GlassTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final String? hint;
-  final IconData icon;
-  final bool isDark;
-  final bool obscure;
-  final Widget? suffixIcon;
-  final TextInputType? keyboardType;
-  final String? Function(String?)? validator;
-
-  const _GlassTextField({
-    required this.controller,
-    required this.label,
-    required this.icon,
-    required this.isDark,
-    this.hint,
-    this.obscure = false,
-    this.suffixIcon,
-    this.keyboardType,
-    this.validator,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  // ── TextField senza ClipRRect — FIX label troncata ──
+  Widget _buildField({
+    required BuildContext context,
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required bool isDark,
+    String? hint,
+    bool obscure = false,
+    Widget? suffixIcon,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
     final cs = Theme.of(context).colorScheme;
 
     final fieldBg = isDark
-        ? Colors.white.withOpacity(0.07)
-        : Colors.white.withOpacity(0.6);
-
+        ? Colors.white.withOpacity(0.09)
+        : Colors.white.withOpacity(0.65);
     final borderColor = isDark
-        ? Colors.white.withOpacity(0.12)
-        : Colors.white.withOpacity(0.7);
-
-    final labelColor =
-        isDark ? Colors.white.withOpacity(0.7) : cs.onSurfaceVariant;
-
+        ? Colors.white.withOpacity(0.14)
+        : cs.outline.withOpacity(0.25);
+    final focusBorder =
+        isDark ? Colors.white.withOpacity(0.45) : cs.primary;
+    final labelColor = isDark
+        ? Colors.white.withOpacity(0.65)
+        : cs.onSurfaceVariant;
     final textColor = isDark ? Colors.white : cs.onSurface;
 
+    // FIX: NON avvolgere in ClipRRect/BackdropFilter —
+    // causa il taglio del floating label.
+    // Il blur estetico è già dato dal _buildGlassCard sottostante.
     return TextFormField(
       controller: controller,
       obscureText: obscure,
       keyboardType: keyboardType,
-      style: TextStyle(
-        color: textColor,
-        fontSize: 15,
-      ),
+      style: TextStyle(color: textColor, fontSize: 15),
       validator: validator,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-
-        labelStyle: TextStyle(
-          color: labelColor,
-          fontSize: 14,
+        // FIX label troncata: floatingLabelStyle esplicito + padding top
+        labelStyle: TextStyle(color: labelColor, fontSize: 15),
+        floatingLabelStyle: TextStyle(
+          color: isDark
+              ? Colors.white.withOpacity(0.85)
+              : cs.primary,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
         ),
-
         hintStyle: TextStyle(
           color: isDark
-              ? Colors.white.withOpacity(0.3)
-              : cs.outline.withOpacity(0.6),
+              ? Colors.white.withOpacity(0.28)
+              : cs.outline.withOpacity(0.5),
+          fontSize: 14,
         ),
-
-        prefixIcon: Icon(
-          icon,
-          color: isDark ? Colors.white.withOpacity(0.5) : cs.outline,
-          size: 20,
-        ),
-
+        prefixIcon: Icon(icon,
+            color: isDark
+                ? Colors.white.withOpacity(0.5)
+                : cs.outline,
+            size: 20),
         suffixIcon: suffixIcon,
-
         filled: true,
         fillColor: fieldBg,
-
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 18,
-        ),
-
+        // FIX: contentPadding con top generoso lascia spazio
+        // al floating label senza che venga tagliato
+        contentPadding:
+            const EdgeInsets.fromLTRB(16, 22, 16, 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: borderColor),
         ),
-
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: borderColor),
         ),
-
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: isDark ? Colors.white.withOpacity(0.4) : cs.primary,
-            width: 1.5,
-          ),
+          borderSide: BorderSide(color: focusBorder, width: 1.5),
         ),
-
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: cs.error),
         ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: cs.error, width: 1.5),
+        ),
       ),
     );
   }
-}
-// ── Bottone primario glass ──
-class _GlassPrimaryButton extends StatelessWidget {
-  final VoidCallback? onTap;
-  final String label;
-  final bool loading;
-  final bool isDark;
-  final ColorScheme cs;
 
-  const _GlassPrimaryButton({
-    required this.onTap,
-    required this.label,
-    required this.loading,
-    required this.isDark,
-    required this.cs,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  // ── Bottone primario glass ──
+  Widget _buildPrimaryButton(ColorScheme cs) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: BackdropFilter(
@@ -639,17 +611,19 @@ class _GlassPrimaryButton extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: onTap,
-            child: Container(
+            onTap: _loading ? null : _submit,
+            borderRadius: BorderRadius.circular(14),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
               width: double.infinity,
               height: 52,
               decoration: BoxDecoration(
-                color: cs.primary,
+                color: _loading
+                    ? cs.primary.withOpacity(0.6)
+                    : cs.primary,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
-                  width: 1,
-                ),
+                    color: Colors.white.withOpacity(0.3)),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -658,24 +632,27 @@ class _GlassPrimaryButton extends StatelessWidget {
                     Colors.transparent,
                   ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: cs.primary.withOpacity(0.45),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+                boxShadow: _loading
+                    ? null
+                    : [
+                        BoxShadow(
+                          color: cs.primary.withOpacity(0.4),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
               ),
               child: Center(
-                child: loading
+                child: _loading
                     ? const SizedBox(
                         width: 22,
                         height: 22,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2.5, color: Colors.white),
+                            strokeWidth: 2.5,
+                            color: Colors.white),
                       )
                     : Text(
-                        label,
+                        _isRegister ? 'Crea account' : 'Accedi',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,

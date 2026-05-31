@@ -1,10 +1,9 @@
-//import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/hive_models.dart';
 import '../../providers/workout_provider.dart';
-import 'workout_detail_screen.dart';
 import '../../widgets/glass_button.dart';
+import 'workout_detail_screen.dart';
 
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
@@ -17,18 +16,25 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => context.read<WorkoutProvider>().loadWorkouts());
+    Future.microtask(
+        () => context.read<WorkoutProvider>().loadWorkouts());
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<WorkoutProvider>();
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      // Nessun IconButton + in AppBar
-      appBar: AppBar(title: const Text('Le mie schede')),
+      backgroundColor: cs.surface,
+      // Nessun + nell'AppBar
+      appBar: AppBar(
+        backgroundColor: cs.surface,
+        title: const Text('Le mie schede'),
+      ),
       body: provider.workouts.isEmpty
-          ? _EmptyState(onAdd: () => _showAddWorkoutDialog(context))
+          ? _EmptyState(
+              onAdd: () => _showAddWorkoutDialog(context))
           : _WorkoutList(
               workouts: provider.workouts,
               onAdd: () => _showAddWorkoutDialog(context),
@@ -60,28 +66,34 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.outlineVariant,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outlineVariant,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
               const SizedBox(height: 20),
               Text('Nuova scheda',
-                  style: Theme.of(context).textTheme.titleLarge),
+                  style:
+                      Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 4),
               Text(
-                'Dai un nome alla tua scheda di allenamento',
+                'Dai un nome alla tua scheda',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
                     ?.copyWith(
-                        color: Theme.of(context).colorScheme.outline),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline),
               ),
               const SizedBox(height: 20),
               TextField(
                 controller: controller,
                 autofocus: false,
-                textCapitalization: TextCapitalization.sentences,
+                textCapitalization:
+                    TextCapitalization.sentences,
                 decoration: const InputDecoration(
                   labelText: 'Nome scheda',
                   hintText: 'Es. Push A, Gambe, Full Body...',
@@ -106,7 +118,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     child: FilledButton(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        _saveWorkout(context, controller.text);
+                        _saveWorkout(
+                            context, controller.text);
                       },
                       child: const Text('Crea'),
                     ),
@@ -129,8 +142,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              WorkoutDetailScreen(workoutId: id, workoutName: name.trim()),
+          builder: (_) => WorkoutDetailScreen(
+              workoutId: id, workoutName: name.trim()),
         ),
       ).then((_) {
         if (context.mounted) {
@@ -141,9 +154,43 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 }
 
+class _WorkoutList extends StatelessWidget {
+  final List<HiveWorkout> workouts;
+  final VoidCallback onAdd;
 
-// ── Bottone glass riusabile ──
-// Usa gli stessi colori del bottone "Aggiungi esercizi" in workout_detail_screen
+  const _WorkoutList(
+      {required this.workouts, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.separated(
+            padding:
+                const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            itemCount: workouts.length,
+            separatorBuilder: (_, __) =>
+                const SizedBox(height: 8),
+            itemBuilder: (_, i) =>
+                _WorkoutCard(workout: workouts[i]),
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+              32, 8, 32, bottomPadding + 100),
+          child: GlassButton(
+            onTap: onAdd,
+            icon: Icons.add_rounded,
+            label: 'Nuova scheda',
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _WorkoutCard extends StatelessWidget {
   final HiveWorkout workout;
@@ -154,8 +201,8 @@ class _WorkoutCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Card(
       child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 4),
         leading: Container(
           width: 44,
           height: 44,
@@ -163,11 +210,12 @@ class _WorkoutCard extends StatelessWidget {
             color: cs.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
-          child:
-              Icon(Icons.list_alt, color: cs.onPrimaryContainer, size: 22),
+          child: Icon(Icons.list_alt,
+              color: cs.onPrimaryContainer, size: 22),
         ),
         title: Text(workout.name,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
+            style:
+                const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(_formatDate(workout.createdAt),
             style: TextStyle(fontSize: 12, color: cs.outline)),
         trailing: PopupMenuButton<String>(
@@ -185,9 +233,11 @@ class _WorkoutCard extends StatelessWidget {
             PopupMenuItem(
               value: 'delete',
               child: Row(children: [
-                Icon(Icons.delete_outline, size: 18, color: cs.error),
+                Icon(Icons.delete_outline,
+                    size: 18, color: cs.error),
                 const SizedBox(width: 8),
-                Text('Elimina', style: TextStyle(color: cs.error)),
+                Text('Elimina',
+                    style: TextStyle(color: cs.error)),
               ]),
             ),
           ],
@@ -227,9 +277,12 @@ class _WorkoutCard extends StatelessWidget {
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Annulla')),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              style: FilledButton.styleFrom(
+                  backgroundColor: Colors.red),
               onPressed: () {
-                context.read<WorkoutProvider>().deleteWorkout(workout.key);
+                context
+                    .read<WorkoutProvider>()
+                    .deleteWorkout(workout.key);
                 Navigator.pop(context);
               },
               child: const Text('Elimina'),
@@ -238,7 +291,8 @@ class _WorkoutCard extends StatelessWidget {
         ),
       );
     } else if (value == 'rename') {
-      final controller = TextEditingController(text: workout.name);
+      final controller =
+          TextEditingController(text: workout.name);
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -258,7 +312,9 @@ class _WorkoutCard extends StatelessWidget {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.outlineVariant,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outlineVariant,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -267,19 +323,24 @@ class _WorkoutCard extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text('Rinomina scheda',
-                    style: Theme.of(context).textTheme.titleLarge),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
                 autofocus: false,
-                textCapitalization: TextCapitalization.sentences,
-                decoration:
-                    const InputDecoration(labelText: 'Nome scheda'),
+                textCapitalization:
+                    TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                    labelText: 'Nome scheda'),
                 onSubmitted: (_) {
                   if (controller.text.trim().isNotEmpty) {
-                    context.read<WorkoutProvider>().renameWorkout(
-                        workout.key, controller.text.trim());
+                    context
+                        .read<WorkoutProvider>()
+                        .renameWorkout(workout.key,
+                            controller.text.trim());
                   }
                   Navigator.pop(ctx);
                 },
@@ -297,9 +358,13 @@ class _WorkoutCard extends StatelessWidget {
                   Expanded(
                     child: FilledButton(
                       onPressed: () {
-                        if (controller.text.trim().isNotEmpty) {
-                          context.read<WorkoutProvider>().renameWorkout(
-                              workout.key, controller.text.trim());
+                        if (controller.text
+                            .trim()
+                            .isNotEmpty) {
+                          context
+                              .read<WorkoutProvider>()
+                              .renameWorkout(workout.key,
+                                  controller.text.trim());
                         }
                         Navigator.pop(ctx);
                       },
@@ -317,7 +382,6 @@ class _WorkoutCard extends StatelessWidget {
   }
 }
 
-// ── Empty state ──
 class _EmptyState extends StatelessWidget {
   final VoidCallback onAdd;
   const _EmptyState({required this.onAdd});
@@ -325,7 +389,6 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Center(
       child: Padding(
@@ -365,54 +428,11 @@ class _EmptyState extends StatelessWidget {
               onTap: onAdd,
               icon: Icons.add_rounded,
               label: 'Crea scheda',
+              minWidth: 220,
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _WorkoutList extends StatelessWidget {
-  final List<HiveWorkout> workouts;
-  final VoidCallback onAdd;
-
-  const _WorkoutList({
-    required this.workouts,
-    required this.onAdd,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            itemCount: workouts.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (_, i) {
-              return _WorkoutCard(workout: workouts[i]);
-            },
-          ),
-        ),
-
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-            32,
-            8,
-            32,
-            bottomPadding + 100,
-          ),
-          child: GlassButton(
-            onTap: onAdd,
-            icon: Icons.add_rounded,
-            label: 'Nuova scheda',
-          ),
-        ),
-      ],
     );
   }
 }
