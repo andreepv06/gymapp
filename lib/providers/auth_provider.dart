@@ -114,49 +114,54 @@ class AuthProvider extends ChangeNotifier {
               prefs.getString('user_email');
       _currentType =
           prefs.getString('current_type') ?? 'email';
+      _accounts = await _readAccountsFromDisk();
 
-      // Ricarica sempre la lista account da disco
-      await _loadAccounts();
+      debugPrint(
+          '[AUTH] checkLogin: isLoggedIn=$_isLoggedIn, '
+          'identifier=$_currentIdentifier, '
+          'accounts=${_accounts.map((a) => a.identifier).toList()}');
 
       if (_isLoggedIn && _currentIdentifier != null) {
         await HiveDatabase.instance
             .switchUser(_currentIdentifier!);
       }
     } catch (e) {
-      debugPrint('checkLogin error: $e');
+      debugPrint('[AUTH] checkLogin error: $e');
       _isLoggedIn = false;
       _currentIdentifier = null;
     }
     notifyListeners();
   }
 
-  /// Legge gli account SEMPRE da SharedPreferences —
-  /// non fa mai affidamento sullo stato in memoria.
   Future<List<UserAccount>> _readAccountsFromDisk() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('accounts');
-    if (raw != null) {
+    debugPrint('[AUTH] _readAccountsFromDisk raw: $raw');
+    if (raw != null && raw.isNotEmpty) {
       try {
         final list = jsonDecode(raw) as List;
-        return list
+        final accounts = list
             .map((e) =>
                 UserAccount.fromJson(e as Map<String, dynamic>))
             .toList();
+        debugPrint(
+            '[AUTH] accounts letti: ${accounts.map((a) => a.identifier).toList()}');
+        return accounts;
       } catch (e) {
-        debugPrint('_readAccountsFromDisk parse error: $e');
+        debugPrint('[AUTH] parse error: $e');
         return [];
       }
     }
-    // Migrazione da vecchio formato
+    // Migrazione vecchio formato
     final oldEmail = prefs.getString('user_email');
     final oldPassword = prefs.getString('user_password');
     if (oldEmail != null && oldPassword != null) {
+      debugPrint('[AUTH] migrazione vecchio account: $oldEmail');
       final migrated = [
         UserAccount(
-          identifier: oldEmail,
-          password: oldPassword,
-          type: 'email',
-        )
+            identifier: oldEmail,
+            password: oldPassword,
+            type: 'email')
       ];
       await prefs.setString(
         'accounts',
@@ -164,19 +169,21 @@ class AuthProvider extends ChangeNotifier {
       );
       return migrated;
     }
+    debugPrint('[AUTH] nessun account su disco');
     return [];
-  }
-
-  Future<void> _loadAccounts() async {
-    _accounts = await _readAccountsFromDisk();
   }
 
   Future<void> _saveAccounts() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      'accounts',
-      jsonEncode(_accounts.map((a) => a.toJson()).toList()),
-    );
+    final json =
+        jsonEncode(_accounts.map((a) => a.toJson()).toList());
+    await prefs.setString('accounts', json);
+    debugPrint(
+        '[AUTH] _saveAccounts: salvati ${_accounts.length} account: '
+        '${_accounts.map((a) => a.identifier).toList()}');
+    // Verifica immediata che il salvataggio sia andato a buon fine
+    final verify = prefs.getString('accounts');
+    debugPrint('[AUTH] verifica disco dopo save: $verify');
   }
 
   bool _isEmail(String value) => value.contains('@');
@@ -189,6 +196,9 @@ class AuthProvider extends ChangeNotifier {
       final id = identifier.trim().toLowerCase();
       final type = _isEmail(id) ? 'email' : 'username';
 
+      debugPrint(
+          '[AUTH] register chiamato con id="$id", type=$type');
+
       if (id.isEmpty) return 'Inserisci email o username';
       if (!_isEmail(id) && id.length < 3) {
         return 'Username troppo corto (min 3 caratteri)';
@@ -197,28 +207,36 @@ class AuthProvider extends ChangeNotifier {
         return 'Password troppo corta (min 6 caratteri)';
       }
 
-      // FIX: rilegge sempre da disco prima di controllare
-      // duplicati — evita falsi positivi su dati stantii
-      _accounts = await _readAccountsFromDisk();
+      // Legge SEMPRE da disco — stato in memoria ignorato
+      final diskAccounts = await _readAccountsFromDisk();
+      debugPrint(
+          '[AUTH] account su disco prima del check: '
+          '${diskAccounts.map((a) => a.identifier).toList()}');
 
-      final exists = _accounts.any((a) => a.identifier == id);
+      final exists =
+          diskAccounts.any((a) => a.identifier == id);
+      debugPrint(
+          '[AUTH] id "$id" già presente? $exists');
+
       if (exists) {
-        final label =
-            type == 'email' ? 'indirizzo email' : 'username';
+        final label = type == 'email'
+            ? 'indirizzo email'
+            : 'username';
         return 'Account già esistente con questo $label';
       }
 
-      final newAccount = UserAccount(
+      // Aggiunge il nuovo account alla lista letta da disco
+      _accounts = diskAccounts;
+      _accounts.add(UserAccount(
         identifier: id,
         password: password,
         type: type,
-      );
-      _accounts.add(newAccount);
+      ));
       await _saveAccounts();
       await _loginInternal(id, type);
       return null;
     } catch (e) {
-      debugPrint('register error: $e');
+      debugPrint('[AUTH] register error: $e');
       return 'Errore durante la registrazione';
     }
   }
@@ -229,15 +247,19 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     try {
       final id = identifier.trim().toLowerCase();
+      debugPrint('[AUTH] login con id="$id"');
 
-      // FIX: rilegge da disco — la lista in memoria
-      // potrebbe essere vuota dopo un logout/riavvio
-      _accounts = await _readAccountsFromDisk();
+      final diskAccounts = await _readAccountsFromDisk();
+      _accounts = diskAccounts;
+
+      debugPrint(
+          '[AUTH] account disponibili: '
+          '${_accounts.map((a) => a.identifier).toList()}');
 
       UserAccount? account;
       try {
-        account =
-            _accounts.firstWhere((a) => a.identifier == id);
+        account = _accounts
+            .firstWhere((a) => a.identifier == id);
       } catch (_) {
         return 'Account non trovato. Registrati prima.';
       }
@@ -249,7 +271,7 @@ class AuthProvider extends ChangeNotifier {
       await _loginInternal(id, account.type);
       return null;
     } catch (e) {
-      debugPrint('login error: $e');
+      debugPrint('[AUTH] login error: $e');
       return 'Errore durante il login';
     }
   }
@@ -263,6 +285,8 @@ class AuthProvider extends ChangeNotifier {
     await prefs.setBool('is_logged_in', true);
     await prefs.setString('current_identifier', identifier);
     await prefs.setString('current_type', type);
+    debugPrint(
+        '[AUTH] _loginInternal: loggato come $identifier');
     await HiveDatabase.instance.switchUser(identifier);
     notifyListeners();
   }
@@ -270,9 +294,11 @@ class AuthProvider extends ChangeNotifier {
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_logged_in', false);
+    // NON cancella gli account — solo la sessione corrente
     _isLoggedIn = false;
     _currentIdentifier = null;
     _currentType = null;
+    debugPrint('[AUTH] logout eseguito');
     notifyListeners();
   }
 
@@ -292,12 +318,10 @@ class AuthProvider extends ChangeNotifier {
     String? bio,
     String? avatarBase64,
   }) async {
-    // Ricarica da disco prima di modificare
     _accounts = await _readAccountsFromDisk();
-    final idx = _accounts
-        .indexWhere((a) => a.identifier == _currentIdentifier);
+    final idx = _accounts.indexWhere(
+        (a) => a.identifier == _currentIdentifier);
     if (idx == -1) return;
-
     final account = _accounts[idx];
     if (displayName != null) account.displayName = displayName;
     if (firstName != null) account.firstName = firstName;
@@ -315,8 +339,8 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> clearAvatar() async {
     _accounts = await _readAccountsFromDisk();
-    final idx = _accounts
-        .indexWhere((a) => a.identifier == _currentIdentifier);
+    final idx = _accounts.indexWhere(
+        (a) => a.identifier == _currentIdentifier);
     if (idx == -1) return;
     _accounts[idx].avatarBase64 = null;
     await _saveAccounts();
