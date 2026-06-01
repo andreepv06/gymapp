@@ -44,7 +44,8 @@ class UserAccount {
         'avatarBase64': avatarBase64,
       };
 
-  factory UserAccount.fromJson(Map<String, dynamic> json) => UserAccount(
+  factory UserAccount.fromJson(Map<String, dynamic> json) =>
+      UserAccount(
         identifier: json['identifier'] as String,
         password: json['password'] as String,
         type: json['type'] as String? ?? 'email',
@@ -105,52 +106,68 @@ class AuthProvider extends ChangeNotifier {
   String? get avatarBase64 => currentAccount?.avatarBase64;
 
   Future<void> checkLogin() async {
-    final prefs = await SharedPreferences.getInstance();
-    _isLoggedIn = prefs.getBool('is_logged_in') ?? false;
-    _currentIdentifier = prefs.getString('current_identifier') ??
-        prefs.getString('user_email');
-    _currentType = prefs.getString('current_type') ?? 'email';
-    await _loadAccounts();
-    // Se è loggato, carica le box del suo utente
-    if (_isLoggedIn && _currentIdentifier != null) {
-      await HiveDatabase.instance.switchUser(_currentIdentifier!);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+      _currentIdentifier =
+          prefs.getString('current_identifier') ??
+              prefs.getString('user_email');
+      _currentType =
+          prefs.getString('current_type') ?? 'email';
+      await _loadAccounts();
+
+      if (_isLoggedIn && _currentIdentifier != null) {
+        // switchUser apre le box prefissate per questo utente
+        await HiveDatabase.instance
+            .switchUser(_currentIdentifier!);
+      }
+    } catch (e) {
+      debugPrint('checkLogin error: $e');
+      _isLoggedIn = false;
+      _currentIdentifier = null;
     }
     notifyListeners();
   }
 
   Future<void> _loadAccounts() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('accounts');
-    if (raw != null) {
-      try {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('accounts');
+      if (raw != null) {
         final list = jsonDecode(raw) as List;
         _accounts = list
             .map((e) =>
                 UserAccount.fromJson(e as Map<String, dynamic>))
             .toList();
-      } catch (_) {
-        _accounts = [];
+      } else {
+        // Migrazione da formato vecchio
+        final oldEmail = prefs.getString('user_email');
+        final oldPassword = prefs.getString('user_password');
+        if (oldEmail != null && oldPassword != null) {
+          _accounts = [
+            UserAccount(
+              identifier: oldEmail,
+              password: oldPassword,
+              type: 'email',
+            )
+          ];
+          await _saveAccounts();
+        } else {
+          _accounts = [];
+        }
       }
-    } else {
-      final oldEmail = prefs.getString('user_email');
-      final oldPassword = prefs.getString('user_password');
-      if (oldEmail != null && oldPassword != null) {
-        _accounts = [
-          UserAccount(
-            identifier: oldEmail,
-            password: oldPassword,
-            type: 'email',
-          )
-        ];
-        await _saveAccounts();
-      }
+    } catch (e) {
+      debugPrint('_loadAccounts error: $e');
+      _accounts = [];
     }
   }
 
   Future<void> _saveAccounts() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('accounts',
-        jsonEncode(_accounts.map((a) => a.toJson()).toList()));
+    await prefs.setString(
+        'accounts',
+        jsonEncode(
+            _accounts.map((a) => a.toJson()).toList()));
   }
 
   bool _isEmail(String value) => value.contains('@');
@@ -159,44 +176,57 @@ class AuthProvider extends ChangeNotifier {
     required String identifier,
     required String password,
   }) async {
-    final id = identifier.trim().toLowerCase();
-    final type = _isEmail(id) ? 'email' : 'username';
+    try {
+      final id = identifier.trim().toLowerCase();
+      final type = _isEmail(id) ? 'email' : 'username';
 
-    if (id.isEmpty) return 'Inserisci email o username';
-    if (!_isEmail(id) && id.length < 3) {
-      return 'Username troppo corto (min 3 caratteri)';
+      if (id.isEmpty) return 'Inserisci email o username';
+      if (!_isEmail(id) && id.length < 3) {
+        return 'Username troppo corto (min 3 caratteri)';
+      }
+
+      final exists = _accounts.any((a) => a.identifier == id);
+      if (exists) {
+        return 'Account già esistente con questo '
+            '${type == 'email' ? 'indirizzo email' : 'username'}';
+      }
+
+      _accounts.add(UserAccount(
+        identifier: id,
+        password: password,
+        type: type,
+      ));
+      await _saveAccounts();
+      await _loginInternal(id, type);
+      return null;
+    } catch (e) {
+      debugPrint('register error: $e');
+      return 'Errore durante la registrazione';
     }
-
-    final exists = _accounts.any((a) => a.identifier == id);
-    if (exists) {
-      return 'Account già esistente con questo '
-          '${type == 'email' ? 'indirizzo email' : 'username'}';
-    }
-
-    _accounts.add(UserAccount(
-      identifier: id,
-      password: password,
-      type: type,
-    ));
-    await _saveAccounts();
-    await _loginInternal(id, type);
-    return null;
   }
 
   Future<String?> login({
     required String identifier,
     required String password,
   }) async {
-    final id = identifier.trim().toLowerCase();
-    UserAccount? account;
     try {
-      account = _accounts.firstWhere((a) => a.identifier == id);
-    } catch (_) {
-      return 'Account non trovato. Registrati prima.';
+      final id = identifier.trim().toLowerCase();
+      UserAccount? account;
+      try {
+        account =
+            _accounts.firstWhere((a) => a.identifier == id);
+      } catch (_) {
+        return 'Account non trovato. Registrati prima.';
+      }
+      if (account.password != password) {
+        return 'Password errata';
+      }
+      await _loginInternal(id, account.type);
+      return null;
+    } catch (e) {
+      debugPrint('login error: $e');
+      return 'Errore durante il login';
     }
-    if (account.password != password) return 'Password errata';
-    await _loginInternal(id, account.type);
-    return null;
   }
 
   Future<void> _loginInternal(
@@ -208,7 +238,7 @@ class AuthProvider extends ChangeNotifier {
     await prefs.setBool('is_logged_in', true);
     await prefs.setString('current_identifier', identifier);
     await prefs.setString('current_type', type);
-    // Carica le box Hive dell'utente loggato
+    // Carica le box Hive specifiche di questo utente
     await HiveDatabase.instance.switchUser(identifier);
     notifyListeners();
   }
@@ -247,7 +277,9 @@ class AuthProvider extends ChangeNotifier {
     if (birthPlace != null) account.birthPlace = birthPlace;
     if (phone != null) account.phone = phone;
     if (bio != null) account.bio = bio;
-    if (avatarBase64 != null) account.avatarBase64 = avatarBase64;
+    if (avatarBase64 != null) {
+      account.avatarBase64 = avatarBase64;
+    }
     await _saveAccounts();
     notifyListeners();
   }
