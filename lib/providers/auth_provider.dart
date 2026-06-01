@@ -114,10 +114,11 @@ class AuthProvider extends ChangeNotifier {
               prefs.getString('user_email');
       _currentType =
           prefs.getString('current_type') ?? 'email';
+
+      // Ricarica sempre la lista account da disco
       await _loadAccounts();
 
       if (_isLoggedIn && _currentIdentifier != null) {
-        // switchUser apre le box prefissate per questo utente
         await HiveDatabase.instance
             .switchUser(_currentIdentifier!);
       }
@@ -129,45 +130,53 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _loadAccounts() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('accounts');
-      if (raw != null) {
+  /// Legge gli account SEMPRE da SharedPreferences —
+  /// non fa mai affidamento sullo stato in memoria.
+  Future<List<UserAccount>> _readAccountsFromDisk() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('accounts');
+    if (raw != null) {
+      try {
         final list = jsonDecode(raw) as List;
-        _accounts = list
+        return list
             .map((e) =>
                 UserAccount.fromJson(e as Map<String, dynamic>))
             .toList();
-      } else {
-        // Migrazione da formato vecchio
-        final oldEmail = prefs.getString('user_email');
-        final oldPassword = prefs.getString('user_password');
-        if (oldEmail != null && oldPassword != null) {
-          _accounts = [
-            UserAccount(
-              identifier: oldEmail,
-              password: oldPassword,
-              type: 'email',
-            )
-          ];
-          await _saveAccounts();
-        } else {
-          _accounts = [];
-        }
+      } catch (e) {
+        debugPrint('_readAccountsFromDisk parse error: $e');
+        return [];
       }
-    } catch (e) {
-      debugPrint('_loadAccounts error: $e');
-      _accounts = [];
     }
+    // Migrazione da vecchio formato
+    final oldEmail = prefs.getString('user_email');
+    final oldPassword = prefs.getString('user_password');
+    if (oldEmail != null && oldPassword != null) {
+      final migrated = [
+        UserAccount(
+          identifier: oldEmail,
+          password: oldPassword,
+          type: 'email',
+        )
+      ];
+      await prefs.setString(
+        'accounts',
+        jsonEncode(migrated.map((a) => a.toJson()).toList()),
+      );
+      return migrated;
+    }
+    return [];
+  }
+
+  Future<void> _loadAccounts() async {
+    _accounts = await _readAccountsFromDisk();
   }
 
   Future<void> _saveAccounts() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-        'accounts',
-        jsonEncode(
-            _accounts.map((a) => a.toJson()).toList()));
+      'accounts',
+      jsonEncode(_accounts.map((a) => a.toJson()).toList()),
+    );
   }
 
   bool _isEmail(String value) => value.contains('@');
@@ -184,18 +193,27 @@ class AuthProvider extends ChangeNotifier {
       if (!_isEmail(id) && id.length < 3) {
         return 'Username troppo corto (min 3 caratteri)';
       }
+      if (password.length < 6) {
+        return 'Password troppo corta (min 6 caratteri)';
+      }
+
+      // FIX: rilegge sempre da disco prima di controllare
+      // duplicati — evita falsi positivi su dati stantii
+      _accounts = await _readAccountsFromDisk();
 
       final exists = _accounts.any((a) => a.identifier == id);
       if (exists) {
-        return 'Account già esistente con questo '
-            '${type == 'email' ? 'indirizzo email' : 'username'}';
+        final label =
+            type == 'email' ? 'indirizzo email' : 'username';
+        return 'Account già esistente con questo $label';
       }
 
-      _accounts.add(UserAccount(
+      final newAccount = UserAccount(
         identifier: id,
         password: password,
         type: type,
-      ));
+      );
+      _accounts.add(newAccount);
       await _saveAccounts();
       await _loginInternal(id, type);
       return null;
@@ -211,6 +229,11 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     try {
       final id = identifier.trim().toLowerCase();
+
+      // FIX: rilegge da disco — la lista in memoria
+      // potrebbe essere vuota dopo un logout/riavvio
+      _accounts = await _readAccountsFromDisk();
+
       UserAccount? account;
       try {
         account =
@@ -218,9 +241,11 @@ class AuthProvider extends ChangeNotifier {
       } catch (_) {
         return 'Account non trovato. Registrati prima.';
       }
+
       if (account.password != password) {
         return 'Password errata';
       }
+
       await _loginInternal(id, account.type);
       return null;
     } catch (e) {
@@ -238,7 +263,6 @@ class AuthProvider extends ChangeNotifier {
     await prefs.setBool('is_logged_in', true);
     await prefs.setString('current_identifier', identifier);
     await prefs.setString('current_type', type);
-    // Carica le box Hive specifiche di questo utente
     await HiveDatabase.instance.switchUser(identifier);
     notifyListeners();
   }
@@ -268,8 +292,13 @@ class AuthProvider extends ChangeNotifier {
     String? bio,
     String? avatarBase64,
   }) async {
-    final account = currentAccount;
-    if (account == null) return;
+    // Ricarica da disco prima di modificare
+    _accounts = await _readAccountsFromDisk();
+    final idx = _accounts
+        .indexWhere((a) => a.identifier == _currentIdentifier);
+    if (idx == -1) return;
+
+    final account = _accounts[idx];
     if (displayName != null) account.displayName = displayName;
     if (firstName != null) account.firstName = firstName;
     if (lastName != null) account.lastName = lastName;
@@ -285,9 +314,11 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> clearAvatar() async {
-    final account = currentAccount;
-    if (account == null) return;
-    account.avatarBase64 = null;
+    _accounts = await _readAccountsFromDisk();
+    final idx = _accounts
+        .indexWhere((a) => a.identifier == _currentIdentifier);
+    if (idx == -1) return;
+    _accounts[idx].avatarBase64 = null;
     await _saveAccounts();
     notifyListeners();
   }
