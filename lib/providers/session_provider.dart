@@ -51,16 +51,21 @@ class SessionProvider extends ChangeNotifier {
   final Map<dynamic, List<ActiveSet>> _exerciseSets = {};
   final List<SessionExercise> _sessionExercises = [];
 
-  Map<dynamic, List<ActiveSet>> get exerciseSets => _exerciseSets;
-  List<SessionExercise> get sessionExercises => _sessionExercises;
+  Map<dynamic, List<ActiveSet>> get exerciseSets =>
+      _exerciseSets;
+  List<SessionExercise> get sessionExercises =>
+      _sessionExercises;
 
   Timer? _restTimer;
   int _restElapsed = 0;
   dynamic _restingExerciseKey;
   int? _restingSetIndex;
+  // FIX: flag per non notificare più volte
+  bool _restDoneNotified = false;
 
   int get restElapsed => _restElapsed;
-  bool get isResting => _restTimer != null && _restTimer!.isActive;
+  bool get isResting =>
+      _restTimer != null && _restTimer!.isActive;
   dynamic get restingExerciseId => _restingExerciseKey;
   int? get restingSetIndex => _restingSetIndex;
 
@@ -75,11 +80,14 @@ class SessionProvider extends ChangeNotifier {
     _sessionExercises.clear();
     _stopRestTimer();
 
-    final exerciseKeys = exercises.map((e) => e.exerciseKey).toList();
-    final savedNotes = HiveDatabase.instance.getExerciseNotes(exerciseKeys);
+    final exerciseKeys =
+        exercises.map((e) => e.exerciseKey).toList();
+    final savedNotes =
+        HiveDatabase.instance.getExerciseNotes(exerciseKeys);
 
     for (final ex in exercises) {
-      final lastSets = HiveDatabase.instance.getLastExerciseSets(ex.exerciseKey);
+      final lastSets = HiveDatabase.instance
+          .getLastExerciseSets(ex.exerciseKey);
       final Map<int, HiveSessionSet> lastBySetNumber = {};
       for (final s in lastSets) {
         lastBySetNumber[s.setNumber] = s;
@@ -94,7 +102,8 @@ class SessionProvider extends ChangeNotifier {
         sessionNote: savedNotes[ex.exerciseKey],
       ));
 
-      _exerciseSets[ex.exerciseKey] = List.generate(ex.sets, (i) {
+      _exerciseSets[ex.exerciseKey] =
+          List.generate(ex.sets, (i) {
         final setNumber = i + 1;
         final last = lastBySetNumber[setNumber];
         return ActiveSet(
@@ -117,14 +126,16 @@ class SessionProvider extends ChangeNotifier {
       _startRestTimer(exerciseKey, index);
     } else {
       set.completed = false;
-      if (_restingExerciseKey == exerciseKey && _restingSetIndex == index) {
+      if (_restingExerciseKey == exerciseKey &&
+          _restingSetIndex == index) {
         _stopRestTimer();
       }
     }
     notifyListeners();
   }
 
-  void updateSet(dynamic exerciseKey, int index, double weight, int reps) {
+  void updateSet(
+      dynamic exerciseKey, int index, double weight, int reps) {
     final set = _exerciseSets[exerciseKey]![index];
     set.weight = weight;
     set.reps = reps;
@@ -162,13 +173,15 @@ class SessionProvider extends ChangeNotifier {
   }) async {
     if (_exerciseSets.containsKey(exerciseKey)) return;
 
-    final lastSets = HiveDatabase.instance.getLastExerciseSets(exerciseKey);
+    final lastSets = HiveDatabase.instance
+        .getLastExerciseSets(exerciseKey);
     final Map<int, HiveSessionSet> lastBySetNumber = {};
     for (final s in lastSets) {
       lastBySetNumber[s.setNumber] = s;
     }
 
-    final savedNote = HiveDatabase.instance.getExerciseNote(exerciseKey);
+    final savedNote =
+        HiveDatabase.instance.getExerciseNote(exerciseKey);
 
     _sessionExercises.add(SessionExercise(
       exerciseKey: exerciseKey,
@@ -178,7 +191,8 @@ class SessionProvider extends ChangeNotifier {
       sessionNote: savedNote,
     ));
 
-    _exerciseSets[exerciseKey] = List.generate(defaultSets, (i) {
+    _exerciseSets[exerciseKey] =
+        List.generate(defaultSets, (i) {
       final setNumber = i + 1;
       final last = lastBySetNumber[setNumber];
       return ActiveSet(
@@ -195,7 +209,8 @@ class SessionProvider extends ChangeNotifier {
 
   void removeExerciseFromSession(dynamic exerciseKey) {
     _exerciseSets.remove(exerciseKey);
-    _sessionExercises.removeWhere((e) => e.exerciseKey == exerciseKey);
+    _sessionExercises
+        .removeWhere((e) => e.exerciseKey == exerciseKey);
     if (_restingExerciseKey == exerciseKey) _stopRestTimer();
     notifyListeners();
   }
@@ -207,14 +222,18 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateExerciseNote(dynamic exerciseKey, String note) async {
-    final ex = _sessionExercises.firstWhere((e) => e.exerciseKey == exerciseKey);
+  Future<void> updateExerciseNote(
+      dynamic exerciseKey, String note) async {
+    final ex = _sessionExercises
+        .firstWhere((e) => e.exerciseKey == exerciseKey);
     if (note.isEmpty) {
       ex.sessionNote = null;
-      await HiveDatabase.instance.deleteExerciseNote(exerciseKey);
+      await HiveDatabase.instance
+          .deleteExerciseNote(exerciseKey);
     } else {
       ex.sessionNote = note;
-      await HiveDatabase.instance.saveExerciseNote(exerciseKey, note);
+      await HiveDatabase.instance
+          .saveExerciseNote(exerciseKey, note);
     }
     notifyListeners();
   }
@@ -222,6 +241,7 @@ class SessionProvider extends ChangeNotifier {
   void _startRestTimer(dynamic exerciseKey, int setIndex) {
     _stopRestTimer();
     _restElapsed = 0;
+    _restDoneNotified = false; // reset flag
     _restingExerciseKey = exerciseKey;
     _restingSetIndex = setIndex;
 
@@ -230,19 +250,31 @@ class SessionProvider extends ChangeNotifier {
         orElse: () => _sessionExercises.first);
     final targetRest = ex.restSeconds;
 
-    _restTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _restTimer = Timer.periodic(
+        const Duration(seconds: 1), (_) {
       _restElapsed++;
-      // FIX AUDIO: chiama il service quando il timer scade
-      if (targetRest != null && _restElapsed == targetRest) {
+
+      // FIX: usa >= invece di == per non perdere tick,
+      // e _restDoneNotified per chiamare una volta sola
+      if (targetRest != null &&
+          _restElapsed >= targetRest &&
+          !_restDoneNotified) {
+        _restDoneNotified = true;
+        debugPrint(
+            '[TIMER] recupero terminato, chiamo playRestDone');
         NotificationService.instance.playRestDone();
       }
+
       notifyListeners();
     });
   }
 
   void stopRestTimer() {
-    if (_restingExerciseKey != null && _restingSetIndex != null) {
-      final set = _exerciseSets[_restingExerciseKey]?[_restingSetIndex!];
+    if (_restingExerciseKey != null &&
+        _restingSetIndex != null) {
+      final set =
+          _exerciseSets[_restingExerciseKey]
+              ?[_restingSetIndex!];
       if (set != null) set.restSeconds = _restElapsed;
     }
     _stopRestTimer();
@@ -253,6 +285,7 @@ class SessionProvider extends ChangeNotifier {
     _restTimer?.cancel();
     _restTimer = null;
     _restElapsed = 0;
+    _restDoneNotified = false;
     _restingExerciseKey = null;
     _restingSetIndex = null;
   }
@@ -261,17 +294,21 @@ class SessionProvider extends ChangeNotifier {
     if (currentSessionKey == null) return;
 
     final duration = _sessionStartTime != null
-        ? DateTime.now().difference(_sessionStartTime!).inSeconds
+        ? DateTime.now()
+            .difference(_sessionStartTime!)
+            .inSeconds
         : null;
 
     if (duration != null) {
-      await HiveDatabase.instance.updateSessionDuration(currentSessionKey, duration);
+      await HiveDatabase.instance
+          .updateSessionDuration(currentSessionKey, duration);
     }
 
     for (final ex in _sessionExercises) {
       final sets = _exerciseSets[ex.exerciseKey] ?? [];
       for (final set in sets) {
-        await HiveDatabase.instance.addSessionSet(HiveSessionSet(
+        await HiveDatabase.instance
+            .addSessionSet(HiveSessionSet(
           sessionKey: currentSessionKey,
           exerciseKey: ex.exerciseKey,
           exerciseName: ex.exerciseName,

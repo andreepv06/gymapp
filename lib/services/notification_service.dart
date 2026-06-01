@@ -25,33 +25,35 @@ class NotificationService {
     if (_isPlaying) return;
     _isPlaying = true;
 
-    // 1. Vibrazione — tripla, funziona su mobile e PWA installata
+    // Vibrazione in background — non aspettare
     _vibrate();
 
-    // 2. Audio
+    // Audio
     try {
       if (kIsWeb) {
-        // Su web: ricrea sempre il player per bypassare stato bloccato
-        // NOTA: su Safari/iOS la prima riproduzione richiede interazione utente
         try {
           await _audioPlayer?.dispose();
         } catch (_) {}
         _audioPlayer = AudioPlayer();
         await _audioPlayer!.setVolume(1.0);
-        await _audioPlayer!.play(AssetSource('sounds/rest_done.mp3'));
+        await _audioPlayer!.play(
+            AssetSource('sounds/rest_done.mp3'));
         debugPrint('Audio played (web)');
       } else {
-        // Mobile: riusa il player
         _audioPlayer ??= AudioPlayer();
         try {
           await _audioPlayer!.stop();
         } catch (_) {}
-        await _audioPlayer!.play(AssetSource('sounds/rest_done.mp3'));
+        await _audioPlayer!.play(
+            AssetSource('sounds/rest_done.mp3'));
         debugPrint('Audio played (mobile)');
       }
     } catch (e) {
       debugPrint('Audio playback error: $e');
     } finally {
+      // Aspetta un secondo prima di permettere
+      // un'altra riproduzione
+      await Future.delayed(const Duration(seconds: 1));
       _isPlaying = false;
     }
   }
