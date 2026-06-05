@@ -58,13 +58,11 @@ class MyApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (_, themeProvider, __) {
-          final lightTheme = _buildTheme(Brightness.light);
-          final darkTheme = _buildTheme(Brightness.dark);
           return MaterialApp(
             title: 'MarkFit',
             debugShowCheckedModeBanner: false,
-            theme: lightTheme,
-            darkTheme: darkTheme,
+            theme: _buildTheme(Brightness.light),
+            darkTheme: _buildTheme(Brightness.dark),
             themeMode: themeProvider.themeMode,
             builder: (context, child) {
               final cs = Theme.of(context).colorScheme;
@@ -79,7 +77,9 @@ class MyApp extends StatelessWidget {
                   statusBarBrightness:
                       isDark ? Brightness.dark : Brightness.light,
                 ),
-                child: Container(
+                // FIX schermata bianca: ColoredBox opaco
+                // durante le transizioni iOS
+                child: ColoredBox(
                   color: cs.surface,
                   child: child!,
                 ),
@@ -103,7 +103,6 @@ class MyApp extends StatelessWidget {
       scaffoldBackgroundColor: colorScheme.surface,
       canvasColor: colorScheme.surface,
       dialogBackgroundColor: colorScheme.surface,
-      // FIX schermata bianca: transizione iOS nativa
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
@@ -115,12 +114,12 @@ class MyApp extends StatelessWidget {
         },
       ),
       textTheme: const TextTheme(
-        headlineLarge:
-            TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineMedium:
-            TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineSmall:
-            TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
+        headlineLarge: TextStyle(
+            fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineMedium: TextStyle(
+            fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineSmall: TextStyle(
+            fontWeight: FontWeight.w600, letterSpacing: -0.3),
         titleLarge: TextStyle(fontWeight: FontWeight.w600),
         titleMedium: TextStyle(fontWeight: FontWeight.w600),
         bodyLarge: TextStyle(letterSpacing: 0.1),
@@ -160,8 +159,8 @@ class MyApp extends StatelessWidget {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: colorScheme.outlineVariant, width: 1),
+          borderSide: BorderSide(
+              color: colorScheme.outlineVariant, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -189,7 +188,8 @@ class MyApp extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+          textStyle:
+              const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       dialogTheme: DialogThemeData(
@@ -297,11 +297,7 @@ class _MainShellState extends State<MainShell> {
 
   void _onNavTap(int index) {
     context.read<NavigationNotifier>().navigateTo(index);
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
+    _pageController.jumpToPage(index);
   }
 
   @override
@@ -323,25 +319,16 @@ class _MainShellState extends State<MainShell> {
       ));
     });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_pageController.hasClients &&
-          _pageController.page?.round() != currentIndex) {
-        _pageController.animateToPage(
-          currentIndex,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
-      }
-    });
-
     return Scaffold(
       backgroundColor: cs.surface,
       extendBody: true,
       body: PageView(
         controller: _pageController,
-        // ClampingScrollPhysics — non interferisce con lo
-        // swipe-back iOS che avviene sul Navigator (bordo sinistro)
-        physics: const ClampingScrollPhysics(),
+        // FIX swipe back iOS: NeverScrollableScrollPhysics
+        // elimina il conflitto tra PageView e il back gesture
+        // del Navigator iOS. La navigazione tra tab avviene
+        // solo tramite la navbar in basso.
+        physics: const NeverScrollableScrollPhysics(),
         onPageChanged: (index) {
           context.read<NavigationNotifier>().navigateTo(index);
         },
