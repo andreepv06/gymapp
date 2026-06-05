@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../providers/exercise_provider.dart';
 import '../../models/hive_models.dart';
 import '../../widgets/glass_button.dart';
+import '../../widgets/glass_action_buttons.dart';
+import '../../widgets/glass_bottom_sheet.dart';
 
 class ExercisesScreen extends StatefulWidget {
   final bool isDialog;
@@ -38,7 +40,6 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
               )
             : null,
       ),
-      // GlassButton come FAB esteso centrato
       floatingActionButtonLocation:
           FloatingActionButtonLocation.centerFloat,
       floatingActionButton: Padding(
@@ -70,7 +71,8 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                 : _ExerciseList(
                     defaultExercises:
                         provider.defaultExercises,
-                    customExercises: provider.customExercises,
+                    customExercises:
+                        provider.customExercises,
                     selectedGroup:
                         provider.selectedMuscleGroup,
                   ),
@@ -81,14 +83,9 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
   }
 
   void _showAddExerciseModal(BuildContext context) {
-    showModalBottomSheet(
+    showGlassBottomSheet(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => const AddExerciseModal(),
+      child: const AddExerciseModal(),
     );
   }
 }
@@ -152,9 +149,8 @@ class _ExerciseList extends StatelessWidget {
           if (customExercises.isNotEmpty) ...[
             _GroupHeader(
                 title: 'Personalizzati',
-                color: Theme.of(context)
-                    .colorScheme
-                    .tertiary),
+                color:
+                    Theme.of(context).colorScheme.tertiary),
             ...customExercises
                 .map((e) => _ExerciseCard(exercise: e)),
           ],
@@ -260,27 +256,42 @@ class _ExerciseCard extends StatelessWidget {
   }
 
   void _confirmDelete(BuildContext context) {
-    showDialog(
+    showGlassDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Elimina esercizio'),
-        content: Text('Vuoi eliminare "${exercise.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annulla'),
-          ),
-          TextButton(
-            onPressed: () {
-              context
-                  .read<ExerciseProvider>()
-                  .deleteExercise(exercise.key);
-              Navigator.pop(context);
-            },
-            child: const Text('Elimina',
-                style: TextStyle(color: Colors.red)),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.delete_outline,
+                    color: Colors.red, size: 22),
+                SizedBox(width: 10),
+                Text('Elimina esercizio',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('Vuoi eliminare "${exercise.name}"?'),
+            const SizedBox(height: 24),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Elimina',
+              confirmColor: Colors.red,
+              onCancel: () => Navigator.pop(context),
+              onConfirm: () {
+                context
+                    .read<ExerciseProvider>()
+                    .deleteExercise(exercise.key);
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -294,7 +305,8 @@ class AddExerciseModal extends StatefulWidget {
       _AddExerciseModalState();
 }
 
-class _AddExerciseModalState extends State<AddExerciseModal> {
+class _AddExerciseModalState
+    extends State<AddExerciseModal> {
   final _nameController = TextEditingController();
   final _notesController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -324,6 +336,7 @@ class _AddExerciseModalState extends State<AddExerciseModal> {
     final provider = context.watch<ExerciseProvider>();
     final nameExists =
         provider.exerciseNameExists(_nameController.text);
+    final cs = Theme.of(context).colorScheme;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -339,18 +352,7 @@ class _AddExerciseModalState extends State<AddExerciseModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .outlineVariant,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
+              const GlassSheetHandle(),
               const SizedBox(height: 16),
               Text('Nuovo esercizio',
                   style: Theme.of(context)
@@ -379,18 +381,14 @@ class _AddExerciseModalState extends State<AddExerciseModal> {
                     children: [
                       Icon(Icons.info_outline,
                           size: 14,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .tertiary),
+                          color: cs.tertiary),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           'Esiste già un esercizio con questo nome.',
                           style: TextStyle(
                               fontSize: 12,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .tertiary),
+                              color: cs.tertiary),
                         ),
                       ),
                     ],
@@ -420,10 +418,7 @@ class _AddExerciseModalState extends State<AddExerciseModal> {
                   child: Text(
                     'Seleziona un gruppo muscolare',
                     style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .error),
+                        fontSize: 12, color: cs.error),
                   ),
                 ),
               const SizedBox(height: 16),
@@ -446,20 +441,17 @@ class _AddExerciseModalState extends State<AddExerciseModal> {
               ),
               const SizedBox(height: 12),
               SwitchListTile(
-                title:
-                    const Text('Segna come personalizzato'),
+                title: const Text(
+                    'Segna come personalizzato'),
                 value: _isCustom,
                 onChanged: (v) =>
                     setState(() => _isCustom = v),
                 contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _save,
-                  child: const Text('Salva esercizio'),
-                ),
+              GlassFilledButton(
+                onPressed: _save,
+                child: const Text('Salva esercizio'),
               ),
               const SizedBox(height: 16),
             ],

@@ -5,6 +5,8 @@ import '../../models/hive_models.dart';
 import '../../providers/exercise_provider.dart';
 import 'session_detail_screen.dart';
 import 'exercise_progress_screen.dart';
+import '../../widgets/glass_action_buttons.dart';
+import '../../widgets/glass_bottom_sheet.dart';
 import '../../main.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -186,43 +188,52 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void _showDayDetail(
       BuildContext context, String dateStr, List<HiveSession> sessions) {
     if (sessions.isEmpty) return;
-    showDialog(
+    showGlassDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(_formatDateLabel(dateStr)),
-        content: Column(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: sessions
-              .map((s) => ListTile(
-                    leading: const Icon(Icons.fitness_center),
-                    title: Text(s.workoutName),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                    contentPadding: EdgeInsets.zero,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => SessionDetailScreen(
-                            sessionKey: s.key,
-                            workoutName: s.workoutName,
-                            date: s.date,
-                          ),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_formatDateLabel(dateStr),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            ...sessions.map((s) => ListTile(
+                  leading: Icon(Icons.fitness_center,
+                      color: Theme.of(context).colorScheme.primary),
+                  title: Text(s.workoutName),
+                  trailing: const Icon(
+                      Icons.arrow_forward_ios, size: 14),
+                  contentPadding: EdgeInsets.zero,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SessionDetailScreen(
+                          sessionKey: s.key,
+                          workoutName: s.workoutName,
+                          date: s.date,
                         ),
-                      );
-                    },
-                  ))
-              .toList(),
+                      ),
+                    );
+                  },
+                )),
+            const SizedBox(height: 8),
+            GlassOutlinedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Chiudi'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Chiudi'),
-          ),
-        ],
       ),
     );
   }
+
 
   String _formatDateLabel(String dateStr) {
     final dt = DateTime.parse(dateStr);
