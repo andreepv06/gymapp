@@ -5,16 +5,21 @@ import '../../models/hive_models.dart';
 import '../../providers/session_provider.dart';
 import '../../providers/exercise_provider.dart';
 import '../../providers/workout_provider.dart';
+import '../../widgets/glass_action_buttons.dart';
+import '../../widgets/glass_bottom_sheet.dart';
 
 class ActiveSessionScreen extends StatefulWidget {
   final HiveWorkout workout;
-  const ActiveSessionScreen({super.key, required this.workout});
+  const ActiveSessionScreen(
+      {super.key, required this.workout});
 
   @override
-  State<ActiveSessionScreen> createState() => _ActiveSessionScreenState();
+  State<ActiveSessionScreen> createState() =>
+      _ActiveSessionScreenState();
 }
 
-class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
+class _ActiveSessionScreenState
+    extends State<ActiveSessionScreen> {
   bool _started = false;
 
   @override
@@ -24,7 +29,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   }
 
   Future<void> _startSession() async {
-    final exercises = context.read<WorkoutProvider>().currentExercises;
+    final exercises =
+        context.read<WorkoutProvider>().currentExercises;
     await context.read<SessionProvider>().startSession(
           exercises,
           widget.workout.key,
@@ -34,21 +40,45 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   }
 
   Future<void> _finishSession() async {
-    final confirm = await showDialog<bool>(
+    final confirm = await showGlassDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Termina sessione'),
-        content: const Text('Vuoi salvare e terminare la sessione?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annulla'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Termina'),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.check_circle_outline,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary,
+                    size: 22),
+                const SizedBox(width: 10),
+                Text('Termina sessione',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(
+                            fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('Vuoi salvare e terminare la sessione?',
+                style:
+                    Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 24),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Termina',
+              onCancel: () =>
+                  Navigator.pop(context, false),
+              onConfirm: () =>
+                  Navigator.pop(context, true),
+            ),
+          ],
+        ),
       ),
     );
     if (confirm != true) return;
@@ -61,20 +91,19 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     }
   }
 
-  // ── Selezione multipla esercizi ──
   void _showAddExerciseSheet() {
-    final sessionProvider = context.read<SessionProvider>();
-    final exerciseProvider = context.read<ExerciseProvider>();
-    showModalBottomSheet(
+    final sessionProvider =
+        context.read<SessionProvider>();
+    final exerciseProvider =
+        context.read<ExerciseProvider>();
+    showGlassBottomSheet(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => MultiProvider(
+      child: MultiProvider(
         providers: [
-          ChangeNotifierProvider.value(value: exerciseProvider),
-          ChangeNotifierProvider.value(value: sessionProvider),
+          ChangeNotifierProvider.value(
+              value: exerciseProvider),
+          ChangeNotifierProvider.value(
+              value: sessionProvider),
         ],
         child: const _AddMultipleExercisesSheet(),
       ),
@@ -84,92 +113,130 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   @override
   Widget build(BuildContext context) {
     if (!_started) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+          body:
+              Center(child: CircularProgressIndicator()));
     }
 
-    final sessionProvider = context.watch<SessionProvider>();
+    final sessionProvider =
+        context.watch<SessionProvider>();
     final exercises = sessionProvider.sessionExercises;
     final exerciseSets = sessionProvider.exerciseSets;
 
-    final allSets = exerciseSets.values.expand((s) => s).toList();
-    final completedSets = allSets.where((s) => s.completed).length;
+    final allSets =
+        exerciseSets.values.expand((s) => s).toList();
+    final completedSets =
+        allSets.where((s) => s.completed).length;
     final totalSets = allSets.length;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.workout.name),
+        // FIX swipe back: l'AppBar di Flutter su iOS
+        // abilita automaticamente il back gesture quando
+        // c'è un leading arrow — non serve nulla in più
+        // se il Navigator usa CupertinoPageRoute o
+        // MaterialPageRoute con allowSnapshotting.
         actions: [
-          TextButton.icon(
+          GlassTextButton(
             onPressed: _showAddExerciseSheet,
-            icon: const Icon(Icons.fitness_center, size: 18),
-            label: const Text('Aggiungi'),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.fitness_center, size: 18),
+                SizedBox(width: 6),
+                Text('Aggiungi'),
+              ],
             ),
           ),
-          TextButton(
+          GlassTextButton(
             onPressed: _finishSession,
             child: const Text('Termina'),
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            padding:
+                const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Row(
               children: [
                 Expanded(
-                  child: LinearProgressIndicator(
-                    value: totalSets > 0 ? completedSets / totalSets : 0,
-                    minHeight: 8,
-                    borderRadius: BorderRadius.circular(4),
+                  child: ClipRRect(
+                    borderRadius:
+                        BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: totalSets > 0
+                          ? completedSets / totalSets
+                          : 0,
+                      minHeight: 8,
+                      borderRadius:
+                          BorderRadius.circular(4),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
-                Text('$completedSets / $totalSets serie',
-                    style: Theme.of(context).textTheme.labelMedium),
+                Text(
+                    '$completedSets / $totalSets serie',
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelMedium),
               ],
             ),
           ),
           const SizedBox(height: 8),
           Expanded(
             child: ReorderableListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              padding: const EdgeInsets.fromLTRB(
+                  16, 0, 16, 24),
               itemCount: exercises.length,
               proxyDecorator: (child, index, animation) {
                 return AnimatedBuilder(
                   animation: animation,
                   builder: (_, __) => Material(
                     elevation: 8,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius:
+                        BorderRadius.circular(16),
                     shadowColor: Colors.black45,
                     child: child,
                   ),
                 );
               },
               onReorder: (oldIndex, newIndex) {
-                sessionProvider.reorderSessionExercises(oldIndex, newIndex);
+                sessionProvider.reorderSessionExercises(
+                    oldIndex, newIndex);
               },
               itemBuilder: (_, i) {
                 final ex = exercises[i];
-                final sets = exerciseSets[ex.exerciseKey] ?? [];
+                final sets =
+                    exerciseSets[ex.exerciseKey] ?? [];
                 return _ExerciseSessionCard(
                   key: ValueKey(ex.exerciseKey),
                   index: i,
                   sessionExercise: ex,
                   sets: sets,
                   onToggle: (index) =>
-                      sessionProvider.toggleSet(ex.exerciseKey, index),
+                      sessionProvider.toggleSet(
+                          ex.exerciseKey, index),
                   onUpdate: (index, weight, reps) =>
-                      sessionProvider.updateSet(ex.exerciseKey, index, weight, reps),
-                  onAddSet: () => sessionProvider.addSetToExercise(ex.exerciseKey),
-                  onRemoveSet: () =>
-                      sessionProvider.removeSetFromExercise(ex.exerciseKey),
-                  onRemoveExercise: () =>
-                      sessionProvider.removeExerciseFromSession(ex.exerciseKey),
+                      sessionProvider.updateSet(
+                          ex.exerciseKey,
+                          index,
+                          weight,
+                          reps),
+                  onAddSet: () => sessionProvider
+                      .addSetToExercise(ex.exerciseKey),
+                  onRemoveSet: () => sessionProvider
+                      .removeSetFromExercise(
+                          ex.exerciseKey),
+                  onRemoveExercise: () => sessionProvider
+                      .removeExerciseFromSession(
+                          ex.exerciseKey),
                   onEditNote: (note) =>
-                      sessionProvider.updateExerciseNote(ex.exerciseKey, note),
+                      sessionProvider.updateExerciseNote(
+                          ex.exerciseKey, note),
                 );
               },
             ),
@@ -180,7 +247,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   }
 }
 
-// ── Selezione MULTIPLA esercizi durante sessione ──
 class _AddMultipleExercisesSheet extends StatefulWidget {
   const _AddMultipleExercisesSheet();
 
@@ -198,45 +264,41 @@ class _AddMultipleExercisesSheetState
 
   @override
   Widget build(BuildContext context) {
-    final allExercises = context.watch<ExerciseProvider>().exercises;
-    final sessionProvider = context.read<SessionProvider>();
-    final alreadyIn =
-        sessionProvider.sessionExercises.map((e) => e.exerciseKey).toSet();
-
+    final allExercises =
+        context.watch<ExerciseProvider>().exercises;
+    final sessionProvider =
+        context.read<SessionProvider>();
+    final alreadyIn = sessionProvider.sessionExercises
+        .map((e) => e.exerciseKey)
+        .toSet();
     final muscleGroups =
-        ({...allExercises.map((e) => e.muscleGroup)}.toList()..sort());
+        ({...allExercises.map((e) => e.muscleGroup)}
+            .toList()
+          ..sort());
     final groups = ['Tutti', ...muscleGroups];
-
     final filtered = allExercises.where((e) {
-      final matchMuscle =
-          _muscleFilter == 'Tutti' || e.muscleGroup == _muscleFilter;
+      final matchMuscle = _muscleFilter == 'Tutti' ||
+          e.muscleGroup == _muscleFilter;
       final matchSearch = _search.isEmpty ||
-          e.name.toLowerCase().contains(_search.toLowerCase());
+          e.name
+              .toLowerCase()
+              .contains(_search.toLowerCase());
       return matchMuscle && matchSearch;
     }).toList();
 
     return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.85,
+      height:
+          MediaQuery.of(context).size.height * 0.85,
       child: Column(
         children: [
-          // Handle
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            padding: const EdgeInsets.symmetric(
+                vertical: 12),
+            child: const GlassSheetHandle(),
           ),
-
-          // Titolo con contatore selezione
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16),
             child: Row(
               children: [
                 Expanded(
@@ -244,67 +306,73 @@ class _AddMultipleExercisesSheetState
                     _selected.isEmpty
                         ? 'Aggiungi esercizi'
                         : '${_selected.length} selezionati',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium,
                   ),
                 ),
                 if (_selected.isNotEmpty)
-                  TextButton(
-                    onPressed: () => setState(() => _selected.clear()),
-                    child: const Text('Deseleziona tutto'),
+                  GlassTextButton(
+                    onPressed: () =>
+                        setState(() => _selected.clear()),
+                    child:
+                        const Text('Deseleziona tutto'),
                   ),
               ],
             ),
           ),
           const SizedBox(height: 8),
-
-          // Ricerca
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16),
             child: TextField(
               decoration: const InputDecoration(
                 hintText: 'Cerca esercizio...',
                 prefixIcon: Icon(Icons.search),
                 isDense: true,
               ),
-              onChanged: (v) => setState(() => _search = v),
+              onChanged: (v) =>
+                  setState(() => _search = v),
             ),
           ),
           const SizedBox(height: 8),
-
-          // Filtro muscoli
           SizedBox(
             height: 40,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16),
               itemCount: groups.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: 8),
               itemBuilder: (_, i) {
                 final g = groups[i];
                 return ChoiceChip(
                   label: Text(g),
                   selected: _muscleFilter == g,
-                  onSelected: (_) => setState(() => _muscleFilter = g),
+                  onSelected: (_) =>
+                      setState(() => _muscleFilter = g),
                   visualDensity: VisualDensity.compact,
                 );
               },
             ),
           ),
           const SizedBox(height: 8),
-
-          // Lista esercizi con checkbox
           Expanded(
             child: ListView.builder(
               itemCount: filtered.length,
               itemBuilder: (_, i) {
                 final ex = filtered[i];
-                final isAlreadyIn = alreadyIn.contains(ex.key);
-                final isSelected = _selected.contains(ex.key);
-
+                final isAlreadyIn =
+                    alreadyIn.contains(ex.key);
+                final isSelected =
+                    _selected.contains(ex.key);
                 return ListTile(
                   leading: isAlreadyIn
                       ? Icon(Icons.check_circle,
-                          color: Theme.of(context).colorScheme.primary)
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary)
                       : Checkbox(
                           value: isSelected,
                           onChanged: (_) {
@@ -320,7 +388,9 @@ class _AddMultipleExercisesSheetState
                   title: Text(ex.name,
                       style: TextStyle(
                           color: isAlreadyIn
-                              ? Theme.of(context).colorScheme.outline
+                              ? Theme.of(context)
+                                  .colorScheme
+                                  .outline
                               : null)),
                   subtitle: Text(ex.muscleGroup),
                   enabled: !isAlreadyIn,
@@ -339,43 +409,50 @@ class _AddMultipleExercisesSheetState
               },
             ),
           ),
-
-          // Bottone conferma
           if (_selected.isNotEmpty)
             Padding(
               padding: EdgeInsets.fromLTRB(
-                  16, 8, 16, MediaQuery.of(context).padding.bottom + 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _loading
-                      ? null
-                      : () async {
-                          setState(() => _loading = true);
-                          final allEx =
-                              context.read<ExerciseProvider>().exercises;
-                          for (final key in _selected) {
-                            try {
-                              final ex =
-                                  allEx.firstWhere((e) => e.key == key);
-                              await sessionProvider.addExerciseToSession(
-                                exerciseKey: ex.key,
-                                exerciseName: ex.name,
-                                muscleGroup: ex.muscleGroup,
-                                notes: ex.notes,
-                              );
-                            } catch (_) {}
-                          }
-                          if (mounted) Navigator.pop(context);
-                        },
-                  child: _loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : Text('Aggiungi ${_selected.length} esercizi'),
-                ),
+                  16,
+                  8,
+                  16,
+                  MediaQuery.of(context).padding.bottom +
+                      16),
+              child: GlassFilledButton(
+                onPressed: _loading
+                    ? null
+                    : () async {
+                        setState(() => _loading = true);
+                        final allEx = context
+                            .read<ExerciseProvider>()
+                            .exercises;
+                        for (final key in _selected) {
+                          try {
+                            final ex = allEx.firstWhere(
+                                (e) => e.key == key);
+                            await context
+                                .read<SessionProvider>()
+                                .addExerciseToSession(
+                                  exerciseKey: ex.key,
+                                  exerciseName: ex.name,
+                                  muscleGroup:
+                                      ex.muscleGroup,
+                                  notes: ex.notes,
+                                );
+                          } catch (_) {}
+                        }
+                        if (mounted) {
+                          Navigator.pop(context);
+                        }
+                      },
+                child: _loading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white))
+                    : Text(
+                        'Aggiungi ${_selected.length} esercizi'),
               ),
             ),
         ],
@@ -384,17 +461,16 @@ class _AddMultipleExercisesSheetState
   }
 }
 
-// ─── Exercise Session Card ───
 class _ExerciseSessionCard extends StatelessWidget {
   final SessionExercise sessionExercise;
   final List<ActiveSet> sets;
   final int index;
-  final void Function(int index) onToggle;
-  final void Function(int index, double weight, int reps) onUpdate;
+  final void Function(int) onToggle;
+  final void Function(int, double, int) onUpdate;
   final VoidCallback onAddSet;
   final VoidCallback onRemoveSet;
   final VoidCallback onRemoveExercise;
-  final void Function(String note) onEditNote;
+  final void Function(String) onEditNote;
 
   const _ExerciseSessionCard({
     super.key,
@@ -410,42 +486,70 @@ class _ExerciseSessionCard extends StatelessWidget {
   });
 
   void _showNoteDialog(BuildContext context) {
-    final ctrl = TextEditingController(text: sessionExercise.sessionNote ?? '');
-    showDialog(
+    final ctrl = TextEditingController(
+        text: sessionExercise.sessionNote ?? '');
+    showGlassDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Nota — ${sessionExercise.exerciseName}'),
-        content: TextField(
-          controller: ctrl,
-          maxLines: 3,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Es. grip più stretto, ROM completo...',
-          ),
-        ),
-        actions: [
-          if (sessionExercise.sessionNote != null &&
-              sessionExercise.sessionNote!.isNotEmpty)
-            TextButton(
-              onPressed: () {
-                onEditNote('');
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.sticky_note_2_outlined,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .tertiary,
+                    size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                      'Nota — ${sessionExercise.exerciseName}',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleSmall
+                          ?.copyWith(
+                              fontWeight:
+                                  FontWeight.w700),
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              maxLines: 3,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText:
+                    'Es. grip più stretto, ROM completo...',
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (sessionExercise.sessionNote != null &&
+                sessionExercise.sessionNote!.isNotEmpty)
+              GlassTextButton(
+                onPressed: () {
+                  onEditNote('');
+                  Navigator.pop(context);
+                },
+                foregroundColor: Colors.red,
+                child: const Text('Elimina nota'),
+              ),
+            const SizedBox(height: 8),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Salva',
+              onCancel: () => Navigator.pop(context),
+              onConfirm: () {
+                onEditNote(ctrl.text.trim());
                 Navigator.pop(context);
               },
-              child: const Text('Elimina nota',
-                  style: TextStyle(color: Colors.red)),
             ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annulla'),
-          ),
-          FilledButton(
-            onPressed: () {
-              onEditNote(ctrl.text.trim());
-              Navigator.pop(context);
-            },
-            child: const Text('Salva'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -453,216 +557,341 @@ class _ExerciseSessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ex = sessionExercise;
-    final completedCount = sets.where((s) => s.completed).length;
-    final allDone = completedCount == sets.length && sets.isNotEmpty;
-    final hasNote = ex.sessionNote != null && ex.sessionNote!.isNotEmpty;
-    final hasExerciseNote = ex.notes != null && ex.notes!.isNotEmpty;
+    final cs = Theme.of(context).colorScheme;
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+    final completedCount =
+        sets.where((s) => s.completed).length;
+    final allDone =
+        completedCount == sets.length && sets.isNotEmpty;
+    final hasNote = ex.sessionNote != null &&
+        ex.sessionNote!.isNotEmpty;
+    final hasExerciseNote =
+        ex.notes != null && ex.notes!.isNotEmpty;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Theme.of(context).colorScheme.outlineVariant.withOpacity(0.6)
-              : Theme.of(context).colorScheme.outlineVariant,
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(
-                Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(ex.exerciseName,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16),
-                          overflow: TextOverflow.ellipsis),
-                      Text(ex.muscleGroup,
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.outline)),
-                      if (hasExerciseNote)
-                        Text(ex.notes!,
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontStyle: FontStyle.italic,
-                                color: Theme.of(context).colorScheme.outline),
-                            overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: allDone
-                        ? Theme.of(context).colorScheme.primaryContainer
-                        : Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text('$completedCount/${sets.length}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                        color: allDone
-                            ? Theme.of(context).colorScheme.onPrimaryContainer
-                            : Theme.of(context).colorScheme.onSurface,
-                      )),
-                ),
-              ],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: isDark
+                ? cs.surface.withOpacity(0.7)
+                : cs.surface.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withOpacity(0.1)
+                  : cs.outlineVariant,
+              width: 1.5,
             ),
-            if (hasNote)
-              GestureDetector(
-                onTap: () => _showNoteDialog(context),
-                child: Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .tertiaryContainer
-                        .withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black
+                    .withOpacity(isDark ? 0.2 : 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          Text(ex.exerciseName,
+                              style: const TextStyle(
+                                  fontWeight:
+                                      FontWeight.bold,
+                                  fontSize: 16),
+                              overflow:
+                                  TextOverflow.ellipsis),
+                          Text(ex.muscleGroup,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.outline)),
+                          if (hasExerciseNote)
+                            Text(ex.notes!,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontStyle:
+                                        FontStyle.italic,
+                                    color: cs.outline),
+                                overflow:
+                                    TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: allDone
+                            ? cs.primaryContainer
+                            : cs.surfaceContainerHighest,
+                        borderRadius:
+                            BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                          '$completedCount/${sets.length}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: allDone
+                                ? cs.onPrimaryContainer
+                                : cs.onSurface,
+                          )),
+                    ),
+                  ],
+                ),
+                if (hasNote)
+                  GestureDetector(
+                    onTap: () =>
+                        _showNoteDialog(context),
+                    child: Container(
+                      margin:
+                          const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: cs.tertiaryContainer
+                            .withOpacity(0.5),
+                        borderRadius:
+                            BorderRadius.circular(8),
+                        border: Border.all(
+                          color: cs.tertiary
+                              .withOpacity(0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                              Icons
+                                  .sticky_note_2_outlined,
+                              size: 14,
+                              color: cs.tertiary),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                                ex.sessionNote!,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.tertiary)),
+                          ),
+                          Icon(Icons.edit,
+                              size: 12,
+                              color: cs.tertiary),
+                        ],
+                      ),
+                    ),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.sticky_note_2_outlined,
-                          size: 14,
-                          color: Theme.of(context).colorScheme.tertiary),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(ex.sessionNote!,
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const SizedBox(width: 36),
+                    Expanded(
+                        child: Text('Peso (kg)',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                                 fontSize: 12,
-                                color: Theme.of(context).colorScheme.tertiary)),
-                      ),
-                      Icon(Icons.edit,
-                          size: 12,
-                          color: Theme.of(context).colorScheme.tertiary),
-                    ],
-                  ),
+                                color: cs.outline))),
+                    Expanded(
+                        child: Text('Reps',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: cs.outline))),
+                    const SizedBox(width: 48),
+                  ],
                 ),
-              ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const SizedBox(width: 36),
-                Expanded(
-                    child: Text('Peso (kg)',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.outline))),
-                Expanded(
-                    child: Text('Reps',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.outline))),
-                const SizedBox(width: 48),
+                const SizedBox(height: 4),
+                ...sets.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final set = entry.value;
+                  return _SetRow(
+                    key: ValueKey(
+                        '${ex.exerciseKey}_$i'),
+                    setNumber: set.setNumber,
+                    set: set,
+                    onToggle: () => onToggle(i),
+                    onUpdate: (weight, reps) =>
+                        onUpdate(i, weight, reps),
+                  );
+                }),
+                const SizedBox(height: 8),
+                // Azioni con bottoni glass mini
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _MiniGlassButton(
+                      label: '– Serie',
+                      color: Colors.red,
+                      onTap: sets.length > 1
+                          ? onRemoveSet
+                          : null,
+                    ),
+                    _MiniGlassButton(
+                      label: '+ Serie',
+                      color:
+                          Theme.of(context)
+                              .colorScheme
+                              .primary,
+                      onTap: onAddSet,
+                    ),
+                    _MiniGlassButton(
+                      label: hasNote
+                          ? 'Modifica nota'
+                          : 'Nota',
+                      color:
+                          Theme.of(context)
+                              .colorScheme
+                              .tertiary,
+                      onTap: () =>
+                          _showNoteDialog(context),
+                    ),
+                    _MiniGlassButton(
+                      label: 'Rimuovi',
+                      color: Colors.red,
+                      onTap: () {
+                        // Conferma prima di rimuovere
+                        showGlassDialog(
+                          context: context,
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize:
+                                  MainAxisSize.min,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment
+                                      .start,
+                              children: [
+                                Text(
+                                    'Rimuovere ${ex.exerciseName}?',
+                                    style: Theme.of(
+                                            context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(
+                                            fontWeight:
+                                                FontWeight
+                                                    .w700)),
+                                const SizedBox(
+                                    height: 20),
+                                GlassDialogActions(
+                                  cancelLabel: 'Annulla',
+                                  confirmLabel:
+                                      'Rimuovi',
+                                  confirmColor:
+                                      Colors.red,
+                                  onCancel: () =>
+                                      Navigator.pop(
+                                          context),
+                                  onConfirm: () {
+                                    Navigator.pop(
+                                        context);
+                                    onRemoveExercise();
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                Consumer<SessionProvider>(
+                  builder: (_, session, __) {
+                    final isResting =
+                        session.isResting &&
+                            session.restingExerciseId ==
+                                ex.exerciseKey;
+                    if (!isResting)
+                      return const SizedBox.shrink();
+                    return _RestBanner(
+                      elapsed: session.restElapsed,
+                      targetRest: ex.restSeconds,
+                      onStop: () =>
+                          session.stopRestTimer(),
+                    );
+                  },
+                ),
               ],
             ),
-            const SizedBox(height: 4),
-            ...sets.asMap().entries.map((entry) {
-              final i = entry.key;
-              final set = entry.value;
-              return _SetRow(
-                key: ValueKey('${ex.exerciseKey}_$i'),
-                setNumber: set.setNumber,
-                set: set,
-                onToggle: () => onToggle(i),
-                onUpdate: (weight, reps) => onUpdate(i, weight, reps),
-              );
-            }),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                OutlinedButton.icon(
-                  onPressed: sets.length > 1 ? onRemoveSet : null,
-                  icon: const Icon(Icons.remove, size: 14),
-                  label: const Text('Serie', style: TextStyle(fontSize: 11)),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                OutlinedButton.icon(
-                  onPressed: onAddSet,
-                  icon: const Icon(Icons.add, size: 14),
-                  label: const Text('Serie', style: TextStyle(fontSize: 11)),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                OutlinedButton.icon(
-                  onPressed: () => _showNoteDialog(context),
-                  icon: const Icon(Icons.sticky_note_2_outlined, size: 14),
-                  label: Text(hasNote ? 'Modifica nota' : 'Nota',
-                      style: const TextStyle(fontSize: 11)),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-                const Spacer(),
-                OutlinedButton.icon(
-                  onPressed: onRemoveExercise,
-                  icon: const Icon(Icons.delete_outline,
-                      size: 14, color: Colors.red),
-                  label: const Text('Rimuovi',
-                      style: TextStyle(fontSize: 11, color: Colors.red)),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    side: const BorderSide(color: Colors.red),
-                  ),
-                ),
-              ],
-            ),
-            Consumer<SessionProvider>(
-              builder: (_, session, __) {
-                final isResting = session.isResting &&
-                    session.restingExerciseId == ex.exerciseKey;
-                if (!isResting) return const SizedBox.shrink();
-                return _RestBanner(
-                  elapsed: session.restElapsed,
-                  targetRest: ex.restSeconds,
-                  onStop: () => session.stopRestTimer(),
-                );
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );
-  
-  
+  }
+}
+
+/// Bottone mini glass per azioni inline
+class _MiniGlassButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const _MiniGlassButton({
+    required this.label,
+    required this.color,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+    final isDisabled = onTap == null;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isDisabled
+              ? Colors.transparent
+              : color.withOpacity(isDark ? 0.15 : 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDisabled
+                ? Theme.of(context)
+                    .colorScheme
+                    .outlineVariant
+                    .withOpacity(0.4)
+                : color.withOpacity(0.5),
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: isDisabled
+                ? Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withOpacity(0.3)
+                : color,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -670,7 +899,7 @@ class _SetRow extends StatefulWidget {
   final int setNumber;
   final ActiveSet set;
   final VoidCallback onToggle;
-  final void Function(double weight, int reps) onUpdate;
+  final void Function(double, int) onUpdate;
 
   const _SetRow({
     super.key,
@@ -715,6 +944,7 @@ class _SetRowState extends State<_SetRow> {
   @override
   Widget build(BuildContext context) {
     final isCompleted = widget.set.completed;
+    final cs = Theme.of(context).colorScheme;
     final weightHint = widget.set.lastWeight != null
         ? widget.set.lastWeight! % 1 == 0
             ? widget.set.lastWeight!.toInt().toString()
@@ -722,16 +952,17 @@ class _SetRowState extends State<_SetRow> {
         : widget.set.weight > 0
             ? widget.set.weight.toString()
             : '-';
-    final repsHint =
-        widget.set.lastReps?.toString() ?? widget.set.reps.toString();
+    final repsHint = widget.set.lastReps?.toString() ??
+        widget.set.reps.toString();
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       margin: const EdgeInsets.symmetric(vertical: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+          horizontal: 4, vertical: 6),
       decoration: BoxDecoration(
         color: isCompleted
-            ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.4)
+            ? cs.primaryContainer.withOpacity(0.4)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
@@ -744,30 +975,32 @@ class _SetRowState extends State<_SetRow> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: isCompleted
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outline,
+                      ? cs.primary
+                      : cs.outline,
                 )),
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 4),
               child: TextField(
                 controller: _weightCtrl,
                 enabled: !isCompleted,
                 textAlign: TextAlign.center,
                 keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                    const TextInputType.numberWithOptions(
+                        decimal: true),
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: weightHint,
                   contentPadding:
-                      const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                      const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 8),
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                      borderRadius:
+                          BorderRadius.circular(8)),
                   filled: isCompleted,
-                  fillColor: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest
+                  fillColor: cs.surfaceContainerHighest
                       .withOpacity(0.3),
                 ),
                 onChanged: (_) => _notifyUpdate(),
@@ -776,7 +1009,8 @@ class _SetRowState extends State<_SetRow> {
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 4),
               child: TextField(
                 controller: _repsCtrl,
                 enabled: !isCompleted,
@@ -786,13 +1020,13 @@ class _SetRowState extends State<_SetRow> {
                   isDense: true,
                   hintText: repsHint,
                   contentPadding:
-                      const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                      const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 8),
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                      borderRadius:
+                          BorderRadius.circular(8)),
                   filled: isCompleted,
-                  fillColor: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest
+                  fillColor: cs.surfaceContainerHighest
                       .withOpacity(0.3),
                 ),
                 onChanged: (_) => _notifyUpdate(),
@@ -803,22 +1037,31 @@ class _SetRowState extends State<_SetRow> {
             width: 48,
             child: IconButton(
               onPressed: () {
-                if (_weightCtrl.text.isEmpty || _repsCtrl.text.isEmpty) {
-                  final weight = double.tryParse(_weightCtrl.text) ??
-                      widget.set.lastWeight ??
-                      widget.set.weight;
-                  final reps = int.tryParse(_repsCtrl.text) ??
-                      widget.set.lastReps ??
-                      widget.set.reps;
+                if (_weightCtrl.text.isEmpty ||
+                    _repsCtrl.text.isEmpty) {
+                  final weight =
+                      double.tryParse(_weightCtrl.text) ??
+                          widget.set.lastWeight ??
+                          widget.set.weight;
+                  final reps =
+                      int.tryParse(_repsCtrl.text) ??
+                          widget.set.lastReps ??
+                          widget.set.reps;
                   widget.onUpdate(weight, reps);
                 }
                 widget.onToggle();
               },
               icon: Icon(
-                isCompleted ? Icons.check_circle : Icons.check_circle_outline,
+                isCompleted
+                    ? Icons.check_circle
+                    : Icons.check_circle_outline,
                 color: isCompleted
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.outline,
+                    ? Theme.of(context)
+                        .colorScheme
+                        .primary
+                    : Theme.of(context)
+                        .colorScheme
+                        .outline,
               ),
             ),
           ),
@@ -847,65 +1090,84 @@ class _RestBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isOver = targetRest != null && elapsed >= targetRest!;
+    final cs = Theme.of(context).colorScheme;
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+    final isOver =
+        targetRest != null && elapsed >= targetRest!;
+    final bg = isOver
+        ? cs.errorContainer
+        : cs.secondaryContainer;
+    final fg = isOver
+        ? cs.onErrorContainer
+        : cs.onSecondaryContainer;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: isOver
-            ? Theme.of(context).colorScheme.errorContainer
-            : Theme.of(context).colorScheme.secondaryContainer,
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isOver ? Icons.notifications_active : Icons.timer_outlined,
-            color: isOver
-                ? Theme.of(context).colorScheme.onErrorContainer
-                : Theme.of(context).colorScheme.onSecondaryContainer,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        child: BackdropFilter(
+          filter:
+              ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: bg.withOpacity(
+                  isDark ? 0.7 : 0.85),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: (isOver
+                        ? cs.error
+                        : cs.secondary)
+                    .withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
               children: [
-                Text(
-                  isOver ? 'Recupero terminato!' : 'Recupero in corso',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: isOver
-                        ? Theme.of(context).colorScheme.onErrorContainer
-                        : Theme.of(context).colorScheme.onSecondaryContainer,
+                Icon(
+                  isOver
+                      ? Icons.notifications_active
+                      : Icons.timer_outlined,
+                  color: fg,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isOver
+                            ? 'Recupero terminato!'
+                            : 'Recupero in corso',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: fg,
+                        ),
+                      ),
+                      Text(
+                        targetRest != null
+                            ? '${_format(elapsed)} / ${_format(targetRest!)}'
+                            : _format(elapsed),
+                        style: TextStyle(
+                            fontSize: 12, color: fg),
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  targetRest != null
-                      ? '${_format(elapsed)} / ${_format(targetRest!)}'
-                      : _format(elapsed),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isOver
-                        ? Theme.of(context).colorScheme.onErrorContainer
-                        : Theme.of(context).colorScheme.onSecondaryContainer,
-                  ),
+                GlassTextButton(
+                  onPressed: onStop,
+                  foregroundColor: fg,
+                  child: const Text('Stop'),
                 ),
               ],
             ),
           ),
-          TextButton(
-            onPressed: onStop,
-            child: Text('Stop',
-                style: TextStyle(
-                  color: isOver
-                      ? Theme.of(context).colorScheme.onErrorContainer
-                      : Theme.of(context).colorScheme.onSecondaryContainer,
-                )),
-          ),
-        ],
+        ),
       ),
     );
   }

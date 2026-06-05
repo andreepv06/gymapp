@@ -73,8 +73,7 @@ class MyApp extends StatelessWidget {
                       Theme.of(context).brightness == Brightness.dark
                           ? Brightness.light
                           : Brightness.dark,
-                  statusBarBrightness:
-                      Theme.of(context).brightness,
+                  statusBarBrightness: Theme.of(context).brightness,
                 ),
                 child: Container(
                   color: cs.surface,
@@ -101,12 +100,9 @@ class MyApp extends StatelessWidget {
       canvasColor: colorScheme.surface,
       dialogBackgroundColor: colorScheme.surface,
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(
-            fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineMedium: TextStyle(
-            fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineSmall: TextStyle(
-            fontWeight: FontWeight.w600, letterSpacing: -0.3),
+        headlineLarge: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineMedium: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineSmall: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
         titleLarge: TextStyle(fontWeight: FontWeight.w600),
         titleMedium: TextStyle(fontWeight: FontWeight.w600),
         bodyLarge: TextStyle(letterSpacing: 0.1),
@@ -114,8 +110,7 @@ class MyApp extends StatelessWidget {
       cardTheme: CardThemeData(
         elevation: 0,
         color: colorScheme.surface,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         surfaceTintColor: colorScheme.surfaceTint,
       ),
       appBarTheme: AppBarTheme(
@@ -125,10 +120,8 @@ class MyApp extends StatelessWidget {
         backgroundColor: colorScheme.surface,
         surfaceTintColor: colorScheme.surfaceTint,
         systemOverlayStyle: brightness == Brightness.dark
-            ? SystemUiOverlayStyle.light
-                .copyWith(statusBarColor: Colors.transparent)
-            : SystemUiOverlayStyle.dark
-                .copyWith(statusBarColor: Colors.transparent),
+            ? SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent)
+            : SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
         titleTextStyle: TextStyle(
           color: colorScheme.onSurface,
           fontSize: 18,
@@ -138,65 +131,53 @@ class MyApp extends StatelessWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor:
-            colorScheme.surfaceContainerHighest.withOpacity(0.4),
+        fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.4),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-              color: colorScheme.outlineVariant, width: 1),
+          borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: colorScheme.primary, width: 2),
+          borderSide: BorderSide(color: colorScheme.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: colorScheme.error, width: 1),
+          borderSide: BorderSide(color: colorScheme.error, width: 1),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(double.infinity, 50),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(
-              fontWeight: FontWeight.w600, fontSize: 15),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          textStyle:
-              const TextStyle(fontWeight: FontWeight.w600),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: colorScheme.surface,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         elevation: 0,
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colorScheme.surface,
         shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         elevation: 0,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -234,8 +215,7 @@ class _AppEntryState extends State<AppEntry> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.fitness_center,
-                  size: 48, color: cs.primary),
+              Icon(Icons.fitness_center, size: 48, color: cs.primary),
               const SizedBox(height: 16),
               CircularProgressIndicator(color: cs.primary),
             ],
@@ -293,20 +273,15 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex =
-        context.watch<NavigationNotifier>().currentIndex;
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
+    final currentIndex = context.watch<NavigationNotifier>().currentIndex;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      SystemChrome.setSystemUIOverlayStyle(
-          SystemUiOverlayStyle(
+      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness:
-            isDark ? Brightness.light : Brightness.dark,
-        statusBarBrightness:
-            isDark ? Brightness.dark : Brightness.light,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       ));
     });
 
@@ -326,9 +301,7 @@ class _MainShellState extends State<MainShell> {
       extendBody: true,
       body: PageView(
         controller: _pageController,
-        // RIABILITATO swipe laterale tra tab
-        // FIX: usa ClampingScrollPhysics per evitare conflitti con swipe-back
-        physics: const ClampingScrollPhysics(),
+        physics: const _EdgeDraggableScrollPhysics(),
         onPageChanged: (index) {
           context.read<NavigationNotifier>().navigateTo(index);
         },
@@ -349,6 +322,20 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
+/// Physics che lascia il bordo sinistro al Navigator
+/// per il back gesture iOS, ma permette lo swipe tra tab.
+class _EdgeDraggableScrollPhysics extends ClampingScrollPhysics {
+  const _EdgeDraggableScrollPhysics({super.parent});
+
+  @override
+  _EdgeDraggableScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _EdgeDraggableScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  double get minFlingVelocity => 800.0;
+}
+
 // ─────────────────────────────────────────────
 // LIQUID GLASS NAVBAR
 // ─────────────────────────────────────────────
@@ -367,13 +354,9 @@ class _LiquidGlassNavBar extends StatelessWidget {
   static const _items = [
     _NavItem(icon: Icons.home_rounded, label: 'Home'),
     _NavItem(icon: Icons.list_alt_rounded, label: 'Schede'),
-    _NavItem(
-        icon: Icons.play_circle_fill_rounded,
-        label: 'Sessione'),
+    _NavItem(icon: Icons.play_circle_fill_rounded, label: 'Sessione'),
     _NavItem(icon: Icons.bar_chart_rounded, label: 'Storico'),
-    _NavItem(
-        icon: Icons.settings_rounded,
-        label: 'Impostazioni'),
+    _NavItem(icon: Icons.settings_rounded, label: 'Impostazioni'),
   ];
 
   @override
@@ -389,8 +372,7 @@ class _LiquidGlassNavBar extends StatelessWidget {
         : Colors.white.withOpacity(0.7);
 
     return Padding(
-      padding:
-          EdgeInsets.fromLTRB(20, 0, 20, bottomPadding + 16),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding + 16),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(40),
         child: BackdropFilter(
@@ -403,15 +385,13 @@ class _LiquidGlassNavBar extends StatelessWidget {
               border: Border.all(color: glassBorder, width: 1.2),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black
-                      .withOpacity(isDark ? 0.35 : 0.1),
+                  color: Colors.black.withOpacity(isDark ? 0.35 : 0.1),
                   blurRadius: 32,
                   spreadRadius: -4,
                   offset: const Offset(0, 8),
                 ),
                 BoxShadow(
-                  color: Colors.white
-                      .withOpacity(isDark ? 0.04 : 0.6),
+                  color: Colors.white.withOpacity(isDark ? 0.04 : 0.6),
                   blurRadius: 0,
                   spreadRadius: 0,
                   offset: const Offset(0, 1),

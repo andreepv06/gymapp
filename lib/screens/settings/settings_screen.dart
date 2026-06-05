@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../db/hive_database.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/glass_action_buttons.dart';
+import '../../widgets/glass_bottom_sheet.dart';
 
 // Import condizionale per web
 import 'image_picker_helper.dart';
@@ -25,7 +27,6 @@ class SettingsScreen extends StatelessWidget {
         title: const Text('Impostazioni'),
         backgroundColor: cs.surfaceContainerLowest,
       ),
-      // FIX scroll: usa CustomScrollView con SliverList
       body: CustomScrollView(
         slivers: [
           SliverPadding(
@@ -101,8 +102,8 @@ class SettingsScreen extends StatelessWidget {
                       iconColor: cs.primary,
                       title: 'Versione',
                       trailing: Text('1.0.0',
-                          style:
-                              TextStyle(color: cs.outline, fontSize: 13)),
+                          style: TextStyle(
+                              color: cs.outline, fontSize: 13)),
                     ),
                     const _Divider(),
                     _SettingsTile(
@@ -122,93 +123,137 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void _confirmLogout(BuildContext context) {
-    showDialog(
+    showGlassDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Vuoi uscire dall\'account?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Annulla')),
-          FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              context.read<AuthProvider>().logout();
-              Navigator.pop(context);
-            },
-            child: const Text('Logout'),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.logout, color: Colors.red, size: 20),
+                SizedBox(width: 10),
+                Text('Logout',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 16)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text("Vuoi uscire dall'account?"),
+            const SizedBox(height: 24),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Logout',
+              confirmColor: Colors.red,
+              onCancel: () => Navigator.pop(context),
+              onConfirm: () {
+                context.read<AuthProvider>().logout();
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _showSwitchAccount(BuildContext context) {
     final auth = context.read<AuthProvider>();
-    showModalBottomSheet(
+    showGlassBottomSheet(
       context: context,
-      builder: (_) => _SwitchAccountSheet(auth: auth),
+      child: _SwitchAccountSheet(auth: auth),
     );
   }
 
   void _confirmDeleteSessions(BuildContext context) {
-    showDialog(
+    showGlassDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Elimina sessioni'),
-        content: const Text(
-            'Sei sicuro? Tutte le sessioni verranno eliminate.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Annulla')),
-          FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              await HiveDatabase.instance.deleteAllSessions();
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Sessioni eliminate')),
-                );
-              }
-            },
-            child: const Text('Elimina'),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.delete_sweep_outlined,
+                    color: Theme.of(context).colorScheme.error,
+                    size: 20),
+                const SizedBox(width: 10),
+                const Text('Elimina sessioni',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 16)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+                'Sei sicuro? Tutte le sessioni verranno eliminate.'),
+            const SizedBox(height: 24),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Elimina',
+              confirmColor: Colors.red,
+              onCancel: () => Navigator.pop(context),
+              onConfirm: () async {
+                await HiveDatabase.instance.deleteAllSessions();
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Sessioni eliminate')),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _confirmDeleteNotes(BuildContext context) {
-    showDialog(
+    showGlassDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Elimina note'),
-        content:
-            const Text('Sei sicuro? Tutte le note verranno eliminate.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Annulla')),
-          FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              await HiveDatabase.instance.deleteAllNotes();
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Note eliminate')),
-                );
-              }
-            },
-            child: const Text('Elimina'),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.note_alt_outlined,
+                    color: Theme.of(context).colorScheme.error,
+                    size: 20),
+                const SizedBox(width: 10),
+                const Text('Elimina note',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 16)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+                'Sei sicuro? Tutte le note verranno eliminate.'),
+            const SizedBox(height: 24),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Elimina',
+              confirmColor: Colors.red,
+              onCancel: () => Navigator.pop(context),
+              onConfirm: () async {
+                await HiveDatabase.instance.deleteAllNotes();
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Note eliminate')),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -252,8 +297,8 @@ class _ProfileCard extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: cs.primary,
                           shape: BoxShape.circle,
-                          border:
-                              Border.all(color: cs.surface, width: 2),
+                          border: Border.all(
+                              color: cs.surface, width: 2),
                         ),
                         child: const Icon(Icons.edit,
                             size: 12, color: Colors.white),
@@ -268,7 +313,8 @@ class _ProfileCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      account?.fullName ?? auth.currentIdentifier ?? '',
+                      account?.fullName ??
+                          auth.currentIdentifier ?? '',
                       style: Theme.of(context)
                           .textTheme
                           .titleLarge
@@ -279,13 +325,15 @@ class _ProfileCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (account?.bio != null && account!.bio!.isNotEmpty) ...[
+                    if (account?.bio != null &&
+                        account!.bio!.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
                         account.bio!,
                         style: TextStyle(
                             fontSize: 13,
-                            color: cs.onPrimaryContainer.withOpacity(0.75)),
+                            color: cs.onPrimaryContainer
+                                .withOpacity(0.75)),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -295,7 +343,8 @@ class _ProfileCard extends StatelessWidget {
                       auth.currentIdentifier ?? '',
                       style: TextStyle(
                           fontSize: 12,
-                          color: cs.onPrimaryContainer.withOpacity(0.65)),
+                          color: cs.onPrimaryContainer
+                              .withOpacity(0.65)),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -304,7 +353,6 @@ class _ProfileCard extends StatelessWidget {
               ),
             ],
           ),
-
           if (account != null &&
               (account.firstName != null ||
                   account.birthDate != null ||
@@ -327,7 +375,8 @@ class _ProfileCard extends StatelessWidget {
                       label: account.birthDate!),
                 if (account.phone != null)
                   _ProfileChip(
-                      icon: Icons.phone_outlined, label: account.phone!),
+                      icon: Icons.phone_outlined,
+                      label: account.phone!),
                 if (account.birthPlace != null)
                   _ProfileChip(
                       icon: Icons.location_on_outlined,
@@ -335,21 +384,21 @@ class _ProfileCard extends StatelessWidget {
               ],
             ),
           ],
-
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
+            child: GlassOutlinedButton(
               onPressed: () => _showEditProfile(context),
-              icon: const Icon(Icons.edit_outlined, size: 16),
-              label: const Text('Modifica profilo'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: cs.onPrimaryContainer,
-                side: BorderSide(
-                    color: cs.onPrimaryContainer.withOpacity(0.4)),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(vertical: 10),
+              foregroundColor: cs.onPrimaryContainer,
+              borderColor:
+                  cs.onPrimaryContainer.withOpacity(0.4),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.edit_outlined, size: 16),
+                  SizedBox(width: 8),
+                  Text('Modifica profilo'),
+                ],
               ),
             ),
           ),
@@ -392,19 +441,21 @@ class _ProfileChip extends StatelessWidget {
           const SizedBox(width: 4),
           Text(label.trim(),
               style: TextStyle(
-                  fontSize: 11, color: cs.onSurface.withOpacity(0.85))),
+                  fontSize: 11,
+                  color: cs.onSurface.withOpacity(0.85))),
         ],
       ),
     );
   }
 }
 
-// ---- Avatar Widget (pubblico per Edit Profile) ----
+// ---- Avatar Widget ----
 
 class AvatarWidget extends StatelessWidget {
   final AuthProvider auth;
   final double radius;
-  const AvatarWidget({super.key, required this.auth, required this.radius});
+  const AvatarWidget(
+      {super.key, required this.auth, required this.radius});
 
   @override
   Widget build(BuildContext context) {
@@ -442,7 +493,8 @@ class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
 
   @override
-  State<EditProfileScreen> createState() => _EditProfileScreenState();
+  State<EditProfileScreen> createState() =>
+      _EditProfileScreenState();
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
@@ -458,10 +510,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     final account = context.read<AuthProvider>().currentAccount;
-    _firstNameCtrl = TextEditingController(text: account?.firstName ?? '');
-    _lastNameCtrl = TextEditingController(text: account?.lastName ?? '');
+    _firstNameCtrl =
+        TextEditingController(text: account?.firstName ?? '');
+    _lastNameCtrl =
+        TextEditingController(text: account?.lastName ?? '');
     _phoneCtrl = TextEditingController(text: account?.phone ?? '');
-    _birthPlaceCtrl = TextEditingController(text: account?.birthPlace ?? '');
+    _birthPlaceCtrl =
+        TextEditingController(text: account?.birthPlace ?? '');
     _bioCtrl = TextEditingController(text: account?.bio ?? '');
 
     if (account?.birthDate != null) {
@@ -481,19 +536,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  // FIX immagine: usa helper che funziona su web con dart:html
   Future<void> _pickImage() async {
     try {
       final b64 = await ImagePickerHelper.pickImageAsBase64();
       if (b64 == null) return;
       if (mounted) {
-        await context.read<AuthProvider>().updateProfile(avatarBase64: b64);
+        await context
+            .read<AuthProvider>()
+            .updateProfile(avatarBase64: b64);
         setState(() {});
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Impossibile caricare immagine: $e')),
+          SnackBar(
+              content:
+                  Text('Impossibile caricare immagine: $e')),
         );
       }
     }
@@ -527,8 +585,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           birthPlace: _birthPlaceCtrl.text.trim().isEmpty
               ? null
               : _birthPlaceCtrl.text.trim(),
-          bio: _bioCtrl.text.trim().isEmpty ? null : _bioCtrl.text.trim(),
-          birthDate: _selectedDate?.toIso8601String().split('T')[0],
+          bio: _bioCtrl.text.trim().isEmpty
+              ? null
+              : _bioCtrl.text.trim(),
+          birthDate:
+              _selectedDate?.toIso8601String().split('T')[0],
         );
     setState(() => _loading = false);
     if (mounted) {
@@ -550,16 +611,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         title: const Text('Modifica profilo'),
         backgroundColor: cs.surface,
         actions: [
-          TextButton(
+          GlassTextButton(
             onPressed: _loading ? null : _save,
             child: _loading
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2))
                 : const Text('Salva',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700)),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: SingleChildScrollView(
@@ -583,8 +647,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             decoration: BoxDecoration(
                               color: cs.primary,
                               shape: BoxShape.circle,
-                              border:
-                                  Border.all(color: cs.surface, width: 2),
+                              border: Border.all(
+                                  color: cs.surface, width: 2),
                             ),
                             child: const Icon(Icons.camera_alt,
                                 size: 16, color: Colors.white),
@@ -594,21 +658,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  TextButton.icon(
+                  GlassTextButton(
                     onPressed: _pickImage,
-                    icon: const Icon(Icons.photo_library_outlined, size: 16),
-                    label: const Text('Cambia foto'),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.photo_library_outlined,
+                            size: 16),
+                        SizedBox(width: 6),
+                        Text('Cambia foto'),
+                      ],
+                    ),
                   ),
                   if (auth.avatarBase64 != null)
-                    TextButton.icon(
+                    GlassTextButton(
                       onPressed: () async {
                         await auth.clearAvatar();
                         setState(() {});
                       },
-                      icon: const Icon(Icons.delete_outline,
-                          size: 16, color: Colors.red),
-                      label: const Text('Rimuovi foto',
-                          style: TextStyle(color: Colors.red)),
+                      foregroundColor: Colors.red,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.delete_outline,
+                              size: 16, color: Colors.red),
+                          SizedBox(width: 6),
+                          Text('Rimuovi foto'),
+                        ],
+                      ),
                     ),
                 ],
               ),
@@ -623,10 +700,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     Expanded(
                       child: TextFormField(
                         controller: _firstNameCtrl,
-                        textCapitalization: TextCapitalization.words,
+                        textCapitalization:
+                            TextCapitalization.words,
                         decoration: const InputDecoration(
                           labelText: 'Nome',
-                          prefixIcon: Icon(Icons.person_outline),
+                          prefixIcon:
+                              Icon(Icons.person_outline),
                         ),
                       ),
                     ),
@@ -634,7 +713,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     Expanded(
                       child: TextFormField(
                         controller: _lastNameCtrl,
-                        textCapitalization: TextCapitalization.words,
+                        textCapitalization:
+                            TextCapitalization.words,
                         decoration: const InputDecoration(
                           labelText: 'Cognome',
                         ),
@@ -649,7 +729,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     child: TextFormField(
                       decoration: InputDecoration(
                         labelText: 'Data di nascita',
-                        prefixIcon: const Icon(Icons.cake_outlined),
+                        prefixIcon:
+                            const Icon(Icons.cake_outlined),
                         hintText: 'Seleziona data',
                         suffixIcon: const Icon(
                             Icons.calendar_today_outlined,
@@ -669,7 +750,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Luogo di nascita',
-                    prefixIcon: Icon(Icons.location_on_outlined),
+                    prefixIcon:
+                        Icon(Icons.location_on_outlined),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -702,18 +784,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
             const SizedBox(height: 32),
 
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _loading ? null : _save,
-                child: _loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.5, color: Colors.white))
-                    : const Text('Salva modifiche'),
-              ),
+            GlassFilledButton(
+              onPressed: _loading ? null : _save,
+              child: _loading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white))
+                  : const Text('Salva modifiche'),
             ),
           ],
         ),
@@ -737,21 +817,14 @@ class _SwitchAccountSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
+          const GlassSheetHandle(),
           const SizedBox(height: 16),
           Text('Seleziona account',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
           ...auth.accounts.map((a) {
-            final isCurrent = a.identifier == auth.currentIdentifier;
+            final isCurrent =
+                a.identifier == auth.currentIdentifier;
             return ListTile(
               contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(
@@ -771,7 +844,8 @@ class _SwitchAccountSheet extends StatelessWidget {
                           ? FontWeight.w700
                           : FontWeight.normal)),
               subtitle: Text(a.identifier,
-                  style: TextStyle(color: cs.outline, fontSize: 12)),
+                  style:
+                      TextStyle(color: cs.outline, fontSize: 12)),
               trailing: isCurrent
                   ? Icon(Icons.check_circle, color: cs.primary)
                   : null,
@@ -790,13 +864,11 @@ class _SwitchAccountSheet extends StatelessWidget {
 
   void _switchTo(BuildContext context, UserAccount account) {
     final pwCtrl = TextEditingController();
-    showModalBottomSheet(
+    showGlassBottomSheet(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (ctx) => Padding(
+      child: Padding(
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          bottom: MediaQuery.of(context).viewInsets.bottom,
           left: 20,
           right: 20,
           top: 20,
@@ -804,37 +876,39 @@ class _SwitchAccountSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const GlassSheetHandle(),
+            const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerLeft,
               child: Text('Accedi come ${account.identifier}',
-                  style: Theme.of(context).textTheme.titleMedium),
+                  style:
+                      Theme.of(context).textTheme.titleMedium),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: pwCtrl,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
+              decoration:
+                  const InputDecoration(labelText: 'Password'),
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () async {
-                  final error = await ctx.read<AuthProvider>().login(
-                        identifier: account.identifier,
-                        password: pwCtrl.text,
-                      );
-                  if (error != null) {
-                    if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text(error)));
-                    }
-                  } else {
-                    if (ctx.mounted) Navigator.pop(ctx);
+            GlassFilledButton(
+              onPressed: () async {
+                final error =
+                    await context.read<AuthProvider>().login(
+                          identifier: account.identifier,
+                          password: pwCtrl.text,
+                        );
+                if (error != null) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(error)));
                   }
-                },
-                child: const Text('Accedi'),
-              ),
+                } else {
+                  if (context.mounted) Navigator.pop(context);
+                }
+              },
+              child: const Text('Accedi'),
             ),
             const SizedBox(height: 16),
           ],
@@ -930,17 +1004,20 @@ class _SettingsTile extends StatelessWidget {
       ),
       title: Text(title,
           style: TextStyle(
-              fontWeight: FontWeight.w500, color: titleColor)),
+              fontWeight: FontWeight.w500,
+              color: titleColor)),
       subtitle: subtitle != null
           ? Text(subtitle!,
               style: TextStyle(fontSize: 12, color: cs.outline))
           : null,
       trailing: trailing ??
           (onTap != null
-              ? Icon(Icons.chevron_right, color: cs.outline, size: 20)
+              ? Icon(Icons.chevron_right,
+                  color: cs.outline, size: 20)
               : null),
       onTap: onTap,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     );
   }
 }
@@ -977,27 +1054,27 @@ class _SectionLabel extends StatelessWidget {
     );
   }
 }
+
 class _GlassThemeToggle extends StatelessWidget {
   final bool isDark;
   final VoidCallback onToggle;
 
-  const _GlassThemeToggle({required this.isDark, required this.onToggle});
+  const _GlassThemeToggle(
+      {required this.isDark, required this.onToggle});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
-    // Tema chiaro: sfondo primary (viola) → testo onPrimary (bianco) ✓
-    // Tema scuro: sfondo quasi nero → testo bianco ✓
-    final baseColor = isDark ? const Color(0xFF2A2A2E) : cs.primary;
+    final baseColor =
+        isDark ? const Color(0xFF2A2A2E) : cs.primary;
     final fgColor = isDark ? Colors.white : Colors.black87;
-    final fgSubColor = isDark
-    ? Colors.white.withOpacity(0.7)
-    : Colors.black54;
+    final fgSubColor =
+        isDark ? Colors.white.withOpacity(0.7) : Colors.black54;
     final borderColor = isDark
         ? Colors.white.withOpacity(0.1)
         : Colors.white.withOpacity(0.3);
-    final iconBg = Colors.white.withOpacity(isDark ? 0.1 : 0.2);
+    final iconBg =
+        Colors.white.withOpacity(isDark ? 0.1 : 0.2);
 
     return Padding(
       padding: const EdgeInsets.all(4),
@@ -1008,17 +1085,19 @@ class _GlassThemeToggle extends StatelessWidget {
           child: GestureDetector(
             onTap: onToggle,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: baseColor,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: borderColor, width: 1),
+                border:
+                    Border.all(color: borderColor, width: 1),
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Colors.white.withOpacity(isDark ? 0.05 : 0.15),
+                    Colors.white
+                        .withOpacity(isDark ? 0.05 : 0.15),
                     Colors.transparent,
                   ],
                 ),
@@ -1033,7 +1112,9 @@ class _GlassThemeToggle extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      isDark ? Icons.dark_mode : Icons.light_mode_outlined,
+                      isDark
+                          ? Icons.dark_mode
+                          : Icons.light_mode_outlined,
                       color: fgColor,
                       size: 20,
                     ),
@@ -1041,24 +1122,26 @@ class _GlassThemeToggle extends StatelessWidget {
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
                       children: [
+                        Text('Tema',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: fgColor,
+                              fontSize: 15,
+                            )),
                         Text(
-                          'Tema',
+                          isDark
+                              ? 'Modalità scura'
+                              : 'Modalità chiara',
                           style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: fgColor,
-                            fontSize: 15,
-                          ),
-                        ),
-                        Text(
-                          isDark ? 'Modalità scura' : 'Modalità chiara',
-                          style: TextStyle(fontSize: 12, color: fgSubColor),
+                              fontSize: 12,
+                              color: fgSubColor),
                         ),
                       ],
                     ),
                   ),
-                  // Toggle pill
                   Container(
                     width: 52,
                     height: 28,
@@ -1066,10 +1149,12 @@ class _GlassThemeToggle extends StatelessWidget {
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                          color: Colors.white.withOpacity(0.3), width: 1),
+                          color: Colors.white.withOpacity(0.3),
+                          width: 1),
                     ),
                     child: AnimatedAlign(
-                      duration: const Duration(milliseconds: 220),
+                      duration:
+                          const Duration(milliseconds: 220),
                       curve: Curves.easeInOut,
                       alignment: isDark
                           ? Alignment.centerRight
@@ -1083,13 +1168,16 @@ class _GlassThemeToggle extends StatelessWidget {
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
+                              color:
+                                  Colors.black.withOpacity(0.2),
                               blurRadius: 4,
                             ),
                           ],
                         ),
                         child: Icon(
-                          isDark ? Icons.dark_mode : Icons.light_mode,
+                          isDark
+                              ? Icons.dark_mode
+                              : Icons.light_mode,
                           size: 12,
                           color: baseColor,
                         ),
