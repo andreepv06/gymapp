@@ -105,12 +105,12 @@ class MyApp extends StatelessWidget {
       dialogBackgroundColor: colorScheme.surface,
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.fuchsia: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: ZoomPageTransitionsBuilder(),
+          TargetPlatform.macOS: ZoomPageTransitionsBuilder(),
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.windows: ZoomPageTransitionsBuilder(),
+          TargetPlatform.linux: ZoomPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: ZoomPageTransitionsBuilder(),
         },
       ),
       textTheme: const TextTheme(
