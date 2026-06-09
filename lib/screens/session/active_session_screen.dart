@@ -35,8 +35,95 @@ class _ActiveSessionScreenState
           exercises,
           widget.workout.key,
           widget.workout.name,
+          widget.workout,
         );
     if (mounted) setState(() => _started = true);
+  }
+
+  /// Chiamato quando l'utente preme back o chiude la schermata
+  Future<bool> _onWillPop() async {
+    final session = context.read<SessionProvider>();
+
+    // Se non ha inserito nessun dato, abbandona silenziosamente
+    if (!session.hasAnyData) {
+      await session.abandonSession();
+      return true;
+    }
+
+    // Altrimenti chiedi cosa fare
+    final result = await showGlassDialog<String>(
+      context: context,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.pause_circle_outline,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 22),
+                const SizedBox(width: 10),
+                Text('Sessione in corso',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(
+                            fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+                'Vuoi mettere in pausa o terminare la sessione?'),
+            const SizedBox(height: 24),
+            Column(
+              children: [
+                GlassFilledButton(
+                  onPressed: () =>
+                      Navigator.pop(context, 'pause'),
+                  child: const Text('Metti in pausa'),
+                ),
+                const SizedBox(height: 10),
+                GlassFilledButton(
+                  onPressed: () =>
+                      Navigator.pop(context, 'finish'),
+                  backgroundColor: Colors.green,
+                  child: const Text('Termina e salva'),
+                ),
+                const SizedBox(height: 10),
+                GlassOutlinedButton(
+                  onPressed: () =>
+                      Navigator.pop(context, 'abandon'),
+                  foregroundColor: Colors.red,
+                  child: const Text('Abbandona senza salvare'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == null) return false; // dialog chiuso
+
+    if (result == 'pause') {
+      session.pauseSession();
+      return true;
+    } else if (result == 'finish') {
+      await session.finishSession();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sessione salvata!')),
+        );
+      }
+      return true;
+    } else if (result == 'abandon') {
+      await session.abandonSession();
+      return true;
+    }
+
+    return false;
   }
 
   Future<void> _finishSession() async {
@@ -66,16 +153,15 @@ class _ActiveSessionScreenState
             ),
             const SizedBox(height: 12),
             Text('Vuoi salvare e terminare la sessione?',
-                style:
-                    Theme.of(context).textTheme.bodyMedium),
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium),
             const SizedBox(height: 24),
             GlassDialogActions(
               cancelLabel: 'Annulla',
               confirmLabel: 'Termina',
-              onCancel: () =>
-                  Navigator.pop(context, false),
-              onConfirm: () =>
-                  Navigator.pop(context, true),
+              onCancel: () => Navigator.pop(context, false),
+              onConfirm: () => Navigator.pop(context, true),
             ),
           ],
         ),
@@ -92,10 +178,8 @@ class _ActiveSessionScreenState
   }
 
   void _showAddExerciseSheet() {
-    final sessionProvider =
-        context.read<SessionProvider>();
-    final exerciseProvider =
-        context.read<ExerciseProvider>();
+    final sessionProvider = context.read<SessionProvider>();
+    final exerciseProvider = context.read<ExerciseProvider>();
     showGlassBottomSheet(
       context: context,
       child: MultiProvider(
@@ -129,119 +213,136 @@ class _ActiveSessionScreenState
         allSets.where((s) => s.completed).length;
     final totalSets = allSets.length;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.workout.name),
-        // FIX swipe back: l'AppBar di Flutter su iOS
-        // abilita automaticamente il back gesture quando
-        // c'è un leading arrow — non serve nulla in più
-        // se il Navigator usa CupertinoPageRoute o
-        // MaterialPageRoute con allowSnapshotting.
-        actions: [
-          GlassTextButton(
-            onPressed: _showAddExerciseSheet,
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.fitness_center, size: 18),
-                SizedBox(width: 6),
-                Text('Aggiungi'),
-              ],
+    // PopScope gestisce il back gesture iOS e il tasto back Android
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final canPop = await _onWillPop();
+        if (canPop && mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.workout.name),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios),
+            onPressed: () async {
+              final canPop = await _onWillPop();
+              if (canPop && mounted) {
+                Navigator.of(context).pop();
+              }
+            },
+          ),
+          actions: [
+            GlassTextButton(
+              onPressed: _showAddExerciseSheet,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.fitness_center, size: 18),
+                  SizedBox(width: 6),
+                  Text('Aggiungi'),
+                ],
+              ),
             ),
-          ),
-          GlassTextButton(
-            onPressed: _finishSession,
-            child: const Text('Termina'),
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding:
-                const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius:
-                        BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: totalSets > 0
-                          ? completedSets / totalSets
-                          : 0,
-                      minHeight: 8,
+            GlassTextButton(
+              onPressed: _finishSession,
+              child: const Text('Termina'),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding:
+                  const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
                       borderRadius:
                           BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: totalSets > 0
+                            ? completedSets / totalSets
+                            : 0,
+                        minHeight: 8,
+                        borderRadius:
+                            BorderRadius.circular(4),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                    '$completedSets / $totalSets serie',
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelMedium),
-              ],
+                  const SizedBox(width: 12),
+                  Text(
+                      '$completedSets / $totalSets serie',
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelMedium),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: ReorderableListView.builder(
-              padding: const EdgeInsets.fromLTRB(
-                  16, 0, 16, 24),
-              itemCount: exercises.length,
-              proxyDecorator: (child, index, animation) {
-                return AnimatedBuilder(
-                  animation: animation,
-                  builder: (_, __) => Material(
-                    elevation: 8,
-                    borderRadius:
-                        BorderRadius.circular(16),
-                    shadowColor: Colors.black45,
-                    child: child,
-                  ),
-                );
-              },
-              onReorder: (oldIndex, newIndex) {
-                sessionProvider.reorderSessionExercises(
-                    oldIndex, newIndex);
-              },
-              itemBuilder: (_, i) {
-                final ex = exercises[i];
-                final sets =
-                    exerciseSets[ex.exerciseKey] ?? [];
-                return _ExerciseSessionCard(
-                  key: ValueKey(ex.exerciseKey),
-                  index: i,
-                  sessionExercise: ex,
-                  sets: sets,
-                  onToggle: (index) =>
-                      sessionProvider.toggleSet(
-                          ex.exerciseKey, index),
-                  onUpdate: (index, weight, reps) =>
-                      sessionProvider.updateSet(
-                          ex.exerciseKey,
-                          index,
-                          weight,
-                          reps),
-                  onAddSet: () => sessionProvider
-                      .addSetToExercise(ex.exerciseKey),
-                  onRemoveSet: () => sessionProvider
-                      .removeSetFromExercise(
-                          ex.exerciseKey),
-                  onRemoveExercise: () => sessionProvider
-                      .removeExerciseFromSession(
-                          ex.exerciseKey),
-                  onEditNote: (note) =>
-                      sessionProvider.updateExerciseNote(
-                          ex.exerciseKey, note),
-                );
-              },
+            const SizedBox(height: 8),
+            Expanded(
+              child: ReorderableListView.builder(
+                padding: const EdgeInsets.fromLTRB(
+                    16, 0, 16, 24),
+                itemCount: exercises.length,
+                proxyDecorator:
+                    (child, index, animation) {
+                  return AnimatedBuilder(
+                    animation: animation,
+                    builder: (_, __) => Material(
+                      elevation: 8,
+                      borderRadius:
+                          BorderRadius.circular(16),
+                      shadowColor: Colors.black45,
+                      child: child,
+                    ),
+                  );
+                },
+                onReorder: (oldIndex, newIndex) {
+                  sessionProvider
+                      .reorderSessionExercises(
+                          oldIndex, newIndex);
+                },
+                itemBuilder: (_, i) {
+                  final ex = exercises[i];
+                  final sets =
+                      exerciseSets[ex.exerciseKey] ?? [];
+                  return _ExerciseSessionCard(
+                    key: ValueKey(ex.exerciseKey),
+                    index: i,
+                    sessionExercise: ex,
+                    sets: sets,
+                    onToggle: (index) =>
+                        sessionProvider.toggleSet(
+                            ex.exerciseKey, index),
+                    onUpdate: (index, weight, reps) =>
+                        sessionProvider.updateSet(
+                            ex.exerciseKey,
+                            index,
+                            weight,
+                            reps),
+                    onAddSet: () => sessionProvider
+                        .addSetToExercise(ex.exerciseKey),
+                    onRemoveSet: () => sessionProvider
+                        .removeSetFromExercise(
+                            ex.exerciseKey),
+                    onRemoveExercise: () => sessionProvider
+                        .removeExerciseFromSession(
+                            ex.exerciseKey),
+                    onEditNote: (note) => sessionProvider
+                        .updateExerciseNote(
+                            ex.exerciseKey, note),
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -266,8 +367,7 @@ class _AddMultipleExercisesSheetState
   Widget build(BuildContext context) {
     final allExercises =
         context.watch<ExerciseProvider>().exercises;
-    final sessionProvider =
-        context.read<SessionProvider>();
+    final sessionProvider = context.read<SessionProvider>();
     final alreadyIn = sessionProvider.sessionExercises
         .map((e) => e.exerciseKey)
         .toSet();
@@ -287,13 +387,12 @@ class _AddMultipleExercisesSheetState
     }).toList();
 
     return SizedBox(
-      height:
-          MediaQuery.of(context).size.height * 0.85,
+      height: MediaQuery.of(context).size.height * 0.85,
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(
-                vertical: 12),
+            padding:
+                const EdgeInsets.symmetric(vertical: 12),
             child: const GlassSheetHandle(),
           ),
           Padding(
@@ -313,10 +412,9 @@ class _AddMultipleExercisesSheetState
                 ),
                 if (_selected.isNotEmpty)
                   GlassTextButton(
-                    onPressed: () =>
-                        setState(() => _selected.clear()),
-                    child:
-                        const Text('Deseleziona tutto'),
+                    onPressed: () => setState(
+                        () => _selected.clear()),
+                    child: const Text('Deseleziona tutto'),
                   ),
               ],
             ),
@@ -634,8 +732,9 @@ class _ExerciseSessionCard extends StatelessWidget {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                      padding:
+                          const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: allDone
                             ? cs.primaryContainer
@@ -660,8 +759,8 @@ class _ExerciseSessionCard extends StatelessWidget {
                     onTap: () =>
                         _showNoteDialog(context),
                     child: Container(
-                      margin:
-                          const EdgeInsets.only(top: 8),
+                      margin: const EdgeInsets.only(
+                          top: 8),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
@@ -731,7 +830,6 @@ class _ExerciseSessionCard extends StatelessWidget {
                   );
                 }),
                 const SizedBox(height: 8),
-                // Azioni con bottoni glass mini
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -745,20 +843,14 @@ class _ExerciseSessionCard extends StatelessWidget {
                     ),
                     _MiniGlassButton(
                       label: '+ Serie',
-                      color:
-                          Theme.of(context)
-                              .colorScheme
-                              .primary,
+                      color: cs.primary,
                       onTap: onAddSet,
                     ),
                     _MiniGlassButton(
                       label: hasNote
                           ? 'Modifica nota'
                           : 'Nota',
-                      color:
-                          Theme.of(context)
-                              .colorScheme
-                              .tertiary,
+                      color: cs.tertiary,
                       onTap: () =>
                           _showNoteDialog(context),
                     ),
@@ -766,7 +858,6 @@ class _ExerciseSessionCard extends StatelessWidget {
                       label: 'Rimuovi',
                       color: Colors.red,
                       onTap: () {
-                        // Conferma prima di rimuovere
                         showGlassDialog(
                           context: context,
                           child: Padding(
@@ -793,10 +884,8 @@ class _ExerciseSessionCard extends StatelessWidget {
                                     height: 20),
                                 GlassDialogActions(
                                   cancelLabel: 'Annulla',
-                                  confirmLabel:
-                                      'Rimuovi',
-                                  confirmColor:
-                                      Colors.red,
+                                  confirmLabel: 'Rimuovi',
+                                  confirmColor: Colors.red,
                                   onCancel: () =>
                                       Navigator.pop(
                                           context),
@@ -816,10 +905,9 @@ class _ExerciseSessionCard extends StatelessWidget {
                 ),
                 Consumer<SessionProvider>(
                   builder: (_, session, __) {
-                    final isResting =
-                        session.isResting &&
-                            session.restingExerciseId ==
-                                ex.exerciseKey;
+                    final isResting = session.isResting &&
+                        session.restingExerciseId ==
+                            ex.exerciseKey;
                     if (!isResting)
                       return const SizedBox.shrink();
                     return _RestBanner(
@@ -839,7 +927,6 @@ class _ExerciseSessionCard extends StatelessWidget {
   }
 }
 
-/// Bottone mini glass per azioni inline
 class _MiniGlassButton extends StatelessWidget {
   final String label;
   final Color color;
@@ -1056,12 +1143,8 @@ class _SetRowState extends State<_SetRow> {
                     ? Icons.check_circle
                     : Icons.check_circle_outline,
                 color: isCompleted
-                    ? Theme.of(context)
-                        .colorScheme
-                        .primary
-                    : Theme.of(context)
-                        .colorScheme
-                        .outline,
+                    ? cs.primary
+                    : cs.outline,
               ),
             ),
           ),
@@ -1114,13 +1197,11 @@ class _RestBanner extends StatelessWidget {
             padding: const EdgeInsets.symmetric(
                 horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: bg.withOpacity(
-                  isDark ? 0.7 : 0.85),
+              color:
+                  bg.withOpacity(isDark ? 0.7 : 0.85),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: (isOver
-                        ? cs.error
-                        : cs.secondary)
+                color: (isOver ? cs.error : cs.secondary)
                     .withOpacity(0.3),
                 width: 1,
               ),

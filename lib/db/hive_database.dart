@@ -232,6 +232,14 @@ class HiveDatabase {
     return await _seBox.add(session);
   }
 
+  Future<void> deleteSession(dynamic sessionKey) async {
+    await _seBox.delete(sessionKey);
+    final keysToDelete = _ssBox.keys
+        .where((k) => _ssBox.get(k)?.sessionKey == sessionKey)
+        .toList();
+    await _ssBox.deleteAll(keysToDelete);
+  }
+
   Future<void> updateSessionDuration(
       dynamic sessionKey, int durationSeconds) async {
     final s = _seBox.get(sessionKey);

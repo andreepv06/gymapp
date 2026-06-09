@@ -48,19 +48,20 @@ class SessionProvider extends ChangeNotifier {
   dynamic currentSessionKey;
   DateTime? _sessionStartTime;
 
+  // Dati della scheda corrente per riprendere la sessione
+  HiveWorkout? _currentWorkout;
+  HiveWorkout? get currentWorkout => _currentWorkout;
+
   final Map<dynamic, List<ActiveSet>> _exerciseSets = {};
   final List<SessionExercise> _sessionExercises = [];
 
-  Map<dynamic, List<ActiveSet>> get exerciseSets =>
-      _exerciseSets;
-  List<SessionExercise> get sessionExercises =>
-      _sessionExercises;
+  Map<dynamic, List<ActiveSet>> get exerciseSets => _exerciseSets;
+  List<SessionExercise> get sessionExercises => _sessionExercises;
 
   Timer? _restTimer;
   int _restElapsed = 0;
   dynamic _restingExerciseKey;
   int? _restingSetIndex;
-  // FIX: flag per non notificare più volte
   bool _restDoneNotified = false;
 
   int get restElapsed => _restElapsed;
@@ -69,13 +70,39 @@ class SessionProvider extends ChangeNotifier {
   dynamic get restingExerciseId => _restingExerciseKey;
   int? get restingSetIndex => _restingSetIndex;
 
+  /// True se c'è una sessione attiva in pausa
+  bool get hasActiveSession =>
+      currentSessionKey != null && _sessionExercises.isNotEmpty;
+
+  /// True se almeno una serie è stata completata
+  bool get hasAnyCompletedSet => _exerciseSets.values
+      .expand((sets) => sets)
+      .any((s) => s.completed);
+
+  /// True se almeno un dato è stato inserito (peso o reps modificati)
+  bool get hasAnyData => _exerciseSets.values
+      .expand((sets) => sets)
+      .any((s) =>
+          s.completed ||
+          s.weight != (s.lastWeight ?? 0) ||
+          s.reps != (s.lastReps ?? s.reps));
+
   Future<void> startSession(
       List<HiveWorkoutExercise> exercises,
       dynamic workoutKey,
-      String workoutName) async {
+      String workoutName,
+      HiveWorkout workout) async {
+    // Se c'è già una sessione attiva per questa stessa scheda,
+    // non ricrearne una nuova
+    if (currentSessionKey != null &&
+        _currentWorkout?.key == workoutKey) {
+      return;
+    }
+
     currentSessionKey = await HiveDatabase.instance
         .createSession(workoutKey, workoutName);
     _sessionStartTime = DateTime.now();
+    _currentWorkout = workout;
     _exerciseSets.clear();
     _sessionExercises.clear();
     _stopRestTimer();
@@ -116,6 +143,34 @@ class SessionProvider extends ChangeNotifier {
       });
     }
 
+    notifyListeners();
+  }
+
+  /// Mette in pausa la sessione (non la cancella)
+  /// Chiamato quando l'utente esce dalla schermata
+  void pauseSession() {
+    _stopRestTimer();
+    // Non resettiamo nulla — la sessione rimane in memoria
+    notifyListeners();
+  }
+
+  /// Abbandona la sessione senza salvarla nello storico
+  /// Chiamato se l'utente non ha inserito nessun dato
+  Future<void> abandonSession() async {
+    if (currentSessionKey != null) {
+      await HiveDatabase.instance
+          .deleteSession(currentSessionKey);
+    }
+    _resetSession();
+  }
+
+  void _resetSession() {
+    _stopRestTimer();
+    _exerciseSets.clear();
+    _sessionExercises.clear();
+    currentSessionKey = null;
+    _sessionStartTime = null;
+    _currentWorkout = null;
     notifyListeners();
   }
 
@@ -241,7 +296,7 @@ class SessionProvider extends ChangeNotifier {
   void _startRestTimer(dynamic exerciseKey, int setIndex) {
     _stopRestTimer();
     _restElapsed = 0;
-    _restDoneNotified = false; // reset flag
+    _restDoneNotified = false;
     _restingExerciseKey = exerciseKey;
     _restingSetIndex = setIndex;
 
@@ -250,12 +305,10 @@ class SessionProvider extends ChangeNotifier {
         orElse: () => _sessionExercises.first);
     final targetRest = ex.restSeconds;
 
-    _restTimer = Timer.periodic(
-        const Duration(seconds: 1), (_) {
+    _restTimer =
+        Timer.periodic(const Duration(seconds: 1), (_) {
       _restElapsed++;
 
-      // FIX: usa >= invece di == per non perdere tick,
-      // e _restDoneNotified per chiamare una volta sola
       if (targetRest != null &&
           _restElapsed >= targetRest &&
           !_restDoneNotified) {
@@ -272,9 +325,8 @@ class SessionProvider extends ChangeNotifier {
   void stopRestTimer() {
     if (_restingExerciseKey != null &&
         _restingSetIndex != null) {
-      final set =
-          _exerciseSets[_restingExerciseKey]
-              ?[_restingSetIndex!];
+      final set = _exerciseSets[_restingExerciseKey]
+          ?[_restingSetIndex!];
       if (set != null) set.restSeconds = _restElapsed;
     }
     _stopRestTimer();
@@ -322,11 +374,6 @@ class SessionProvider extends ChangeNotifier {
       }
     }
 
-    _stopRestTimer();
-    _exerciseSets.clear();
-    _sessionExercises.clear();
-    currentSessionKey = null;
-    _sessionStartTime = null;
-    notifyListeners();
+    _resetSession();
   }
 }

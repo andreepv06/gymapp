@@ -1,9 +1,13 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/workout_provider.dart';
+import '../../providers/session_provider.dart';
 import '../../models/hive_models.dart';
 import '../../main.dart';
 import '../../widgets/glass_button.dart';
+import '../../widgets/glass_action_buttons.dart';
+import '../../widgets/glass_bottom_sheet.dart';
 import 'active_session_screen.dart';
 
 class SessionSelectorScreen extends StatefulWidget {
@@ -27,6 +31,8 @@ class _SessionSelectorScreenState
   Widget build(BuildContext context) {
     final workoutProvider =
         context.watch<WorkoutProvider>();
+    final sessionProvider =
+        context.watch<SessionProvider>();
     final workouts = workoutProvider.workouts;
     final cs = Theme.of(context).colorScheme;
 
@@ -95,6 +101,72 @@ class _SessionSelectorScreenState
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Banner sessione in pausa
+          if (sessionProvider.hasActiveSession)
+            _PausedSessionBanner(
+              workout: sessionProvider.currentWorkout!,
+              onResume: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ActiveSessionScreen(
+                      workout:
+                          sessionProvider.currentWorkout!,
+                    ),
+                  ),
+                );
+              },
+              onAbandon: () async {
+                final confirm =
+                    await showGlassDialog<bool>(
+                  context: context,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.delete_outline,
+                                color: Colors.red,
+                                size: 22),
+                            SizedBox(width: 10),
+                            Text('Abbandona sessione',
+                                style: TextStyle(
+                                    fontWeight:
+                                        FontWeight.w700,
+                                    fontSize: 16)),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                            'Vuoi abbandonare la sessione in pausa? I dati non verranno salvati.'),
+                        const SizedBox(height: 24),
+                        GlassDialogActions(
+                          cancelLabel: 'Annulla',
+                          confirmLabel: 'Abbandona',
+                          confirmColor: Colors.red,
+                          onCancel: () =>
+                              Navigator.pop(context,
+                                  false),
+                          onConfirm: () =>
+                              Navigator.pop(
+                                  context, true),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+                if (confirm == true) {
+                  await context
+                      .read<SessionProvider>()
+                      .abandonSession();
+                }
+              },
+            ),
+
           _SessionHeader(),
           Padding(
             padding:
@@ -112,8 +184,8 @@ class _SessionSelectorScreenState
           ),
           Expanded(
             child: ListView.separated(
-              padding:
-                  const EdgeInsets.fromLTRB(16, 0, 16, 100),
+              padding: const EdgeInsets.fromLTRB(
+                  16, 0, 16, 100),
               itemCount: workouts.length,
               separatorBuilder: (_, __) =>
                   const SizedBox(height: 8),
@@ -128,8 +200,9 @@ class _SessionSelectorScreenState
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ActiveSessionScreen(
-                            workout: workout),
+                        builder: (_) =>
+                            ActiveSessionScreen(
+                                workout: workout),
                       ),
                     );
                   },
@@ -138,6 +211,89 @@ class _SessionSelectorScreenState
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Banner mostrato quando c'è una sessione in pausa
+class _PausedSessionBanner extends StatelessWidget {
+  final HiveWorkout workout;
+  final VoidCallback onResume;
+  final VoidCallback onAbandon;
+
+  const _PausedSessionBanner({
+    required this.workout,
+    required this.onResume,
+    required this.onAbandon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding:
+          const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter:
+              ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cs.primaryContainer
+                  .withOpacity(isDark ? 0.7 : 0.85),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: cs.primary.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.pause_circle_filled,
+                    color: cs.primary, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Text('Sessione in pausa',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: cs.onPrimaryContainer,
+                          )),
+                      Text(workout.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onPrimaryContainer
+                                .withOpacity(0.75),
+                          )),
+                    ],
+                  ),
+                ),
+                GlassTextButton(
+                  onPressed: onAbandon,
+                  foregroundColor: Colors.red,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 6),
+                  child: const Text('Elimina'),
+                ),
+                const SizedBox(width: 4),
+                GlassFilledButton(
+                  onPressed: onResume,
+                  child: const Text('Riprendi'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -170,7 +326,8 @@ class _SessionHeader extends StatelessWidget {
           const SizedBox(width: 16),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Text(
                   'Pronto ad allenarti?',
@@ -222,7 +379,8 @@ class _WorkoutSessionCard extends StatelessWidget {
                 height: 48,
                 decoration: BoxDecoration(
                   color: cs.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius:
+                      BorderRadius.circular(12),
                 ),
                 child: Icon(Icons.list_alt,
                     color: cs.onPrimaryContainer,
