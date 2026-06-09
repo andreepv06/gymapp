@@ -1003,12 +1003,15 @@ class _SetRow extends StatefulWidget {
 class _SetRowState extends State<_SetRow> {
   late TextEditingController _weightCtrl;
   late TextEditingController _repsCtrl;
+  late int _currentReps;
 
   @override
   void initState() {
     super.initState();
+    _currentReps = widget.set.lastReps ?? widget.set.reps;
     _weightCtrl = TextEditingController(text: '');
-    _repsCtrl = TextEditingController(text: '');
+    _repsCtrl = TextEditingController(
+        text: _currentReps.toString());
   }
 
   @override
@@ -1022,16 +1025,30 @@ class _SetRowState extends State<_SetRow> {
     final weight = double.tryParse(_weightCtrl.text) ??
         widget.set.lastWeight ??
         widget.set.weight;
-    final reps = int.tryParse(_repsCtrl.text) ??
-        widget.set.lastReps ??
-        widget.set.reps;
+    final reps =
+        int.tryParse(_repsCtrl.text) ?? _currentReps;
     widget.onUpdate(weight, reps);
+  }
+
+  void _changeReps(int delta) {
+    if (widget.set.completed) return;
+    final current =
+        int.tryParse(_repsCtrl.text) ?? _currentReps;
+    final newVal = (current + delta).clamp(0, 999);
+    setState(() {
+      _currentReps = newVal;
+      _repsCtrl.text = newVal.toString();
+    });
+    _notifyUpdate();
   }
 
   @override
   Widget build(BuildContext context) {
     final isCompleted = widget.set.completed;
     final cs = Theme.of(context).colorScheme;
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+
     final weightHint = widget.set.lastWeight != null
         ? widget.set.lastWeight! % 1 == 0
             ? widget.set.lastWeight!.toInt().toString()
@@ -1039,8 +1056,6 @@ class _SetRowState extends State<_SetRow> {
         : widget.set.weight > 0
             ? widget.set.weight.toString()
             : '-';
-    final repsHint = widget.set.lastReps?.toString() ??
-        widget.set.reps.toString();
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -1055,85 +1070,140 @@ class _SetRowState extends State<_SetRow> {
       ),
       child: Row(
         children: [
+          // Numero serie
           SizedBox(
-            width: 36,
+            width: 28,
             child: Text('${widget.setNumber}',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
+                  fontSize: 13,
                   color: isCompleted
                       ? cs.primary
                       : cs.outline,
                 )),
           ),
+          const SizedBox(width: 4),
+
+          // Campo peso
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 4),
-              child: TextField(
-                controller: _weightCtrl,
-                enabled: !isCompleted,
-                textAlign: TextAlign.center,
-                keyboardType:
-                    const TextInputType.numberWithOptions(
-                        decimal: true),
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: weightHint,
-                  contentPadding:
-                      const EdgeInsets.symmetric(
-                          vertical: 8, horizontal: 8),
-                  border: OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(8)),
-                  filled: isCompleted,
-                  fillColor: cs.surfaceContainerHighest
-                      .withOpacity(0.3),
+            flex: 3,
+            child: TextField(
+              controller: _weightCtrl,
+              enabled: !isCompleted,
+              textAlign: TextAlign.center,
+              keyboardType:
+                  const TextInputType.numberWithOptions(
+                      decimal: true),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: weightHint,
+                hintStyle: TextStyle(
+                    fontSize: 12,
+                    color: cs.outline.withOpacity(0.6)),
+                contentPadding:
+                    const EdgeInsets.symmetric(
+                        vertical: 8, horizontal: 6),
+                border: OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(8)),
+                filled: isCompleted,
+                fillColor: cs.surfaceContainerHighest
+                    .withOpacity(0.3),
+              ),
+              onChanged: (_) => _notifyUpdate(),
+            ),
+          ),
+          const SizedBox(width: 4),
+
+          // Reps con +/-
+          Expanded(
+            flex: 4,
+            child: Container(
+              decoration: BoxDecoration(
+                color: isCompleted
+                    ? cs.surfaceContainerHighest
+                        .withOpacity(0.3)
+                    : isDark
+                        ? Colors.white.withOpacity(0.05)
+                        : cs.surfaceContainerHighest
+                            .withOpacity(0.4),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isCompleted
+                      ? cs.outlineVariant.withOpacity(0.3)
+                      : cs.outlineVariant,
+                  width: 1,
                 ),
-                onChanged: (_) => _notifyUpdate(),
+              ),
+              child: Row(
+                children: [
+                  // Bottone -
+                  _RepsButton(
+                    icon: Icons.remove,
+                    onTap: isCompleted
+                        ? null
+                        : () => _changeReps(-1),
+                    color: cs.outline,
+                  ),
+                  // Campo reps editabile
+                  Expanded(
+                    child: TextField(
+                      controller: _repsCtrl,
+                      enabled: !isCompleted,
+                      textAlign: TextAlign.center,
+                      keyboardType:
+                          TextInputType.number,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isCompleted
+                            ? cs.outline
+                            : cs.onSurface,
+                      ),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding:
+                            EdgeInsets.symmetric(
+                                vertical: 8),
+                      ),
+                      onChanged: (v) {
+                        _currentReps =
+                            int.tryParse(v) ??
+                                _currentReps;
+                        _notifyUpdate();
+                      },
+                    ),
+                  ),
+                  // Bottone +
+                  _RepsButton(
+                    icon: Icons.add,
+                    onTap: isCompleted
+                        ? null
+                        : () => _changeReps(1),
+                    color: cs.primary,
+                  ),
+                ],
               ),
             ),
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 4),
-              child: TextField(
-                controller: _repsCtrl,
-                enabled: !isCompleted,
-                textAlign: TextAlign.center,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: repsHint,
-                  contentPadding:
-                      const EdgeInsets.symmetric(
-                          vertical: 8, horizontal: 8),
-                  border: OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(8)),
-                  filled: isCompleted,
-                  fillColor: cs.surfaceContainerHighest
-                      .withOpacity(0.3),
-                ),
-                onChanged: (_) => _notifyUpdate(),
-              ),
-            ),
-          ),
+          const SizedBox(width: 4),
+
+          // Check completamento
           SizedBox(
-            width: 48,
+            width: 40,
             child: IconButton(
+              padding: EdgeInsets.zero,
               onPressed: () {
-                if (_weightCtrl.text.isEmpty ||
-                    _repsCtrl.text.isEmpty) {
+                if (_weightCtrl.text.isEmpty) {
                   final weight =
                       double.tryParse(_weightCtrl.text) ??
                           widget.set.lastWeight ??
                           widget.set.weight;
                   final reps =
                       int.tryParse(_repsCtrl.text) ??
-                          widget.set.lastReps ??
-                          widget.set.reps;
+                          _currentReps;
                   widget.onUpdate(weight, reps);
                 }
                 widget.onToggle();
@@ -1145,6 +1215,7 @@ class _SetRowState extends State<_SetRow> {
                 color: isCompleted
                     ? cs.primary
                     : cs.outline,
+                size: 26,
               ),
             ),
           ),
@@ -1153,6 +1224,39 @@ class _SetRowState extends State<_SetRow> {
     );
   }
 }
+
+class _RepsButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final Color color;
+
+  const _RepsButton({
+    required this.icon,
+    required this.onTap,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 28,
+        height: 36,
+        alignment: Alignment.center,
+        child: Icon(
+          icon,
+          size: 16,
+          color: onTap == null
+              ? color.withOpacity(0.3)
+              : color,
+        ),
+      ),
+    );
+  }
+}
+
+
 
 class _RestBanner extends StatelessWidget {
   final int elapsed;

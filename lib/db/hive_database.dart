@@ -34,7 +34,9 @@ class HiveDatabase {
     if (!Hive.isAdapterRegistered(5)) {
       Hive.registerAdapter(HiveExerciseNoteAdapter());
     }
-    // Non apre nessuna box qui
+    if (!Hive.isAdapterRegistered(6)) {
+      Hive.registerAdapter(HiveCircuitAdapter());
+    }
   }
 
   Future<void> switchUser(String userId) async {
@@ -109,6 +111,7 @@ class HiveDatabase {
     await Hive.openBox<HiveSession>(_sessions);
     await Hive.openBox<HiveSessionSet>(_sessionSets);
     await Hive.openBox<HiveExerciseNote>(_exerciseNotes);
+    await Hive.openBox<HiveCircuit>(_circuits);
   }
 
   Box<HiveExercise> get _exBox =>
@@ -124,6 +127,9 @@ class HiveDatabase {
   Box<HiveExerciseNote> get _enBox =>
       Hive.box<HiveExerciseNote>(_exerciseNotes);
 
+  String get _circuits => '${_userId}_circuits';
+  Box<HiveCircuit> get _ciBox =>
+    Hive.box<HiveCircuit>(_circuits);
   // ── EXERCISES ──
 
   List<HiveExercise> getExercises() {
@@ -358,6 +364,33 @@ class HiveDatabase {
     await _enBox.clear();
   }
 
+  // ── CIRCUITS ──
+
+  List<HiveCircuit> getCircuits(dynamic workoutKey) {
+    final list = _ciBox.values
+        .where((c) => c.workoutKey == workoutKey)
+        .toList();
+    list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return list;
+  }
+  
+  Future<dynamic> addCircuit(HiveCircuit circuit) async {
+    return await _ciBox.add(circuit);
+  }
+  
+  Future<void> updateCircuit(
+      dynamic key, String name, int rounds) async {
+    final c = _ciBox.get(key);
+    if (c != null) {
+      c.name = name;
+      c.rounds = rounds;
+      await c.save();
+    }
+  }
+  
+  Future<void> deleteCircuit(dynamic key) async {
+    await _ciBox.delete(key);
+  }
   // ── DEFAULT EXERCISES ──
 
   Future<void> _insertDefaultExercises() async {
@@ -476,3 +509,4 @@ class HiveDatabase {
     }
   }
 }
+

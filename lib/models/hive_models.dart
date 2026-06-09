@@ -57,6 +57,11 @@ class HiveWorkoutExercise extends HiveObject {
   String? notes;
   @HiveField(9)
   late int sortOrder;
+  @HiveField(10)
+  String? circuitId; // ID del circuito di appartenenza (null = esercizio libero)
+  @HiveField(11)
+  int? circuitRound; // a quale ciclo si riferisce questo dato
+
 
   HiveWorkoutExercise({
     required this.workoutKey,
@@ -145,5 +150,23 @@ class HiveExerciseNote extends HiveObject {
     required this.exerciseKey,
     required this.note,
     required this.updatedAt,
+  });
+}
+@HiveType(typeId: 6)
+class HiveCircuit extends HiveObject {
+  @HiveField(0)
+  late int workoutKey;
+  @HiveField(1)
+  late String name;
+  @HiveField(2)
+  late int rounds; // numero di cicli
+  @HiveField(3)
+  late int sortOrder;
+
+  HiveCircuit({
+    required this.workoutKey,
+    required this.name,
+    this.rounds = 3,
+    this.sortOrder = 0,
   });
 }
