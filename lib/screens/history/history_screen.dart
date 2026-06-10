@@ -57,9 +57,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _confirmDeleteSession(
-      BuildContext context, HiveSession session) async {
+      BuildContext ctx, HiveSession session) async {
+    final dt = DateTime.tryParse(session.date);
+    final timeStr = dt != null
+        ? '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} alle ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
+        : session.date;
+
     final confirm = await showGlassDialog<bool>(
-      context: context,
+      context: ctx,
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -79,16 +84,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-                'Vuoi eliminare la sessione "${session.workoutName}"? Questa azione è permanente.'),
+                'Eliminare la sessione "${session.workoutName}" del $timeStr?'),
             const SizedBox(height: 24),
             GlassDialogActions(
               cancelLabel: 'Annulla',
               confirmLabel: 'Elimina',
               confirmColor: Colors.red,
               onCancel: () =>
-                  Navigator.pop(context, false),
+                  Navigator.pop(ctx, false),
               onConfirm: () =>
-                  Navigator.pop(context, true),
+                  Navigator.pop(ctx, true),
             ),
           ],
         ),
@@ -114,8 +119,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final currentWeekStart =
         now.subtract(Duration(days: now.weekday - 1));
     int streak = 0;
-    DateTime weekStart = DateTime(currentWeekStart.year,
-        currentWeekStart.month, currentWeekStart.day);
+    DateTime weekStart = DateTime(
+        currentWeekStart.year,
+        currentWeekStart.month,
+        currentWeekStart.day);
     while (true) {
       final weekEnd =
           weekStart.add(const Duration(days: 6));
@@ -128,8 +135,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
       });
       if (!hasSession) break;
       streak++;
-      weekStart = weekStart
-          .subtract(const Duration(days: 7));
+      weekStart =
+          weekStart.subtract(const Duration(days: 7));
       if (streak > 200) break;
     }
     return streak;
@@ -140,8 +147,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final weekStart =
         now.subtract(Duration(days: now.weekday - 1));
     return List.generate(7, (i) {
-      final day =
-          weekStart.add(Duration(days: i));
+      final day = weekStart.add(Duration(days: i));
       final dateStr =
           '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
       return _sessionsByDate.containsKey(dateStr);
@@ -284,31 +290,169 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ?.copyWith(
                         fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
-            ...sessions.map((s) => ListTile(
-                  leading: Icon(Icons.fitness_center,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary),
-                  title: Text(s.workoutName),
-                  trailing: const Icon(
-                      Icons.arrow_forward_ios,
-                      size: 14),
-                  contentPadding: EdgeInsets.zero,
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            SessionDetailScreen(
-                          sessionKey: s.key,
-                          workoutName: s.workoutName,
-                          date: s.date,
-                        ),
+            ...sessions.map((s) {
+              final dt = DateTime.tryParse(s.date);
+              final timeStr = dt != null
+                  ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
+                  : '';
+              final sets = HiveDatabase.instance
+                  .getSessionSets(s.key);
+              // Prendi i primi 3 esercizi completati
+              final topSets = sets
+                  .where((ss) => ss.completed)
+                  .fold<Map<String, HiveSessionSet>>(
+                      {},
+                      (map, ss) => map
+                        ..putIfAbsent(
+                            ss.exerciseName, () => ss))
+                  .values
+                  .take(3)
+                  .toList();
+
+              return Container(
+                margin:
+                    const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withOpacity(0.3),
+                  borderRadius:
+                      BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outlineVariant
+                        .withOpacity(0.5),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                  Icons.fitness_center,
+                                  size: 14,
+                                  color: Theme.of(
+                                          context)
+                                      .colorScheme
+                                      .primary),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                    s.workoutName,
+                                    style: const TextStyle(
+                                        fontWeight:
+                                            FontWeight
+                                                .w600,
+                                        fontSize: 14)),
+                              ),
+                              if (timeStr.isNotEmpty)
+                                Text(timeStr,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Theme.of(
+                                                context)
+                                            .colorScheme
+                                            .outline)),
+                            ],
+                          ),
+                          if (topSets.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            ...topSets.map((ss) =>
+                                Text(
+                                  '• ${ss.exerciseName}: ${ss.weight > 0 ? '${ss.weight % 1 == 0 ? ss.weight.toInt() : ss.weight} kg × ' : ''}${ss.reps} reps',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Theme.of(
+                                              context)
+                                          .colorScheme
+                                          .outline),
+                                )),
+                          ],
+                        ],
                       ),
-                    );
-                  },
-                )),
+                    ),
+                    Column(
+                      children: [
+                        // Bottone vai ai dettagli
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    SessionDetailScreen(
+                                  sessionKey: s.key,
+                                  workoutName:
+                                      s.workoutName,
+                                  date: s.date,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding:
+                                const EdgeInsets.all(
+                                    6),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.1),
+                              borderRadius:
+                                  BorderRadius.circular(
+                                      8),
+                            ),
+                            child: Icon(
+                                Icons
+                                    .arrow_forward_ios,
+                                size: 14,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        // Bottone elimina
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pop(context);
+                            _confirmDeleteSession(
+                                context, s);
+                          },
+                          child: Container(
+                            padding:
+                                const EdgeInsets.all(
+                                    6),
+                            decoration: BoxDecoration(
+                              color: Colors.red
+                                  .withOpacity(0.1),
+                              borderRadius:
+                                  BorderRadius.circular(
+                                      8),
+                            ),
+                            child: const Icon(
+                                Icons.delete_outline,
+                                size: 14,
+                                color: Colors.red),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
             const SizedBox(height: 8),
             GlassOutlinedButton(
               onPressed: () => Navigator.pop(context),
@@ -356,13 +500,7 @@ class _CompactStatsBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     const dayLabels = [
-      'L',
-      'M',
-      'M',
-      'G',
-      'V',
-      'S',
-      'D'
+      'L', 'M', 'M', 'G', 'V', 'S', 'D'
     ];
 
     return Container(
@@ -378,15 +516,12 @@ class _CompactStatsBar extends StatelessWidget {
             crossAxisAlignment:
                 CrossAxisAlignment.start,
             children: [
-              Text(
-                '$totalSessions',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: cs.primary,
-                  height: 1,
-                ),
-              ),
+              Text('$totalSessions',
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: cs.primary,
+                      height: 1)),
               Text('allenamenti',
                   style: TextStyle(
                       fontSize: 10,
@@ -406,15 +541,12 @@ class _CompactStatsBar extends StatelessWidget {
             crossAxisAlignment:
                 CrossAxisAlignment.start,
             children: [
-              Text(
-                '$streak',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: cs.primary,
-                  height: 1,
-                ),
-              ),
+              Text('$streak',
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: cs.primary,
+                      height: 1)),
               Text(
                   streak == 1
                       ? 'settimana'
@@ -495,19 +627,9 @@ class _CalendarCard extends StatelessWidget {
     final startOffset =
         (firstDay.weekday - 1) % 7;
     const months = [
-      '',
-      'Gennaio',
-      'Febbraio',
-      'Marzo',
-      'Aprile',
-      'Maggio',
-      'Giugno',
-      'Luglio',
-      'Agosto',
-      'Settembre',
-      'Ottobre',
-      'Novembre',
-      'Dicembre'
+      '', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile',
+      'Maggio', 'Giugno', 'Luglio', 'Agosto',
+      'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
     ];
 
     return Card(
@@ -521,10 +643,12 @@ class _CalendarCard extends StatelessWidget {
                   MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: () => onMonthChanged(DateTime(
-                      focusedMonth.year,
-                      focusedMonth.month - 1)),
+                  icon:
+                      const Icon(Icons.chevron_left),
+                  onPressed: () =>
+                      onMonthChanged(DateTime(
+                          focusedMonth.year,
+                          focusedMonth.month - 1)),
                 ),
                 Text(
                   '${months[focusedMonth.month]} ${focusedMonth.year}',
@@ -533,11 +657,12 @@ class _CalendarCard extends StatelessWidget {
                       .titleMedium,
                 ),
                 IconButton(
-                  icon:
-                      const Icon(Icons.chevron_right),
-                  onPressed: () => onMonthChanged(DateTime(
-                      focusedMonth.year,
-                      focusedMonth.month + 1)),
+                  icon: const Icon(
+                      Icons.chevron_right),
+                  onPressed: () =>
+                      onMonthChanged(DateTime(
+                          focusedMonth.year,
+                          focusedMonth.month + 1)),
                 ),
               ],
             ),
@@ -554,15 +679,7 @@ class _CalendarCard extends StatelessWidget {
                 return Column(
                   children: [
                     Row(
-                      children: [
-                        'L',
-                        'M',
-                        'M',
-                        'G',
-                        'V',
-                        'S',
-                        'D'
-                      ]
+                      children: ['L', 'M', 'M', 'G', 'V', 'S', 'D']
                           .map((d) => SizedBox(
                                 width: cellSize,
                                 height: cellSize * 0.45,
@@ -610,17 +727,16 @@ class _CalendarCard extends StatelessWidget {
                         final dateStr =
                             '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
                         final sessions =
-                            sessionsByDate[dateStr] ?? [];
+                            sessionsByDate[dateStr] ??
+                                [];
                         final hasSession =
                             sessions.isNotEmpty;
-                        final isToday =
-                            date.year ==
-                                    DateTime.now().year &&
-                                date.month ==
-                                    DateTime.now()
-                                        .month &&
-                                date.day ==
-                                    DateTime.now().day;
+                        final isToday = date.year ==
+                                DateTime.now().year &&
+                            date.month ==
+                                DateTime.now().month &&
+                            date.day ==
+                                DateTime.now().day;
 
                         return _DayCell(
                           day: day,
@@ -681,7 +797,8 @@ class _DayCellState extends State<_DayCell> {
     final offset = box.localToGlobal(Offset.zero);
     _overlayEntry = OverlayEntry(
       builder: (ctx) => Positioned(
-        left: (offset.dx - 60).clamp(8.0, double.infinity),
+        left: (offset.dx - 60)
+            .clamp(8.0, double.infinity),
         top: offset.dy + box.size.height + 4,
         child: Material(
           elevation: 6,
@@ -692,9 +809,8 @@ class _DayCellState extends State<_DayCell> {
             constraints:
                 const BoxConstraints(maxWidth: 200),
             decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .surface,
+              color:
+                  Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                   color: Theme.of(context)
@@ -712,22 +828,17 @@ class _DayCellState extends State<_DayCell> {
                                 vertical: 3),
                         child: Row(
                           children: [
-                            Icon(
-                                Icons.fitness_center,
+                            Icon(Icons.fitness_center,
                                 size: 13,
-                                color: Theme.of(context)
+                                color: Theme.of(ctx)
                                     .colorScheme
                                     .primary),
                             const SizedBox(width: 6),
                             Flexible(
                               child: Text(
                                   s.workoutName,
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      color: Theme.of(
-                                              context)
-                                          .colorScheme
-                                          .onSurface),
+                                  style: const TextStyle(
+                                      fontSize: 13),
                                   overflow: TextOverflow
                                       .ellipsis),
                             ),
@@ -786,11 +897,14 @@ class _DayCellState extends State<_DayCell> {
         onTap: widget.onTap,
         child: Center(
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            width:
-                _hovered ? hoverSize : widget.circleSize,
-            height:
-                _hovered ? hoverSize : widget.circleSize,
+            duration:
+                const Duration(milliseconds: 150),
+            width: _hovered
+                ? hoverSize
+                : widget.circleSize,
+            height: _hovered
+                ? hoverSize
+                : widget.circleSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: widget.hasSession
@@ -848,80 +962,117 @@ class _SessionTile extends StatelessWidget {
   String _formatDate(String iso) {
     final dt = DateTime.parse(iso);
     const months = [
-      '',
-      'Gen',
-      'Feb',
-      'Mar',
-      'Apr',
-      'Mag',
-      'Giu',
-      'Lug',
-      'Ago',
-      'Set',
-      'Ott',
-      'Nov',
-      'Dic'
+      '', 'Gen', 'Feb', 'Mar', 'Apr', 'Mag',
+      'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
     ];
-    return '${dt.day} ${months[dt.month]} ${dt.year}';
+    return '${dt.day} ${months[dt.month]} ${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
   String _formatDuration(int? seconds) {
     if (seconds == null) return '';
     final m = seconds ~/ 60;
-    final s = seconds % 60;
-    if (m == 0) return '${s}s';
-    return '${m}min ${s}s';
+    if (m == 0) return '${seconds}s';
+    return '${m}min';
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
+    // Carica i principali set completati per il preview
+    final sets =
+        HiveDatabase.instance.getSessionSets(session.key);
+    final topSets = sets
+        .where((s) => s.completed)
+        .fold<Map<String, HiveSessionSet>>(
+            {},
+            (map, s) =>
+                map..putIfAbsent(s.exerciseName, () => s))
+        .values
+        .take(2)
+        .toList();
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: cs.primaryContainer,
-          child: Icon(Icons.fitness_center,
-              color: cs.onPrimaryContainer, size: 18),
-        ),
-        title: Text(session.workoutName,
-            style: const TextStyle(
-                fontWeight: FontWeight.w500)),
-        subtitle: Text(_formatDate(session.date)),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (session.durationSeconds != null)
-              Text(
-                  _formatDuration(
-                      session.durationSeconds),
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: cs.outline)),
-            const SizedBox(width: 4),
-            // Bottone elimina
-            GestureDetector(
-              onTap: onDelete,
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius:
-                      BorderRadius.circular(8),
-                  border: Border.all(
-                      color:
-                          Colors.red.withOpacity(0.3),
-                      width: 1),
-                ),
-                child: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.red,
-                    size: 16),
-              ),
-            ),
-          ],
-        ),
+      child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                backgroundColor: cs.primaryContainer,
+                radius: 20,
+                child: Icon(Icons.fitness_center,
+                    color: cs.onPrimaryContainer,
+                    size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(session.workoutName,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14)),
+                    const SizedBox(height: 2),
+                    Text(_formatDate(session.date),
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: cs.outline)),
+                    if (topSets.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      ...topSets.map((s) => Text(
+                            '• ${s.exerciseName}: ${s.weight > 0 ? '${s.weight % 1 == 0 ? s.weight.toInt() : s.weight} kg × ' : ''}${s.reps} reps',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: cs.outline),
+                          )),
+                    ],
+                  ],
+                ),
+              ),
+              Column(
+                children: [
+                  if (session.durationSeconds != null)
+                    Text(
+                        _formatDuration(
+                            session.durationSeconds),
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: cs.outline)),
+                  const SizedBox(height: 4),
+                  GestureDetector(
+                    onTap: onDelete,
+                    child: Container(
+                      padding:
+                          const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.red
+                            .withOpacity(0.1),
+                        borderRadius:
+                            BorderRadius.circular(8),
+                        border: Border.all(
+                            color: Colors.red
+                                .withOpacity(0.3),
+                            width: 1),
+                      ),
+                      child: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.red,
+                          size: 16),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -472,7 +472,7 @@ class _CircuitSessionBlock extends StatelessWidget {
                     circuitId, ex.exerciseKey);
                 return _ExerciseSessionCard(
                   key: ValueKey(
-                      '${ex.exerciseKey}_${circuitId}_$currentRound'),
+                    '${ex.exerciseKey}_${circuitId}_$currentRound'),
                   sessionExercise: ex,
                   sets: sets,
                   onToggle: (index) =>
@@ -1226,9 +1226,40 @@ class _SetRowState extends State<_SetRow> {
     super.initState();
     _currentReps =
         widget.set.lastReps ?? widget.set.reps;
-    _weightCtrl = TextEditingController(text: '');
+    _weightCtrl = TextEditingController(
+        text: widget.set.weight > 0
+            ? (widget.set.weight % 1 == 0
+                ? widget.set.weight.toInt().toString()
+                : widget.set.weight.toString())
+            : '');
     _repsCtrl = TextEditingController(
         text: _currentReps.toString());
+  }
+
+  // FIX: aggiorna i controller quando cambiano i dati
+  // (es. navigazione tra round del circuito)
+  @override
+  void didUpdateWidget(_SetRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.set != widget.set) {
+      _currentReps =
+          widget.set.lastReps ?? widget.set.reps;
+
+      final newWeight = widget.set.weight > 0
+          ? (widget.set.weight % 1 == 0
+              ? widget.set.weight.toInt().toString()
+              : widget.set.weight.toString())
+          : '';
+
+      if (_weightCtrl.text != newWeight) {
+        _weightCtrl.text = newWeight;
+      }
+
+      final newReps = _currentReps.toString();
+      if (_repsCtrl.text != newReps) {
+        _repsCtrl.text = newReps;
+      }
+    }
   }
 
   @override
@@ -1301,7 +1332,6 @@ class _SetRowState extends State<_SetRow> {
                 )),
           ),
           const SizedBox(width: 4),
-          // Campo peso
           Expanded(
             flex: 3,
             child: TextField(
@@ -1331,7 +1361,6 @@ class _SetRowState extends State<_SetRow> {
             ),
           ),
           const SizedBox(width: 4),
-          // Reps con +/-
           Expanded(
             flex: 4,
             child: Container(
@@ -1408,16 +1437,14 @@ class _SetRowState extends State<_SetRow> {
             child: IconButton(
               padding: EdgeInsets.zero,
               onPressed: () {
-                if (_weightCtrl.text.isEmpty) {
-                  final weight = double.tryParse(
-                          _weightCtrl.text) ??
-                      widget.set.lastWeight ??
-                      widget.set.weight;
-                  final reps =
-                      int.tryParse(_repsCtrl.text) ??
-                          _currentReps;
-                  widget.onUpdate(weight, reps);
-                }
+                final weight =
+                    double.tryParse(_weightCtrl.text) ??
+                        widget.set.lastWeight ??
+                        widget.set.weight;
+                final reps =
+                    int.tryParse(_repsCtrl.text) ??
+                        _currentReps;
+                widget.onUpdate(weight, reps);
                 widget.onToggle();
               },
               icon: Icon(
@@ -1436,6 +1463,7 @@ class _SetRowState extends State<_SetRow> {
     );
   }
 }
+
 
 class _RepsBtn extends StatelessWidget {
   final IconData icon;

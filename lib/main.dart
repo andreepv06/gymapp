@@ -233,6 +233,12 @@ class _AppEntryState extends State<AppEntry> {
 
   Future<void> _checkAuth() async {
     await context.read<AuthProvider>().checkLogin();
+    // Tenta ripristino sessione dopo login
+    if (context.read<AuthProvider>().isLoggedIn) {
+      await context
+          .read<SessionProvider>()
+          .tryRestoreSession();
+    }
     setState(() => _checked = true);
   }
 
@@ -580,3 +586,4 @@ class _UnselectedItem extends StatelessWidget {
     );
   }
 }
+
