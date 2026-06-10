@@ -2,17 +2,21 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/hive_models.dart';
 
 class HiveDatabase {
-  static final HiveDatabase instance = HiveDatabase._internal();
+  static final HiveDatabase instance =
+      HiveDatabase._internal();
   HiveDatabase._internal();
 
   String _userId = '';
 
   String get _exercises => '${_userId}_exercises';
   String get _workouts => '${_userId}_workouts';
-  String get _workoutExercises => '${_userId}_workout_exercises';
+  String get _workoutExercises =>
+      '${_userId}_workout_exercises';
   String get _sessions => '${_userId}_sessions';
   String get _sessionSets => '${_userId}_session_sets';
-  String get _exerciseNotes => '${_userId}_exercise_notes';
+  String get _exerciseNotes =>
+      '${_userId}_exercise_notes';
+  String get _circuits => '${_userId}_circuits';
 
   Future<void> init() async {
     await Hive.initFlutter();
@@ -44,27 +48,19 @@ class HiveDatabase {
         .trim()
         .replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
 
-    // Se stesso utente e box già aperte, niente da fare
     if (newId == _userId && _currentBoxesOpen()) {
       return;
     }
 
-    // Chiude TUTTE le box aperte da Hive
-    // (non solo quelle dell'utente corrente)
     await _closeAllOpenBoxes();
-
     _userId = newId;
-
-    // Apre le box del nuovo utente
     await _openCurrentBoxes();
 
-    // Prima volta per questo utente: inserisce esercizi default
     if (_exBox.isEmpty) {
       await _insertDefaultExercises();
     }
   }
 
-  // Controlla se le box dell'utente CORRENTE sono aperte
   bool _currentBoxesOpen() {
     if (_userId.isEmpty) return false;
     return Hive.isBoxOpen(_exercises) &&
@@ -72,17 +68,12 @@ class HiveDatabase {
         Hive.isBoxOpen(_workoutExercises) &&
         Hive.isBoxOpen(_sessions) &&
         Hive.isBoxOpen(_sessionSets) &&
-        Hive.isBoxOpen(_exerciseNotes);
+        Hive.isBoxOpen(_exerciseNotes) &&
+        Hive.isBoxOpen(_circuits);
   }
 
-  // FIX: chiude TUTTE le box aperte — non solo quelle
-  // dell'utente corrente. Questo evita il conflitto quando
-  // si passa da un utente all'altro.
   Future<void> _closeAllOpenBoxes() async {
-    // Hive.close() chiude tutte le box aperte
     await Hive.close();
-    // Dopo Hive.close() gli adapter vengono deregistrati,
-    // quindi li riregistriamo
     if (!Hive.isAdapterRegistered(0)) {
       Hive.registerAdapter(HiveExerciseAdapter());
     }
@@ -101,13 +92,17 @@ class HiveDatabase {
     if (!Hive.isAdapterRegistered(5)) {
       Hive.registerAdapter(HiveExerciseNoteAdapter());
     }
+    if (!Hive.isAdapterRegistered(6)) {
+      Hive.registerAdapter(HiveCircuitAdapter());
+    }
   }
 
   Future<void> _openCurrentBoxes() async {
     if (_userId.isEmpty) return;
     await Hive.openBox<HiveExercise>(_exercises);
     await Hive.openBox<HiveWorkout>(_workouts);
-    await Hive.openBox<HiveWorkoutExercise>(_workoutExercises);
+    await Hive.openBox<HiveWorkoutExercise>(
+        _workoutExercises);
     await Hive.openBox<HiveSession>(_sessions);
     await Hive.openBox<HiveSessionSet>(_sessionSets);
     await Hive.openBox<HiveExerciseNote>(_exerciseNotes);
@@ -126,10 +121,9 @@ class HiveDatabase {
       Hive.box<HiveSessionSet>(_sessionSets);
   Box<HiveExerciseNote> get _enBox =>
       Hive.box<HiveExerciseNote>(_exerciseNotes);
-
-  String get _circuits => '${_userId}_circuits';
   Box<HiveCircuit> get _ciBox =>
-    Hive.box<HiveCircuit>(_circuits);
+      Hive.box<HiveCircuit>(_circuits);
+
   // ── EXERCISES ──
 
   List<HiveExercise> getExercises() {
@@ -159,7 +153,8 @@ class HiveDatabase {
 
   List<HiveWorkout> getWorkouts() {
     final list = _woBox.values.toList();
-    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    list.sort(
+        (a, b) => b.createdAt.compareTo(a.createdAt));
     return list;
   }
 
@@ -167,7 +162,8 @@ class HiveDatabase {
     return await _woBox.add(workout);
   }
 
-  Future<void> updateWorkout(dynamic key, String name) async {
+  Future<void> updateWorkout(
+      dynamic key, String name) async {
     final w = _woBox.get(key);
     if (w != null) {
       w.name = name;
@@ -181,6 +177,11 @@ class HiveDatabase {
         .where((k) => _weBox.get(k)?.workoutKey == key)
         .toList();
     await _weBox.deleteAll(toDelete);
+    // Elimina anche i circuiti associati
+    final circuitsToDelete = _ciBox.keys
+        .where((k) => _ciBox.get(k)?.workoutKey == key)
+        .toList();
+    await _ciBox.deleteAll(circuitsToDelete);
   }
 
   // ── WORKOUT EXERCISES ──
@@ -190,16 +191,8 @@ class HiveDatabase {
     final list = _weBox.values
         .where((we) => we.workoutKey == workoutKey)
         .toList();
-    list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    for (final we in list) {
-      if (we.notes == null) {
-        try {
-          final ex = _exBox.values
-              .firstWhere((e) => e.key == we.exerciseKey);
-          we.notes = ex.notes;
-        } catch (_) {}
-      }
-    }
+    list.sort(
+        (a, b) => a.sortOrder.compareTo(b.sortOrder));
     return list;
   }
 
@@ -225,13 +218,49 @@ class HiveDatabase {
     }
   }
 
+  // ── CIRCUITS ──
+
+  List<HiveCircuit> getCircuits(dynamic workoutKey) {
+    final list = _ciBox.values
+        .where((c) => c.workoutKey == workoutKey)
+        .toList();
+    list.sort(
+        (a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return list;
+  }
+
+  Future<dynamic> addCircuit(HiveCircuit circuit) async {
+    return await _ciBox.add(circuit);
+  }
+
+  Future<void> updateCircuit(
+      dynamic key, String name, int rounds) async {
+    final c = _ciBox.get(key);
+    if (c != null) {
+      c.name = name;
+      c.rounds = rounds;
+      await c.save();
+    }
+  }
+
+  Future<void> deleteCircuit(dynamic key) async {
+    await _ciBox.delete(key);
+    // Elimina anche gli esercizi del circuito
+    final tag = '__circuit_$key';
+    final toDelete = _weBox.keys
+        .where((k) => _weBox.get(k)?.notes == tag)
+        .toList();
+    await _weBox.deleteAll(toDelete);
+  }
+
   // ── SESSIONS ──
 
   Future<int> createSession(
       dynamic workoutKey, String workoutName) async {
     final session = HiveSession(
-      workoutKey:
-          workoutKey is int ? workoutKey : workoutKey as int,
+      workoutKey: workoutKey is int
+          ? workoutKey
+          : workoutKey as int,
       workoutName: workoutName,
       date: DateTime.now().toIso8601String(),
     );
@@ -241,7 +270,8 @@ class HiveDatabase {
   Future<void> deleteSession(dynamic sessionKey) async {
     await _seBox.delete(sessionKey);
     final keysToDelete = _ssBox.keys
-        .where((k) => _ssBox.get(k)?.sessionKey == sessionKey)
+        .where(
+            (k) => _ssBox.get(k)?.sessionKey == sessionKey)
         .toList();
     await _ssBox.deleteAll(keysToDelete);
   }
@@ -265,12 +295,14 @@ class HiveDatabase {
     return list;
   }
 
-  List<HiveSessionSet> getSessionSets(dynamic sessionKey) {
+  List<HiveSessionSet> getSessionSets(
+      dynamic sessionKey) {
     return _ssBox.values
         .where((s) => s.sessionKey == sessionKey)
         .toList()
       ..sort((a, b) {
-        final ex = a.exerciseKey.compareTo(b.exerciseKey);
+        final ex =
+            a.exerciseKey.compareTo(b.exerciseKey);
         return ex != 0
             ? ex
             : a.setNumber.compareTo(b.setNumber);
@@ -289,7 +321,8 @@ class HiveDatabase {
     return allSets
         .where((s) => s.sessionKey == lastSessionKey)
         .toList()
-      ..sort((a, b) => a.setNumber.compareTo(b.setNumber));
+      ..sort((a, b) =>
+          a.setNumber.compareTo(b.setNumber));
   }
 
   List<HiveSessionSet> getExerciseHistory(
@@ -297,8 +330,8 @@ class HiveDatabase {
     return _ssBox.values
         .where((s) => s.exerciseKey == exerciseKey)
         .toList()
-      ..sort(
-          (a, b) => b.sessionKey.compareTo(a.sessionKey));
+      ..sort((a, b) =>
+          b.sessionKey.compareTo(a.sessionKey));
   }
 
   Future<void> deleteAllSessions() async {
@@ -312,8 +345,8 @@ class HiveDatabase {
       dynamic exerciseKey, String note) async {
     HiveExerciseNote? existing;
     try {
-      existing = _enBox.values
-          .firstWhere((n) => n.exerciseKey == exerciseKey);
+      existing = _enBox.values.firstWhere(
+          (n) => n.exerciseKey == exerciseKey);
     } catch (_) {}
 
     if (existing == null) {
@@ -326,7 +359,8 @@ class HiveDatabase {
       ));
     } else {
       existing.note = note;
-      existing.updatedAt = DateTime.now().toIso8601String();
+      existing.updatedAt =
+          DateTime.now().toIso8601String();
       await existing.save();
     }
   }
@@ -334,8 +368,8 @@ class HiveDatabase {
   Future<void> deleteExerciseNote(
       dynamic exerciseKey) async {
     final keys = _enBox.keys
-        .where(
-            (k) => _enBox.get(k)?.exerciseKey == exerciseKey)
+        .where((k) =>
+            _enBox.get(k)?.exerciseKey == exerciseKey)
         .toList();
     await _enBox.deleteAll(keys);
   }
@@ -343,14 +377,16 @@ class HiveDatabase {
   String? getExerciseNote(dynamic exerciseKey) {
     try {
       return _enBox.values
-          .firstWhere((n) => n.exerciseKey == exerciseKey)
+          .firstWhere(
+              (n) => n.exerciseKey == exerciseKey)
           .note;
     } catch (_) {
       return null;
     }
   }
 
-  Map<int, String> getExerciseNotes(List<dynamic> keys) {
+  Map<int, String> getExerciseNotes(
+      List<dynamic> keys) {
     final result = <int, String>{};
     for (final note in _enBox.values) {
       if (keys.contains(note.exerciseKey)) {
@@ -364,149 +400,332 @@ class HiveDatabase {
     await _enBox.clear();
   }
 
-  // ── CIRCUITS ──
-
-  List<HiveCircuit> getCircuits(dynamic workoutKey) {
-    final list = _ciBox.values
-        .where((c) => c.workoutKey == workoutKey)
-        .toList();
-    list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    return list;
-  }
-  
-  Future<dynamic> addCircuit(HiveCircuit circuit) async {
-    return await _ciBox.add(circuit);
-  }
-  
-  Future<void> updateCircuit(
-      dynamic key, String name, int rounds) async {
-    final c = _ciBox.get(key);
-    if (c != null) {
-      c.name = name;
-      c.rounds = rounds;
-      await c.save();
-    }
-  }
-  
-  Future<void> deleteCircuit(dynamic key) async {
-    await _ciBox.delete(key);
-  }
   // ── DEFAULT EXERCISES ──
 
   Future<void> _insertDefaultExercises() async {
     final defaults = [
-      HiveExercise(name: 'Chest press', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Pectoral machine', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Croci ai cavi bassi (panca piana)', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Croci ai cavi bassi (panca inclinata)', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Croci ai cavi', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Panca inclinata con bilanciere', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Distensioni panca piana con manubri', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Distensioni panca inclinata con manubri', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Distensioni panca piana multipower', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Distensioni panca inclinata multipower', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Panca piana', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Panca inclinata', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Panca declinata', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Pullover con manubrio', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Push-up', muscleGroup: 'Petto'),
-      HiveExercise(name: 'Lento avanti multipower', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Lento dietro multipower', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Lento manubri', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Lento manubri con rotazione', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Alzate laterali', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Alzate frontali', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Alzate laterali busto 90°', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Trazioni al mento con bilanciere', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Trazioni al mento multipower', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Cavi incrociati alti', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Cavi incrociati bassi', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Rotatori con elastico', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Military press', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Face pull', muscleGroup: 'Spalle'),
-      HiveExercise(name: 'Lat machine avanti', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Lat machine inversa', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Lat machine dietro', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Low row', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Rematore 1 manubrio a 90°', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Rematore 2 manubri', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Rematore con bilanciere', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Pulley al cavo basso', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Pulley al cavo alto', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Stacco da terra', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Vertical traction', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Pull down', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Trazioni', muscleGroup: 'Schiena'),
-      HiveExercise(name: 'Curl manubri alternati su panca', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl manubri alternati panca inclinata', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl manubri alternati in piedi', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl presa inversa manubri su panca', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl presa inversa manubri panca inclinata', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl presa inversa manubri in piedi', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl bilanciere', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl bilanciere presa inversa', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Panca scott', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl in concentrazione', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl con ercolina', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl ercolina presa inversa', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl ai cavi alti', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl al cavo basso', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Curl al cavo basso presa inversa', muscleGroup: 'Bicipiti'),
-      HiveExercise(name: 'Tricipiti con ercolina', muscleGroup: 'Tricipiti'),
-      HiveExercise(name: 'Tricipiti con manubrio su panca', muscleGroup: 'Tricipiti'),
-      HiveExercise(name: 'French press', muscleGroup: 'Tricipiti'),
-      HiveExercise(name: 'Tricipiti con appoggio palmare su panca', muscleGroup: 'Tricipiti'),
-      HiveExercise(name: 'Tricipiti al cavo alto', muscleGroup: 'Tricipiti'),
-      HiveExercise(name: 'Tricipiti con manubrio busto a 90°', muscleGroup: 'Tricipiti'),
-      HiveExercise(name: 'Piegamenti mani unite', muscleGroup: 'Tricipiti'),
-      HiveExercise(name: 'Dip alle parallele', muscleGroup: 'Tricipiti'),
-      HiveExercise(name: 'Tricep pushdown', muscleGroup: 'Tricipiti'),
-      HiveExercise(name: 'Panca iperextension', muscleGroup: 'Lombari'),
-      HiveExercise(name: 'Stacchi gambe semitese', muscleGroup: 'Lombari'),
-      HiveExercise(name: 'Leg press', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Leg extension', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Leg curl', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Glutes machine', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Adductor machine', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Abductor machine', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Squat a corpo libero', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Squat con bilanciere', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Squat al multipower', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Squat sumo', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Affondi frontali', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Affondi frontali con manubri', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Affondi frontali con bilanciere', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Affondi laterali', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Polpacci alla pressa', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Polpacci su rialzo', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Slanci posteriori ai cavi', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Slanci posteriori a corpo libero', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Adduttori ai cavi', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Abduttori ai cavi', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Slanci laterali a corpo libero', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Slanci posteriori in quadrupedia', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Elevazioni laterali in quadrupedia', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Ponte per glutei', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Calf raises', muscleGroup: 'Gambe'),
-      HiveExercise(name: 'Crunch avanti', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Crunch avanti su palla', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Addominali su palla', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Crunch inversi', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Addominali su panca piana', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Addominali su panca inclinata', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Addominali in isometria', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Retto addominale con pallina', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Retto addominale con pallina + isometria', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Obliqui con pallina', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Obliqui su panca iperextension', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Plank', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Crunch', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Russian twist', muscleGroup: 'Addominali'),
-      HiveExercise(name: 'Leg raise', muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Chest press',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Pectoral machine',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Croci ai cavi bassi (panca piana)',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name:
+              'Croci ai cavi bassi (panca inclinata)',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Croci ai cavi',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Panca inclinata con bilanciere',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Distensioni panca piana con manubri',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name:
+              'Distensioni panca inclinata con manubri',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Distensioni panca piana multipower',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name:
+              'Distensioni panca inclinata multipower',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Panca piana', muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Panca inclinata',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Panca declinata',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Pullover con manubrio',
+          muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Push-up', muscleGroup: 'Petto'),
+      HiveExercise(
+          name: 'Lento avanti multipower',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Lento dietro multipower',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Lento manubri',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Lento manubri con rotazione',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Alzate laterali',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Alzate frontali',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Alzate laterali busto 90°',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Trazioni al mento con bilanciere',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Trazioni al mento multipower',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Cavi incrociati alti',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Cavi incrociati bassi',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Rotatori con elastico',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Military press',
+          muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Face pull', muscleGroup: 'Spalle'),
+      HiveExercise(
+          name: 'Lat machine avanti',
+          muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Lat machine inversa',
+          muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Lat machine dietro',
+          muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Low row', muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Rematore 1 manubrio a 90°',
+          muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Rematore 2 manubri',
+          muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Rematore con bilanciere',
+          muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Pulley al cavo basso',
+          muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Pulley al cavo alto',
+          muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Stacco da terra',
+          muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Vertical traction',
+          muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Pull down', muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Trazioni', muscleGroup: 'Schiena'),
+      HiveExercise(
+          name: 'Curl manubri alternati su panca',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name:
+              'Curl manubri alternati panca inclinata',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Curl manubri alternati in piedi',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Curl presa inversa manubri su panca',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name:
+              'Curl presa inversa manubri panca inclinata',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Curl presa inversa manubri in piedi',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Curl bilanciere',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Curl bilanciere presa inversa',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Panca scott',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Curl in concentrazione',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Curl con ercolina',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Curl ercolina presa inversa',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Curl ai cavi alti',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Curl al cavo basso',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Curl al cavo basso presa inversa',
+          muscleGroup: 'Bicipiti'),
+      HiveExercise(
+          name: 'Tricipiti con ercolina',
+          muscleGroup: 'Tricipiti'),
+      HiveExercise(
+          name: 'Tricipiti con manubrio su panca',
+          muscleGroup: 'Tricipiti'),
+      HiveExercise(
+          name: 'French press',
+          muscleGroup: 'Tricipiti'),
+      HiveExercise(
+          name:
+              'Tricipiti con appoggio palmare su panca',
+          muscleGroup: 'Tricipiti'),
+      HiveExercise(
+          name: 'Tricipiti al cavo alto',
+          muscleGroup: 'Tricipiti'),
+      HiveExercise(
+          name: 'Tricipiti con manubrio busto a 90°',
+          muscleGroup: 'Tricipiti'),
+      HiveExercise(
+          name: 'Piegamenti mani unite',
+          muscleGroup: 'Tricipiti'),
+      HiveExercise(
+          name: 'Dip alle parallele',
+          muscleGroup: 'Tricipiti'),
+      HiveExercise(
+          name: 'Tricep pushdown',
+          muscleGroup: 'Tricipiti'),
+      HiveExercise(
+          name: 'Panca iperextension',
+          muscleGroup: 'Lombari'),
+      HiveExercise(
+          name: 'Stacchi gambe semitese',
+          muscleGroup: 'Lombari'),
+      HiveExercise(
+          name: 'Leg press', muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Leg extension',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Leg curl', muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Glutes machine',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Adductor machine',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Abductor machine',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Squat a corpo libero',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Squat con bilanciere',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Squat al multipower',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Squat sumo', muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Affondi frontali',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Affondi frontali con manubri',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Affondi frontali con bilanciere',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Affondi laterali',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Polpacci alla pressa',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Polpacci su rialzo',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Slanci posteriori ai cavi',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Slanci posteriori a corpo libero',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Adduttori ai cavi',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Abduttori ai cavi',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Slanci laterali a corpo libero',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Slanci posteriori in quadrupedia',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Elevazioni laterali in quadrupedia',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Ponte per glutei',
+          muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Calf raises', muscleGroup: 'Gambe'),
+      HiveExercise(
+          name: 'Crunch avanti',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Crunch avanti su palla',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Addominali su palla',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Crunch inversi',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Addominali su panca piana',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Addominali su panca inclinata',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Addominali in isometria',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Retto addominale con pallina',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name:
+              'Retto addominale con pallina + isometria',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Obliqui con pallina',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Obliqui su panca iperextension',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Plank', muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Crunch', muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Russian twist',
+          muscleGroup: 'Addominali'),
+      HiveExercise(
+          name: 'Leg raise',
+          muscleGroup: 'Addominali'),
     ];
     for (final ex in defaults) {
       await _exBox.add(ex);
     }
   }
 }
-

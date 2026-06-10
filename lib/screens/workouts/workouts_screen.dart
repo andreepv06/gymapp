@@ -12,10 +12,12 @@ class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
 
   @override
-  State<WorkoutsScreen> createState() => _WorkoutsScreenState();
+  State<WorkoutsScreen> createState() =>
+      _WorkoutsScreenState();
 }
 
-class _WorkoutsScreenState extends State<WorkoutsScreen> {
+class _WorkoutsScreenState
+    extends State<WorkoutsScreen> {
   @override
   void initState() {
     super.initState();
@@ -35,7 +37,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         title: const Text('Le mie schede'),
       ),
       body: provider.workouts.isEmpty
-          ? _EmptyState(onAdd: () => _showAddWorkoutSheet(context))
+          ? _EmptyState(
+              onAdd: () => _showAddWorkoutSheet(context))
           : _WorkoutList(
               workouts: provider.workouts,
               onAdd: () => _showAddWorkoutSheet(context),
@@ -50,19 +53,23 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       child: StatefulBuilder(
         builder: (ctx, setModalState) => Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            bottom:
+                MediaQuery.of(ctx).viewInsets.bottom,
             left: 24,
             right: 24,
             top: 20,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               const GlassSheetHandle(),
               const SizedBox(height: 20),
               Text('Nuova scheda',
-                  style: Theme.of(context).textTheme.titleLarge),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge),
               const SizedBox(height: 4),
               Text(
                 'Dai un nome alla tua scheda',
@@ -70,21 +77,26 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     .textTheme
                     .bodySmall
                     ?.copyWith(
-                        color: Theme.of(context).colorScheme.outline),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline),
               ),
               const SizedBox(height: 20),
               TextField(
                 controller: controller,
                 autofocus: false,
-                textCapitalization: TextCapitalization.sentences,
+                textCapitalization:
+                    TextCapitalization.sentences,
                 decoration: const InputDecoration(
                   labelText: 'Nome scheda',
                   hintText: 'Es. Push A, Gambe...',
-                  prefixIcon: Icon(Icons.edit_outlined),
+                  prefixIcon:
+                      Icon(Icons.edit_outlined),
                 ),
                 onSubmitted: (_) {
                   Navigator.pop(ctx);
-                  _saveWorkout(context, controller.text);
+                  _saveWorkout(
+                      context, controller.text);
                 },
               ),
               const SizedBox(height: 20),
@@ -94,7 +106,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                 onCancel: () => Navigator.pop(ctx),
                 onConfirm: () {
                   Navigator.pop(ctx);
-                  _saveWorkout(context, controller.text);
+                  _saveWorkout(
+                      context, controller.text);
                 },
               ),
               const SizedBox(height: 20),
@@ -105,7 +118,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
   }
 
-  void _saveWorkout(BuildContext context, String name) async {
+  void _saveWorkout(
+      BuildContext context, String name) async {
     if (name.trim().isEmpty) return;
     final provider = context.read<WorkoutProvider>();
     final id = await provider.addWorkout(name.trim());
@@ -114,11 +128,14 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => WorkoutDetailScreen(
-              workoutId: id, workoutName: name.trim()),
+              workoutId: id,
+              workoutName: name.trim()),
         ),
       ).then((_) {
         if (context.mounted) {
-          context.read<WorkoutProvider>().loadWorkouts();
+          context
+              .read<WorkoutProvider>()
+              .loadWorkouts();
         }
       });
     }
@@ -129,24 +146,30 @@ class _WorkoutList extends StatelessWidget {
   final List<HiveWorkout> workouts;
   final VoidCallback onAdd;
 
-  const _WorkoutList({required this.workouts, required this.onAdd});
+  const _WorkoutList(
+      {required this.workouts, required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final bottomPadding =
+        MediaQuery.of(context).padding.bottom;
 
     return Column(
       children: [
         Expanded(
           child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            padding: const EdgeInsets.fromLTRB(
+                16, 16, 16, 12),
             itemCount: workouts.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (_, i) => _WorkoutCard(workout: workouts[i]),
+            separatorBuilder: (_, __) =>
+                const SizedBox(height: 8),
+            itemBuilder: (_, i) =>
+                _WorkoutCard(workout: workouts[i]),
           ),
         ),
         Padding(
-          padding: EdgeInsets.fromLTRB(32, 8, 32, bottomPadding + 100),
+          padding: EdgeInsets.fromLTRB(
+              32, 8, 32, bottomPadding + 100),
           child: GlassButton(
             onTap: onAdd,
             icon: Icons.add_rounded,
@@ -165,7 +188,8 @@ class _WorkoutCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -185,8 +209,8 @@ class _WorkoutCard extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color:
-                    Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                color: Colors.black
+                    .withOpacity(isDark ? 0.2 : 0.05),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -196,45 +220,36 @@ class _WorkoutCard extends StatelessWidget {
             color: Colors.transparent,
             child: ListTile(
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 4),
               leading: Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
                   color: cs.primary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius:
+                      BorderRadius.circular(12),
                   border: Border.all(
-                      color: cs.primary.withOpacity(0.3), width: 1),
+                    color: cs.primary.withOpacity(0.3),
+                    width: 1,
+                  ),
                 ),
-                child: Icon(Icons.list_alt, color: cs.primary, size: 22),
+                child: Icon(Icons.list_alt,
+                    color: cs.primary, size: 22),
               ),
               title: Text(workout.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text(_formatDate(workout.createdAt),
-                  style: TextStyle(fontSize: 12, color: cs.outline)),
-              trailing: PopupMenuButton<String>(
-                onSelected: (value) => _handleMenu(context, value),
-                icon: Icon(Icons.more_vert, color: cs.outline),
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'rename',
-                    child: Row(children: [
-                      Icon(Icons.edit_outlined, size: 18),
-                      SizedBox(width: 8),
-                      Text('Rinomina'),
-                    ]),
-                  ),
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: Row(children: [
-                      Icon(Icons.delete_outline,
-                          size: 18, color: cs.error),
-                      const SizedBox(width: 8),
-                      Text('Elimina',
-                          style: TextStyle(color: cs.error)),
-                    ]),
-                  ),
-                ],
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600)),
+              subtitle: Text(
+                  _formatDate(workout.createdAt),
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: cs.outline)),
+              trailing: IconButton(
+                icon: Icon(Icons.more_vert,
+                    color: cs.outline),
+                onPressed: () =>
+                    _showOptionsSheet(context),
               ),
               onTap: () => Navigator.push(
                 context,
@@ -246,7 +261,9 @@ class _WorkoutCard extends StatelessWidget {
                 ),
               ).then((_) {
                 if (context.mounted) {
-                  context.read<WorkoutProvider>().loadWorkouts();
+                  context
+                      .read<WorkoutProvider>()
+                      .loadWorkouts();
                 }
               }),
             ),
@@ -262,97 +279,240 @@ class _WorkoutCard extends StatelessWidget {
     return '${dt.day}/${dt.month}/${dt.year}';
   }
 
-  void _handleMenu(BuildContext context, String value) {
-    if (value == 'delete') {
-      showGlassDialog(
-        context: context,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.delete_outline,
-                      color: Colors.red, size: 22),
-                  const SizedBox(width: 10),
-                  Text('Elimina scheda',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text('Vuoi eliminare "${workout.name}"?',
-                  style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 24),
-              GlassDialogActions(
-                cancelLabel: 'Annulla',
-                confirmLabel: 'Elimina',
-                confirmColor: Colors.red,
-                onCancel: () => Navigator.pop(context),
-                onConfirm: () {
+  /// Menu opzioni in stile Glass invece del PopupMenuButton
+  void _showOptionsSheet(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    showGlassBottomSheet(
+      context: context,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+            24,
+            20,
+            24,
+            MediaQuery.of(context).padding.bottom + 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const GlassSheetHandle(),
+            const SizedBox(height: 16),
+            // Nome scheda come titolo
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: cs.primary.withOpacity(0.15),
+                    borderRadius:
+                        BorderRadius.circular(10),
+                    border: Border.all(
+                        color:
+                            cs.primary.withOpacity(0.3)),
+                  ),
+                  child: Icon(Icons.list_alt,
+                      color: cs.primary, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    workout.name,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(
+                            fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            // Opzione Rinomina
+            _OptionTile(
+              icon: Icons.edit_outlined,
+              label: 'Rinomina scheda',
+              color: cs.primary,
+              onTap: () {
+                Navigator.pop(context);
+                _showRenameSheet(context);
+              },
+            ),
+            const SizedBox(height: 10),
+            // Opzione Elimina
+            _OptionTile(
+              icon: Icons.delete_outline,
+              label: 'Elimina scheda',
+              color: Colors.red,
+              onTap: () {
+                Navigator.pop(context);
+                _confirmDelete(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRenameSheet(BuildContext context) {
+    final controller =
+        TextEditingController(text: workout.name);
+    showGlassBottomSheet(
+      context: context,
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 24,
+          right: 24,
+          top: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const GlassSheetHandle(),
+            const SizedBox(height: 20),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Rinomina scheda',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: false,
+              textCapitalization:
+                  TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                  labelText: 'Nome scheda'),
+            ),
+            const SizedBox(height: 16),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Salva',
+              onCancel: () => Navigator.pop(context),
+              onConfirm: () {
+                if (controller.text.trim().isNotEmpty) {
                   context
                       .read<WorkoutProvider>()
-                      .deleteWorkout(workout.key);
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          ),
+                      .renameWorkout(workout.key,
+                          controller.text.trim());
+                }
+                Navigator.pop(context);
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
         ),
-      );
-    } else if (value == 'rename') {
-      final controller = TextEditingController(text: workout.name);
-      showGlassBottomSheet(
-        context: context,
-        child: Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 24,
-            right: 24,
-            top: 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const GlassSheetHandle(),
-              const SizedBox(height: 20),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Rinomina scheda',
-                    style:
-                        Theme.of(context).textTheme.titleLarge),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                autofocus: false,
-                textCapitalization: TextCapitalization.sentences,
-                decoration:
-                    const InputDecoration(labelText: 'Nome scheda'),
-              ),
-              const SizedBox(height: 16),
-              GlassDialogActions(
-                cancelLabel: 'Annulla',
-                confirmLabel: 'Salva',
-                onCancel: () => Navigator.pop(context),
-                onConfirm: () {
-                  if (controller.text.trim().isNotEmpty) {
-                    context.read<WorkoutProvider>().renameWorkout(
-                        workout.key, controller.text.trim());
-                  }
-                  Navigator.pop(context);
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context) {
+    showGlassDialog(
+      context: context,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.delete_outline,
+                    color: Colors.red, size: 22),
+                SizedBox(width: 10),
+                Text('Elimina scheda',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+                'Vuoi eliminare "${workout.name}"? Questa azione è permanente.'),
+            const SizedBox(height: 24),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Elimina',
+              confirmColor: Colors.red,
+              onCancel: () => Navigator.pop(context),
+              onConfirm: () {
+                context
+                    .read<WorkoutProvider>()
+                    .deleteWorkout(workout.key);
+                Navigator.pop(context);
+              },
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
+  }
+}
+
+/// Tile opzione nel bottom sheet Glass
+class _OptionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _OptionTile({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: color
+              .withOpacity(isDark ? 0.12 : 0.07),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: color.withOpacity(0.25), width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon,
+                  color: color, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                color: color,
+              ),
+            ),
+            const Spacer(),
+            Icon(Icons.chevron_right,
+                color: color.withOpacity(0.5),
+                size: 20),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -377,7 +537,8 @@ class _EmptyState extends StatelessWidget {
                 color: cs.primary.withOpacity(0.12),
                 shape: BoxShape.circle,
                 border: Border.all(
-                    color: cs.primary.withOpacity(0.3), width: 1.5),
+                    color: cs.primary.withOpacity(0.3),
+                    width: 1.5),
               ),
               child: Icon(Icons.list_alt_outlined,
                   size: 40, color: cs.primary),
@@ -388,7 +549,8 @@ class _EmptyState extends StatelessWidget {
               style: Theme.of(context)
                   .textTheme
                   .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w700),
+                  ?.copyWith(
+                      fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(

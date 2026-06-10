@@ -5,15 +5,16 @@ import '../../models/hive_models.dart';
 import '../../providers/exercise_provider.dart';
 import 'session_detail_screen.dart';
 import 'exercise_progress_screen.dart';
+import '../../main.dart';
 import '../../widgets/glass_action_buttons.dart';
 import '../../widgets/glass_bottom_sheet.dart';
-import '../../main.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
   @override
-  State<HistoryScreen> createState() => _HistoryScreenState();
+  State<HistoryScreen> createState() =>
+      _HistoryScreenState();
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
@@ -32,14 +33,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final currentIndex = context.watch<NavigationNotifier>().currentIndex;
-    if (currentIndex == 3 && _lastIndex != 3) _loadData();
+    final currentIndex =
+        context.watch<NavigationNotifier>().currentIndex;
+    if (currentIndex == 3 && _lastIndex != 3)
+      _loadData();
     _lastIndex = currentIndex;
   }
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
-    final sessions = HiveDatabase.instance.getSessions();
+    final sessions =
+        HiveDatabase.instance.getSessions();
     final Map<String, List<HiveSession>> byDate = {};
     for (final s in sessions) {
       final dateStr = s.date.substring(0, 10);
@@ -52,23 +56,80 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
   }
 
+  Future<void> _confirmDeleteSession(
+      BuildContext context, HiveSession session) async {
+    final confirm = await showGlassDialog<bool>(
+      context: context,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.delete_outline,
+                    color: Colors.red, size: 22),
+                SizedBox(width: 10),
+                Text('Elimina sessione',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+                'Vuoi eliminare la sessione "${session.workoutName}"? Questa azione è permanente.'),
+            const SizedBox(height: 24),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Elimina',
+              confirmColor: Colors.red,
+              onCancel: () =>
+                  Navigator.pop(context, false),
+              onConfirm: () =>
+                  Navigator.pop(context, true),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirm == true) {
+      await HiveDatabase.instance
+          .deleteSession(session.key);
+      await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Sessione eliminata')),
+        );
+      }
+    }
+  }
+
   int _computeStreak() {
     if (_sessions.isEmpty) return 0;
     final now = DateTime.now();
-    final currentWeekStart = now.subtract(Duration(days: now.weekday - 1));
+    final currentWeekStart =
+        now.subtract(Duration(days: now.weekday - 1));
     int streak = 0;
-    DateTime weekStart = DateTime(
-        currentWeekStart.year, currentWeekStart.month, currentWeekStart.day);
+    DateTime weekStart = DateTime(currentWeekStart.year,
+        currentWeekStart.month, currentWeekStart.day);
     while (true) {
-      final weekEnd = weekStart.add(const Duration(days: 6));
+      final weekEnd =
+          weekStart.add(const Duration(days: 6));
       final hasSession = _sessions.any((s) {
         final date = DateTime.parse(s.date);
-        return date.isAfter(weekStart.subtract(const Duration(seconds: 1))) &&
-            date.isBefore(weekEnd.add(const Duration(days: 1)));
+        return date.isAfter(weekStart
+                .subtract(const Duration(seconds: 1))) &&
+            date.isBefore(
+                weekEnd.add(const Duration(days: 1)));
       });
       if (!hasSession) break;
       streak++;
-      weekStart = weekStart.subtract(const Duration(days: 7));
+      weekStart = weekStart
+          .subtract(const Duration(days: 7));
       if (streak > 200) break;
     }
     return streak;
@@ -76,9 +137,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   List<bool> _currentWeekDays() {
     final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
+    final weekStart =
+        now.subtract(Duration(days: now.weekday - 1));
     return List.generate(7, (i) {
-      final day = weekStart.add(Duration(days: i));
+      final day =
+          weekStart.add(Duration(days: i));
       final dateStr =
           '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
       return _sessionsByDate.containsKey(dateStr);
@@ -88,7 +151,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+          body: Center(
+              child: CircularProgressIndicator()));
     }
 
     final streak = _computeStreak();
@@ -104,9 +169,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => ChangeNotifierProvider.value(
-                  value: context.read<ExerciseProvider>(),
-                  child: const ExerciseProgressScreen(),
+                builder: (_) =>
+                    ChangeNotifierProvider.value(
+                  value:
+                      context.read<ExerciseProvider>(),
+                  child:
+                      const ExerciseProgressScreen(),
                 ),
               ),
             ),
@@ -116,44 +184,50 @@ class _HistoryScreenState extends State<HistoryScreen> {
       body: RefreshIndicator(
         onRefresh: _loadData,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+          padding: const EdgeInsets.fromLTRB(
+              16, 12, 16, 100),
           children: [
-            // ── Compact Stats Bar ──
             if (_sessions.isNotEmpty)
               _CompactStatsBar(
                 totalSessions: _sessions.length,
                 streak: streak,
                 weekDays: weekDays,
               ),
-            if (_sessions.isNotEmpty) const SizedBox(height: 14),
-
-            // ── Calendario ──
+            if (_sessions.isNotEmpty)
+              const SizedBox(height: 14),
             _CalendarCard(
               focusedMonth: _focusedMonth,
               sessionsByDate: _sessionsByDate,
               onMonthChanged: (month) =>
                   setState(() => _focusedMonth = month),
               onDayTapped: (dateStr, sessions) =>
-                  _showDayDetail(context, dateStr, sessions),
+                  _showDayDetail(
+                      context, dateStr, sessions),
             ),
             const SizedBox(height: 16),
-
             if (_sessions.isNotEmpty) ...[
               Text('Sessioni recenti',
-                  style: Theme.of(context).textTheme.titleMedium),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium),
               const SizedBox(height: 8),
-              ..._sessions.take(10).map((s) => _SessionTile(
+              ..._sessions.take(20).map((s) =>
+                  _SessionTile(
                     session: s,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => SessionDetailScreen(
+                        builder: (_) =>
+                            SessionDetailScreen(
                           sessionKey: s.key,
                           workoutName: s.workoutName,
                           date: s.date,
                         ),
                       ),
                     ),
+                    onDelete: () =>
+                        _confirmDeleteSession(
+                            context, s),
                   )),
             ] else
               Center(
@@ -163,18 +237,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     children: [
                       Icon(Icons.history,
                           size: 48,
-                          color: Theme.of(context).colorScheme.outline),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .outline),
                       const SizedBox(height: 12),
                       Text('Nessuna sessione ancora',
-                          style: Theme.of(context).textTheme.titleSmall),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall),
                       const SizedBox(height: 4),
-                      Text('Completa il tuo primo allenamento!',
+                      Text(
+                          'Completa il tuo primo allenamento!',
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
                               ?.copyWith(
-                                  color:
-                                      Theme.of(context).colorScheme.outline)),
+                                  color: Theme.of(
+                                          context)
+                                      .colorScheme
+                                      .outline)),
                     ],
                   ),
                 ),
@@ -185,8 +266,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  void _showDayDetail(
-      BuildContext context, String dateStr, List<HiveSession> sessions) {
+  void _showDayDetail(BuildContext context,
+      String dateStr, List<HiveSession> sessions) {
     if (sessions.isEmpty) return;
     showGlassDialog(
       context: context,
@@ -200,21 +281,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 style: Theme.of(context)
                     .textTheme
                     .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+                    ?.copyWith(
+                        fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             ...sessions.map((s) => ListTile(
                   leading: Icon(Icons.fitness_center,
-                      color: Theme.of(context).colorScheme.primary),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary),
                   title: Text(s.workoutName),
                   trailing: const Icon(
-                      Icons.arrow_forward_ios, size: 14),
+                      Icons.arrow_forward_ios,
+                      size: 14),
                   contentPadding: EdgeInsets.zero,
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => SessionDetailScreen(
+                        builder: (_) =>
+                            SessionDetailScreen(
                           sessionKey: s.key,
                           workoutName: s.workoutName,
                           date: s.date,
@@ -234,18 +320,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-
   String _formatDateLabel(String dateStr) {
     final dt = DateTime.parse(dateStr);
     const months = [
-      '', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-      'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+      '',
+      'Gennaio',
+      'Febbraio',
+      'Marzo',
+      'Aprile',
+      'Maggio',
+      'Giugno',
+      'Luglio',
+      'Agosto',
+      'Settembre',
+      'Ottobre',
+      'Novembre',
+      'Dicembre'
     ];
     return '${dt.day} ${months[dt.month]} ${dt.year}';
   }
 }
 
-// ── Compact Stats Bar — piccola, sopra il calendario ──
 class _CompactStatsBar extends StatelessWidget {
   final int totalSessions;
   final int streak;
@@ -260,19 +355,28 @@ class _CompactStatsBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    const dayLabels = ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
+    const dayLabels = [
+      'L',
+      'M',
+      'M',
+      'G',
+      'V',
+      'S',
+      'D'
+    ];
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+          horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: cs.surfaceContainer,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
-          // Totale allenamenti
           Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               Text(
                 '$totalSessions',
@@ -284,20 +388,23 @@ class _CompactStatsBar extends StatelessWidget {
                 ),
               ),
               Text('allenamenti',
-                  style: TextStyle(fontSize: 10, color: cs.outline)),
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: cs.outline)),
             ],
           ),
           const SizedBox(width: 12),
-
-          // Divider
-          Container(width: 1, height: 36, color: cs.outlineVariant),
+          Container(
+              width: 1,
+              height: 36,
+              color: cs.outlineVariant),
           const SizedBox(width: 12),
-
-          // Streak
-          Text('🔥', style: const TextStyle(fontSize: 18)),
+          const Text('🔥',
+              style: TextStyle(fontSize: 18)),
           const SizedBox(width: 4),
           Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               Text(
                 '$streak',
@@ -308,20 +415,25 @@ class _CompactStatsBar extends StatelessWidget {
                   height: 1,
                 ),
               ),
-              Text(streak == 1 ? 'settimana' : 'settimane',
-                  style: TextStyle(fontSize: 10, color: cs.outline)),
+              Text(
+                  streak == 1
+                      ? 'settimana'
+                      : 'settimane',
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: cs.outline)),
             ],
           ),
           const SizedBox(width: 12),
-
-          // Divider
-          Container(width: 1, height: 36, color: cs.outlineVariant),
+          Container(
+              width: 1,
+              height: 36,
+              color: cs.outlineVariant),
           const SizedBox(width: 12),
-
-          // Week dots — compatti
           Expanded(
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment:
+                  MainAxisAlignment.spaceAround,
               children: List.generate(7, (i) {
                 final done = weekDays[i];
                 return Column(
@@ -330,17 +442,22 @@ class _CompactStatsBar extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 8,
                             color: cs.outline,
-                            fontWeight: FontWeight.w600)),
+                            fontWeight:
+                                FontWeight.w600)),
                     const SizedBox(height: 3),
                     Container(
                       width: 16,
                       height: 16,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: done ? cs.primary : cs.outlineVariant,
+                        color: done
+                            ? cs.primary
+                            : cs.outlineVariant,
                       ),
                       child: done
-                          ? Icon(Icons.check, size: 10, color: cs.onPrimary)
+                          ? Icon(Icons.check,
+                              size: 10,
+                              color: cs.onPrimary)
                           : null,
                     ),
                   ],
@@ -358,7 +475,8 @@ class _CalendarCard extends StatelessWidget {
   final DateTime focusedMonth;
   final Map<String, List<HiveSession>> sessionsByDate;
   final void Function(DateTime) onMonthChanged;
-  final void Function(String, List<HiveSession>) onDayTapped;
+  final void Function(String, List<HiveSession>)
+      onDayTapped;
 
   const _CalendarCard({
     required this.focusedMonth,
@@ -369,13 +487,27 @@ class _CalendarCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final firstDay = DateTime(focusedMonth.year, focusedMonth.month, 1);
-    final daysInMonth =
-        DateTime(focusedMonth.year, focusedMonth.month + 1, 0).day;
-    final startOffset = (firstDay.weekday - 1) % 7;
+    final firstDay = DateTime(
+        focusedMonth.year, focusedMonth.month, 1);
+    final daysInMonth = DateTime(
+            focusedMonth.year, focusedMonth.month + 1, 0)
+        .day;
+    final startOffset =
+        (firstDay.weekday - 1) % 7;
     const months = [
-      '', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-      'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+      '',
+      'Gennaio',
+      'Febbraio',
+      'Marzo',
+      'Aprile',
+      'Maggio',
+      'Giugno',
+      'Luglio',
+      'Agosto',
+      'Settembre',
+      'Ottobre',
+      'Novembre',
+      'Dicembre'
     ];
 
     return Card(
@@ -385,44 +517,66 @@ class _CalendarCard extends StatelessWidget {
         child: Column(
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment:
+                  MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
                   icon: const Icon(Icons.chevron_left),
-                  onPressed: () => onMonthChanged(
-                      DateTime(focusedMonth.year, focusedMonth.month - 1)),
+                  onPressed: () => onMonthChanged(DateTime(
+                      focusedMonth.year,
+                      focusedMonth.month - 1)),
                 ),
                 Text(
                   '${months[focusedMonth.month]} ${focusedMonth.year}',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium,
                 ),
                 IconButton(
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: () => onMonthChanged(
-                      DateTime(focusedMonth.year, focusedMonth.month + 1)),
+                  icon:
+                      const Icon(Icons.chevron_right),
+                  onPressed: () => onMonthChanged(DateTime(
+                      focusedMonth.year,
+                      focusedMonth.month + 1)),
                 ),
               ],
             ),
             const SizedBox(height: 4),
             LayoutBuilder(
               builder: (context, constraints) {
-                final cellSize = constraints.maxWidth / 7;
-                final circleSize = (cellSize * 0.72).clamp(28.0, 52.0);
-                final fontSize = (circleSize * 0.38).clamp(10.0, 18.0);
+                final cellSize =
+                    constraints.maxWidth / 7;
+                final circleSize =
+                    (cellSize * 0.72).clamp(28.0, 52.0);
+                final fontSize =
+                    (circleSize * 0.38).clamp(10.0, 18.0);
 
                 return Column(
                   children: [
                     Row(
-                      children: ['L', 'M', 'M', 'G', 'V', 'S', 'D']
+                      children: [
+                        'L',
+                        'M',
+                        'M',
+                        'G',
+                        'V',
+                        'S',
+                        'D'
+                      ]
                           .map((d) => SizedBox(
                                 width: cellSize,
                                 height: cellSize * 0.45,
                                 child: Center(
                                   child: Text(d,
                                       style: TextStyle(
-                                        fontSize: fontSize * 0.85,
-                                        fontWeight: FontWeight.bold,
-                                        color: Theme.of(context)
+                                        fontSize:
+                                            fontSize *
+                                                0.85,
+                                        fontWeight:
+                                            FontWeight
+                                                .bold,
+                                        color: Theme.of(
+                                                context)
                                             .colorScheme
                                             .outline,
                                       )),
@@ -433,7 +587,8 @@ class _CalendarCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     GridView.builder(
                       shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
+                      physics:
+                          const NeverScrollableScrollPhysics(),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 7,
@@ -441,21 +596,31 @@ class _CalendarCard extends StatelessWidget {
                         mainAxisSpacing: 4,
                         crossAxisSpacing: 0,
                       ),
-                      itemCount: startOffset + daysInMonth,
+                      itemCount:
+                          startOffset + daysInMonth,
                       itemBuilder: (_, index) {
                         if (index < startOffset)
                           return const SizedBox.shrink();
-                        final day = index - startOffset + 1;
+                        final day =
+                            index - startOffset + 1;
                         final date = DateTime(
-                            focusedMonth.year, focusedMonth.month, day);
+                            focusedMonth.year,
+                            focusedMonth.month,
+                            day);
                         final dateStr =
                             '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-                        final sessions = sessionsByDate[dateStr] ?? [];
-                        final hasSession = sessions.isNotEmpty;
+                        final sessions =
+                            sessionsByDate[dateStr] ?? [];
+                        final hasSession =
+                            sessions.isNotEmpty;
                         final isToday =
-                            date.year == DateTime.now().year &&
-                                date.month == DateTime.now().month &&
-                                date.day == DateTime.now().day;
+                            date.year ==
+                                    DateTime.now().year &&
+                                date.month ==
+                                    DateTime.now()
+                                        .month &&
+                                date.day ==
+                                    DateTime.now().day;
 
                         return _DayCell(
                           day: day,
@@ -465,7 +630,8 @@ class _CalendarCard extends StatelessWidget {
                           circleSize: circleSize,
                           fontSize: fontSize,
                           onTap: hasSession
-                              ? () => onDayTapped(dateStr, sessions)
+                              ? () => onDayTapped(
+                                  dateStr, sessions)
                               : null,
                         );
                       },
@@ -510,7 +676,8 @@ class _DayCellState extends State<_DayCell> {
 
   void _showPreview(BuildContext context) {
     if (!widget.hasSession) return;
-    final box = context.findRenderObject() as RenderBox;
+    final box =
+        context.findRenderObject() as RenderBox;
     final offset = box.localToGlobal(Offset.zero);
     _overlayEntry = OverlayEntry(
       builder: (ctx) => Positioned(
@@ -520,34 +687,49 @@ class _DayCellState extends State<_DayCell> {
           elevation: 6,
           borderRadius: BorderRadius.circular(10),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            constraints: const BoxConstraints(maxWidth: 200),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 10),
+            constraints:
+                const BoxConstraints(maxWidth: 200),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
+              color: Theme.of(context)
+                  .colorScheme
+                  .surface,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .outlineVariant),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: widget.sessions
                   .map((s) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        padding:
+                            const EdgeInsets.symmetric(
+                                vertical: 3),
                         child: Row(
                           children: [
-                            Icon(Icons.fitness_center,
+                            Icon(
+                                Icons.fitness_center,
                                 size: 13,
-                                color: Theme.of(context).colorScheme.primary),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary),
                             const SizedBox(width: 6),
                             Flexible(
-                              child: Text(s.workoutName,
+                              child: Text(
+                                  s.workoutName,
                                   style: TextStyle(
                                       fontSize: 13,
-                                      color: Theme.of(context)
+                                      color: Theme.of(
+                                              context)
                                           .colorScheme
                                           .onSurface),
-                                  overflow: TextOverflow.ellipsis),
+                                  overflow: TextOverflow
+                                      .ellipsis),
                             ),
                           ],
                         ),
@@ -574,7 +756,8 @@ class _DayCellState extends State<_DayCell> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final colorScheme =
+        Theme.of(context).colorScheme;
     final hoverSize = widget.circleSize * 1.12;
 
     if (!widget.hasSession && !widget.isToday) {
@@ -582,7 +765,8 @@ class _DayCellState extends State<_DayCell> {
         child: Text('${widget.day}',
             style: TextStyle(
                 fontSize: widget.fontSize,
-                color: colorScheme.onSurface.withOpacity(0.6))),
+                color: colorScheme.onSurface
+                    .withOpacity(0.6))),
       );
     }
 
@@ -603,27 +787,35 @@ class _DayCellState extends State<_DayCell> {
         child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            width: _hovered ? hoverSize : widget.circleSize,
-            height: _hovered ? hoverSize : widget.circleSize,
+            width:
+                _hovered ? hoverSize : widget.circleSize,
+            height:
+                _hovered ? hoverSize : widget.circleSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: widget.hasSession
                   ? _hovered
-                      ? colorScheme.primary.withOpacity(0.8)
+                      ? colorScheme.primary
+                          .withOpacity(0.8)
                       : colorScheme.primary
                   : colorScheme.primaryContainer,
-              border: widget.isToday && !widget.hasSession
-                  ? Border.all(color: colorScheme.primary, width: 1.5)
+              border: widget.isToday &&
+                      !widget.hasSession
+                  ? Border.all(
+                      color: colorScheme.primary,
+                      width: 1.5)
                   : null,
-              boxShadow: _hovered && widget.hasSession
-                  ? [
-                      BoxShadow(
-                        color: colorScheme.primary.withOpacity(0.4),
-                        blurRadius: 8,
-                        spreadRadius: 2,
-                      )
-                    ]
-                  : null,
+              boxShadow:
+                  _hovered && widget.hasSession
+                      ? [
+                          BoxShadow(
+                            color: colorScheme.primary
+                                .withOpacity(0.4),
+                            blurRadius: 8,
+                            spreadRadius: 2,
+                          )
+                        ]
+                      : null,
             ),
             child: Center(
               child: Text('${widget.day}',
@@ -645,13 +837,30 @@ class _DayCellState extends State<_DayCell> {
 class _SessionTile extends StatelessWidget {
   final HiveSession session;
   final VoidCallback onTap;
-  const _SessionTile({required this.session, required this.onTap});
+  final VoidCallback onDelete;
+
+  const _SessionTile({
+    required this.session,
+    required this.onTap,
+    required this.onDelete,
+  });
 
   String _formatDate(String iso) {
     final dt = DateTime.parse(iso);
     const months = [
-      '', 'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu',
-      'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
+      '',
+      'Gen',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mag',
+      'Giu',
+      'Lug',
+      'Ago',
+      'Set',
+      'Ott',
+      'Nov',
+      'Dic'
     ];
     return '${dt.day} ${months[dt.month]} ${dt.year}';
   }
@@ -666,24 +875,52 @@ class _SessionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          backgroundColor: cs.primaryContainer,
           child: Icon(Icons.fitness_center,
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
-              size: 18),
+              color: cs.onPrimaryContainer, size: 18),
         ),
         title: Text(session.workoutName,
-            style: const TextStyle(fontWeight: FontWeight.w500)),
+            style: const TextStyle(
+                fontWeight: FontWeight.w500)),
         subtitle: Text(_formatDate(session.date)),
-        trailing: session.durationSeconds != null
-            ? Text(_formatDuration(session.durationSeconds),
-                style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.outline))
-            : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (session.durationSeconds != null)
+              Text(
+                  _formatDuration(
+                      session.durationSeconds),
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: cs.outline)),
+            const SizedBox(width: 4),
+            // Bottone elimina
+            GestureDetector(
+              onTap: onDelete,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius:
+                      BorderRadius.circular(8),
+                  border: Border.all(
+                      color:
+                          Colors.red.withOpacity(0.3),
+                      width: 1),
+                ),
+                child: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.red,
+                    size: 16),
+              ),
+            ),
+          ],
+        ),
         onTap: onTap,
       ),
     );

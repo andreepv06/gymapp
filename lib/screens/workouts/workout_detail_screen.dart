@@ -107,7 +107,8 @@ class _WorkoutDetailScreenState
               ],
             ),
             const SizedBox(height: 12),
-            Text('Vuoi rimuovere "${we.exerciseName}"?'),
+            Text(
+                'Vuoi rimuovere "${we.exerciseName}"?'),
             const SizedBox(height: 24),
             GlassDialogActions(
               cancelLabel: 'Annulla',
@@ -115,8 +116,9 @@ class _WorkoutDetailScreenState
               confirmColor: Colors.red,
               onCancel: () => Navigator.pop(context),
               onConfirm: () {
-                _workoutProvider.removeExerciseFromWorkout(
-                    we.key, widget.workoutId);
+                _workoutProvider
+                    .removeExerciseFromWorkout(
+                        we.key, widget.workoutId);
                 Navigator.pop(context);
               },
             ),
@@ -158,8 +160,7 @@ class _WorkoutDetailScreenState
                       borderRadius:
                           BorderRadius.circular(10),
                     ),
-                    child: Icon(
-                        Icons.loop_rounded,
+                    child: Icon(Icons.loop_rounded,
                         color: Theme.of(context)
                             .colorScheme
                             .onTertiaryContainer,
@@ -182,7 +183,8 @@ class _WorkoutDetailScreenState
                     TextCapitalization.sentences,
                 decoration: const InputDecoration(
                   labelText: 'Nome circuito',
-                  hintText: 'Es. Circuito A, Superset...',
+                  hintText:
+                      'Es. Circuito A, Superset...',
                   prefixIcon:
                       Icon(Icons.edit_outlined),
                 ),
@@ -198,8 +200,8 @@ class _WorkoutDetailScreenState
                   _RoundsButton(
                     icon: Icons.remove,
                     onTap: rounds > 1
-                        ? () => setModal(
-                            () => rounds--)
+                        ? () =>
+                            setModal(() => rounds--)
                         : null,
                   ),
                   Expanded(
@@ -210,8 +212,7 @@ class _WorkoutDetailScreenState
                               .titleMedium
                               ?.copyWith(
                                   fontWeight:
-                                      FontWeight
-                                          .w700)),
+                                      FontWeight.w700)),
                     ),
                   ),
                   _RoundsButton(
@@ -227,9 +228,8 @@ class _WorkoutDetailScreenState
                 confirmLabel: 'Crea circuito',
                 onCancel: () => Navigator.pop(ctx),
                 onConfirm: () async {
-                  if (nameCtrl.text
-                      .trim()
-                      .isEmpty) return;
+                  if (nameCtrl.text.trim().isEmpty)
+                    return;
                   await HiveDatabase.instance
                       .addCircuit(HiveCircuit(
                     workoutKey: widget.workoutId,
@@ -247,129 +247,6 @@ class _WorkoutDetailScreenState
           ),
         ),
       ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final exercises =
-        context.watch<WorkoutProvider>().currentExercises;
-    final cs = Theme.of(context).colorScheme;
-
-    return Scaffold(
-      backgroundColor: cs.surface,
-      appBar: AppBar(
-        backgroundColor: cs.surface,
-        title: Text(widget.workoutName),
-        actions: [
-          // Bottone aggiungi circuito
-          GlassTextButton(
-            onPressed: _showAddCircuitSheet,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.loop_rounded,
-                    size: 16, color: cs.tertiary),
-                const SizedBox(width: 4),
-                Text('Circuito',
-                    style:
-                        TextStyle(color: cs.tertiary)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: exercises.isEmpty && _circuits.isEmpty
-          ? _EmptyExercisesState(
-              onAdd: _showAddExercisesSheet,
-              onAddCircuit: _showAddCircuitSheet,
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(
-                  16, 16, 16, 120),
-              children: [
-                // Esercizi liberi (senza circuito)
-                ...exercises.asMap().entries.map((e) {
-                  return _ExerciseRow(
-                    key: ValueKey(e.value.key),
-                    index: e.key,
-                    workoutExercise: e.value,
-                    onEdit: () =>
-                        _showEditSheet(e.value),
-                    onDelete: () =>
-                        _confirmDeleteExercise(
-                            e.value),
-                  );
-                }),
-
-                // Circuiti
-                ..._circuits.map((circuit) {
-                  final circuitExercises =
-                      exercises.where((ex) =>
-                          ex.notes ==
-                          '__circuit_${circuit.key}').toList();
-                  return _CircuitCard(
-                    circuit: circuit,
-                    exercises: circuitExercises,
-                    onAddExercise: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => MultiProvider(
-                            providers: [
-                              ChangeNotifierProvider
-                                  .value(
-                                      value:
-                                          _exerciseProvider),
-                              ChangeNotifierProvider
-                                  .value(
-                                      value:
-                                          _workoutProvider),
-                            ],
-                            child:
-                                _SelectExercisesScreen(
-                              workoutId:
-                                  widget.workoutId,
-                              circuitKey: circuit.key,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                    onEdit: (we) =>
-                        _showEditSheet(we),
-                    onDelete: (we) =>
-                        _confirmDeleteExercise(we),
-                    onDeleteCircuit: () async {
-                      await HiveDatabase.instance
-                          .deleteCircuit(circuit.key);
-                      _loadCircuits();
-                    },
-                    onEditCircuit: () =>
-                        _showEditCircuitSheet(circuit),
-                  );
-                }),
-              ],
-            ),
-      bottomNavigationBar:
-          (exercises.isNotEmpty || _circuits.isNotEmpty)
-              ? Padding(
-                  padding: EdgeInsets.fromLTRB(
-                      24,
-                      8,
-                      24,
-                      MediaQuery.of(context)
-                              .padding
-                              .bottom +
-                          16),
-                  child: GlassButton(
-                    onTap: _showAddExercisesSheet,
-                    icon: Icons.add_rounded,
-                    label: 'Aggiungi esercizi',
-                  ),
-                )
-              : null,
     );
   }
 
@@ -432,8 +309,7 @@ class _WorkoutDetailScreenState
                               .titleMedium
                               ?.copyWith(
                                   fontWeight:
-                                      FontWeight
-                                          .w700)),
+                                      FontWeight.w700)),
                     ),
                   ),
                   _RoundsButton(
@@ -464,9 +340,192 @@ class _WorkoutDetailScreenState
       ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    final allExercises =
+        context.watch<WorkoutProvider>().currentExercises;
+    final cs = Theme.of(context).colorScheme;
+
+    // FIX: separa gli esercizi liberi da quelli nei circuiti
+    final freeExercises = allExercises
+        .where((e) => !e.isInCircuit)
+        .toList();
+
+    final isEmpty =
+        freeExercises.isEmpty && _circuits.isEmpty;
+
+    return Scaffold(
+      backgroundColor: cs.surface,
+      appBar: AppBar(
+        backgroundColor: cs.surface,
+        title: Text(widget.workoutName),
+        actions: [
+          GlassTextButton(
+            onPressed: _showAddCircuitSheet,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.loop_rounded,
+                    size: 16, color: cs.tertiary),
+                const SizedBox(width: 4),
+                Text('Circuito',
+                    style:
+                        TextStyle(color: cs.tertiary)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: isEmpty
+          ? _EmptyExercisesState(
+              onAdd: _showAddExercisesSheet,
+              onAddCircuit: _showAddCircuitSheet,
+            )
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(
+                  16, 16, 16, 120),
+              children: [
+                // FIX: mostra SOLO gli esercizi liberi
+                // (non quelli appartenenti a un circuito)
+                ...freeExercises.asMap().entries.map(
+                    (e) {
+                  return _ExerciseRow(
+                    key: ValueKey(e.value.key),
+                    index: e.key,
+                    workoutExercise: e.value,
+                    onEdit: () =>
+                        _showEditSheet(e.value),
+                    onDelete: () =>
+                        _confirmDeleteExercise(
+                            e.value),
+                  );
+                }),
+
+                // Circuiti con i loro esercizi
+                ..._circuits.map((circuit) {
+                  final circuitTag =
+                      '__circuit_${circuit.key}';
+                  final circuitExercises = allExercises
+                      .where((ex) =>
+                          ex.notes == circuitTag)
+                      .toList();
+                  return _CircuitCard(
+                    circuit: circuit,
+                    exercises: circuitExercises,
+                    onAddExercise: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => MultiProvider(
+                            providers: [
+                              ChangeNotifierProvider
+                                  .value(
+                                      value:
+                                          _exerciseProvider),
+                              ChangeNotifierProvider
+                                  .value(
+                                      value:
+                                          _workoutProvider),
+                            ],
+                            child:
+                                _SelectExercisesScreen(
+                              workoutId:
+                                  widget.workoutId,
+                              circuitKey: circuit.key,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    onEdit: (we) =>
+                        _showEditSheet(we),
+                    onDelete: (we) =>
+                        _confirmDeleteExercise(we),
+                    onDeleteCircuit: () async {
+                      showGlassDialog(
+                        context: context,
+                        child: Padding(
+                          padding:
+                              const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize:
+                                MainAxisSize.min,
+                            crossAxisAlignment:
+                                CrossAxisAlignment
+                                    .start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(
+                                      Icons
+                                          .delete_outline,
+                                      color: Colors.red,
+                                      size: 22),
+                                  SizedBox(width: 10),
+                                  Text('Elimina circuito',
+                                      style: TextStyle(
+                                          fontWeight:
+                                              FontWeight
+                                                  .w700,
+                                          fontSize: 16)),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                  'Eliminare "${circuit.name}"? Verranno eliminati anche gli esercizi al suo interno.'),
+                              const SizedBox(height: 24),
+                              GlassDialogActions(
+                                cancelLabel: 'Annulla',
+                                confirmLabel: 'Elimina',
+                                confirmColor: Colors.red,
+                                onCancel: () =>
+                                    Navigator.pop(
+                                        context),
+                                onConfirm: () async {
+                                  await HiveDatabase
+                                      .instance
+                                      .deleteCircuit(
+                                          circuit.key);
+                                  _loadCircuits();
+                                  context.read<WorkoutProvider>()
+                                    .loadWorkoutExercises(widget.workoutId);
+                                  if (context.mounted)
+                                    Navigator.pop(
+                                        context);
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                    onEditCircuit: () =>
+                        _showEditCircuitSheet(circuit),
+                  );
+                }),
+              ],
+            ),
+      bottomNavigationBar: !isEmpty
+          ? Padding(
+              padding: EdgeInsets.fromLTRB(
+                  24,
+                  8,
+                  24,
+                  MediaQuery.of(context).padding.bottom +
+                      16),
+              child: GlassButton(
+                onTap: _showAddExercisesSheet,
+                icon: Icons.add_rounded,
+                label: 'Aggiungi esercizi',
+              ),
+            )
+          : null,
+    );
+  }
 }
 
-/// Bottone +/- per i cicli
 class _RoundsButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
@@ -503,7 +562,6 @@ class _RoundsButton extends StatelessWidget {
   }
 }
 
-/// Card circuito con i suoi esercizi
 class _CircuitCard extends StatelessWidget {
   final HiveCircuit circuit;
   final List<HiveWorkoutExercise> exercises;
@@ -544,7 +602,6 @@ class _CircuitCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header circuito
           Padding(
             padding: const EdgeInsets.fromLTRB(
                 16, 12, 12, 8),
@@ -581,7 +638,6 @@ class _CircuitCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Azioni circuito
                 GlassTextButton(
                   onPressed: onEditCircuit,
                   child: Icon(Icons.edit_outlined,
@@ -597,8 +653,6 @@ class _CircuitCard extends StatelessWidget {
               ],
             ),
           ),
-
-          // Esercizi del circuito
           if (exercises.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(
@@ -623,8 +677,6 @@ class _CircuitCard extends StatelessWidget {
                     compact: true,
                   ),
                 )),
-
-          // Bottone aggiungi esercizio al circuito
           Padding(
             padding: const EdgeInsets.fromLTRB(
                 12, 4, 12, 12),
@@ -686,7 +738,8 @@ class _EmptyExercisesState extends StatelessWidget {
               style: Theme.of(context)
                   .textTheme
                   .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w700),
+                  ?.copyWith(
+                      fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(
@@ -752,8 +805,8 @@ class _ExerciseRow extends StatelessWidget {
         Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      margin: EdgeInsets.only(
-          bottom: compact ? 4 : 8),
+      margin:
+          EdgeInsets.only(bottom: compact ? 4 : 8),
       decoration: BoxDecoration(
         color: isDark
             ? cs.surface.withOpacity(0.8)
@@ -769,8 +822,8 @@ class _ExerciseRow extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black
-                      .withOpacity(isDark ? 0.15 : 0.04),
+                  color: Colors.black.withOpacity(
+                      isDark ? 0.15 : 0.04),
                   blurRadius: 4,
                   offset: const Offset(0, 1),
                 ),
@@ -790,7 +843,8 @@ class _ExerciseRow extends StatelessWidget {
                     const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
                   color: cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius:
+                      BorderRadius.circular(2),
                 ),
               ),
             Text(
@@ -813,13 +867,15 @@ class _ExerciseRow extends StatelessWidget {
               spacing: 6,
               runSpacing: 4,
               children: [
-                _InfoChip(label: '${we.sets} serie'),
+                _InfoChip(
+                    label: '${we.sets} serie'),
                 _InfoChip(
                     label: '${we.targetReps} reps'),
                 if (we.targetWeight != null &&
                     we.targetWeight! > 0)
                   _InfoChip(
-                      label: '${we.targetWeight} kg'),
+                      label:
+                          '${we.targetWeight} kg'),
                 if (we.restSeconds != null)
                   _InfoChip(
                       label:
@@ -877,8 +933,8 @@ class _SmallGlassButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(
             horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color:
-              color.withOpacity(isDark ? 0.15 : 0.08),
+          color: color
+              .withOpacity(isDark ? 0.15 : 0.08),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
               color: color.withOpacity(0.4), width: 1),
@@ -922,10 +978,9 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
-// ── Selezione esercizi ──
 class _SelectExercisesScreen extends StatefulWidget {
   final dynamic workoutId;
-  final dynamic circuitKey; // null = esercizio libero
+  final dynamic circuitKey;
 
   const _SelectExercisesScreen({
     required this.workoutId,
@@ -965,8 +1020,8 @@ class _SelectExercisesScreenState
       final selected = _selected.toList();
       final toAdd = <HiveWorkoutExercise>[];
       for (int i = 0; i < selected.length; i++) {
-        final matches =
-            allExercises.where((e) => e.key == selected[i]);
+        final matches = allExercises
+            .where((e) => e.key == selected[i]);
         if (matches.isEmpty) continue;
         final ex = matches.first;
         toAdd.add(HiveWorkoutExercise(
@@ -974,7 +1029,6 @@ class _SelectExercisesScreenState
           exerciseKey: ex.key,
           exerciseName: ex.name,
           muscleGroup: ex.muscleGroup,
-          // Usa notes per marcare appartenenza al circuito
           notes: widget.circuitKey != null
               ? '__circuit_${widget.circuitKey}'
               : ex.notes,
@@ -1013,7 +1067,7 @@ class _SelectExercisesScreenState
       return matchMuscle && matchSearch;
     }).toList();
 
-    final alreadyInWorkout = context
+    final currentExercises = context
         .read<WorkoutProvider>()
         .currentExercises;
 
@@ -1045,8 +1099,8 @@ class _SelectExercisesScreenState
       body: Column(
         children: [
           Padding(
-            padding:
-                const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(
+                16, 12, 16, 8),
             child: TextField(
               decoration: const InputDecoration(
                 hintText: 'Cerca esercizio...',
@@ -1089,16 +1143,21 @@ class _SelectExercisesScreenState
                       final ex = filtered[i];
                       final isSelected =
                           _selected.contains(ex.key);
-                      // FIX duplicati: controlla se già in scheda
+
+                      // FIX duplicati: controlla se
+                      // già presente nella stessa
+                      // destinazione (libero o circuito)
                       final alreadyAdded =
-                          alreadyInWorkout.any((we) =>
-                              we.exerciseKey == ex.key &&
-                              (widget.circuitKey == null
-                                  ? (we.notes == null ||
-                                      !we.notes!.startsWith(
-                                          '__circuit_'))
-                                  : we.notes ==
-                                      '__circuit_${widget.circuitKey}'));
+                          currentExercises.any((we) {
+                        if (we.exerciseKey != ex.key)
+                          return false;
+                        if (widget.circuitKey != null) {
+                          return we.notes ==
+                              '__circuit_${widget.circuitKey}';
+                        } else {
+                          return !we.isInCircuit;
+                        }
+                      });
 
                       return ListTile(
                         leading: alreadyAdded
@@ -1118,7 +1177,8 @@ class _SelectExercisesScreenState
                                         .colorScheme
                                         .outline
                                     : null)),
-                        subtitle: Text(ex.muscleGroup),
+                        subtitle:
+                            Text(ex.muscleGroup),
                         trailing: alreadyAdded
                             ? Text('Già aggiunto',
                                 style: TextStyle(
@@ -1158,7 +1218,6 @@ class _SelectExercisesScreenState
   }
 }
 
-// ── Edit Exercise Sheet glass ──
 class _EditExerciseSheet extends StatefulWidget {
   final HiveWorkoutExercise workoutExercise;
   const _EditExerciseSheet(
@@ -1182,12 +1241,12 @@ class _EditExerciseSheetState
     final we = widget.workoutExercise;
     _restCtrl = TextEditingController(
         text: we.restSeconds?.toString() ?? '');
-    // Non mostrare le note interne del circuito
     final displayNotes = (we.notes != null &&
             we.notes!.startsWith('__circuit_'))
         ? ''
         : we.notes ?? '';
-    _notesCtrl = TextEditingController(text: displayNotes);
+    _notesCtrl =
+        TextEditingController(text: displayNotes);
     _series = List.generate(
       we.sets,
       (i) => _SerieRow(
@@ -1231,7 +1290,6 @@ class _EditExerciseSheetState
         : widget.workoutExercise.targetReps;
 
     final we = widget.workoutExercise;
-    // Preserva il tag circuito se presente
     final originalNotes = we.notes;
     final isCircuitNote = originalNotes != null &&
         originalNotes.startsWith('__circuit_');
@@ -1264,13 +1322,12 @@ class _EditExerciseSheetState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isCircuit = widget.workoutExercise.notes
-            ?.startsWith('__circuit_') ??
-        false;
+    final isCircuit = widget.workoutExercise.isInCircuit;
 
     return Padding(
       padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
+        bottom:
+            MediaQuery.of(context).viewInsets.bottom,
         left: 20,
         right: 20,
         top: 20,
@@ -1401,7 +1458,8 @@ class _SerieEditRow extends StatefulWidget {
   final _SerieRow serie;
   final bool canDelete;
   final VoidCallback onDelete;
-  final void Function(double weight, int reps) onChanged;
+  final void Function(double weight, int reps)
+      onChanged;
 
   const _SerieEditRow({
     required this.index,

@@ -2,10 +2,6 @@
 
 part of 'hive_models.dart';
 
-// **************************************************************************
-// TypeAdapterGenerator
-// **************************************************************************
-
 class HiveExerciseAdapter extends TypeAdapter<HiveExercise> {
   @override
   final int typeId = 0;
@@ -14,7 +10,8 @@ class HiveExerciseAdapter extends TypeAdapter<HiveExercise> {
   HiveExercise read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
-      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+      for (int i = 0; i < numOfFields; i++)
+        reader.readByte(): reader.read(),
     };
     return HiveExercise(
       name: fields[0] as String,
@@ -57,7 +54,8 @@ class HiveWorkoutAdapter extends TypeAdapter<HiveWorkout> {
   HiveWorkout read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
-      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+      for (int i = 0; i < numOfFields; i++)
+        reader.readByte(): reader.read(),
     };
     return HiveWorkout(
       name: fields[0] as String,
@@ -86,7 +84,8 @@ class HiveWorkoutAdapter extends TypeAdapter<HiveWorkout> {
           typeId == other.typeId;
 }
 
-class HiveWorkoutExerciseAdapter extends TypeAdapter<HiveWorkoutExercise> {
+class HiveWorkoutExerciseAdapter
+    extends TypeAdapter<HiveWorkoutExercise> {
   @override
   final int typeId = 2;
 
@@ -94,7 +93,8 @@ class HiveWorkoutExerciseAdapter extends TypeAdapter<HiveWorkoutExercise> {
   HiveWorkoutExercise read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
-      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+      for (int i = 0; i < numOfFields; i++)
+        reader.readByte(): reader.read(),
     };
     return HiveWorkoutExercise(
       workoutKey: fields[0] as int,
@@ -155,7 +155,8 @@ class HiveSessionAdapter extends TypeAdapter<HiveSession> {
   HiveSession read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
-      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+      for (int i = 0; i < numOfFields; i++)
+        reader.readByte(): reader.read(),
     };
     return HiveSession(
       workoutKey: fields[0] as int,
@@ -190,7 +191,8 @@ class HiveSessionAdapter extends TypeAdapter<HiveSession> {
           typeId == other.typeId;
 }
 
-class HiveSessionSetAdapter extends TypeAdapter<HiveSessionSet> {
+class HiveSessionSetAdapter
+    extends TypeAdapter<HiveSessionSet> {
   @override
   final int typeId = 4;
 
@@ -198,7 +200,8 @@ class HiveSessionSetAdapter extends TypeAdapter<HiveSessionSet> {
   HiveSessionSet read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
-      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+      for (int i = 0; i < numOfFields; i++)
+        reader.readByte(): reader.read(),
     };
     return HiveSessionSet(
       sessionKey: fields[0] as int,
@@ -248,7 +251,8 @@ class HiveSessionSetAdapter extends TypeAdapter<HiveSessionSet> {
           typeId == other.typeId;
 }
 
-class HiveExerciseNoteAdapter extends TypeAdapter<HiveExerciseNote> {
+class HiveExerciseNoteAdapter
+    extends TypeAdapter<HiveExerciseNote> {
   @override
   final int typeId = 5;
 
@@ -256,7 +260,8 @@ class HiveExerciseNoteAdapter extends TypeAdapter<HiveExerciseNote> {
   HiveExerciseNote read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
-      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+      for (int i = 0; i < numOfFields; i++)
+        reader.readByte(): reader.read(),
     };
     return HiveExerciseNote(
       exerciseKey: fields[0] as int,
