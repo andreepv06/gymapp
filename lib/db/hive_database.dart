@@ -374,6 +374,20 @@ class HiveDatabase {
     await _enBox.deleteAll(keys);
   }
 
+  Future<void> updateCircuitSortOrder(
+      dynamic key, int sortOrder) async {
+    final c = _ciBox.get(key);
+    if (c != null) {
+      c.sortOrder = sortOrder;
+      await c.save();
+    }
+  }
+
+  HiveWorkoutExercise? getWorkoutExerciseByKey(
+      dynamic key) {
+    return _weBox.get(key);
+  }
+
   String? getExerciseNote(dynamic exerciseKey) {
     try {
       return _enBox.values

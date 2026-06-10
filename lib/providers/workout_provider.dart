@@ -7,7 +7,8 @@ class WorkoutProvider extends ChangeNotifier {
   List<HiveWorkoutExercise> _currentExercises = [];
 
   List<HiveWorkout> get workouts => _workouts;
-  List<HiveWorkoutExercise> get currentExercises => _currentExercises;
+  List<HiveWorkoutExercise> get currentExercises =>
+      _currentExercises;
 
   void loadWorkouts() {
     _workouts = HiveDatabase.instance.getWorkouts();
@@ -15,8 +16,8 @@ class WorkoutProvider extends ChangeNotifier {
   }
 
   void loadWorkoutExercises(dynamic workoutKey) {
-    _currentExercises =
-        HiveDatabase.instance.getWorkoutExercises(workoutKey);
+    _currentExercises = HiveDatabase.instance
+        .getWorkoutExercises(workoutKey);
     notifyListeners();
   }
 
@@ -25,13 +26,16 @@ class WorkoutProvider extends ChangeNotifier {
       name: name,
       createdAt: DateTime.now().toIso8601String(),
     );
-    final key = await HiveDatabase.instance.addWorkout(workout);
+    final key =
+        await HiveDatabase.instance.addWorkout(workout);
     loadWorkouts();
     return key;
   }
 
-  Future<void> renameWorkout(dynamic key, String newName) async {
-    await HiveDatabase.instance.updateWorkout(key, newName);
+  Future<void> renameWorkout(
+      dynamic key, String newName) async {
+    await HiveDatabase.instance
+        .updateWorkout(key, newName);
     loadWorkouts();
   }
 
@@ -43,7 +47,8 @@ class WorkoutProvider extends ChangeNotifier {
   Future<void> addExercisesToWorkout(
       List<HiveWorkoutExercise> list) async {
     for (final we in list) {
-      await HiveDatabase.instance.addWorkoutExercise(we);
+      await HiveDatabase.instance
+          .addWorkoutExercise(we);
     }
     if (list.isNotEmpty) {
       loadWorkoutExercises(list.first.workoutKey);
@@ -52,20 +57,59 @@ class WorkoutProvider extends ChangeNotifier {
 
   Future<void> updateExerciseInWorkout(
       dynamic key, HiveWorkoutExercise updated) async {
-    await HiveDatabase.instance.updateWorkoutExercise(key, updated);
+    await HiveDatabase.instance
+        .updateWorkoutExercise(key, updated);
     loadWorkoutExercises(updated.workoutKey);
   }
 
   Future<void> removeExerciseFromWorkout(
       dynamic key, dynamic workoutKey) async {
-    await HiveDatabase.instance.deleteWorkoutExercise(key);
+    await HiveDatabase.instance
+        .deleteWorkoutExercise(key);
     loadWorkoutExercises(workoutKey);
   }
 
-  Future<void> reorderExercises(
-      dynamic workoutKey, List<HiveWorkoutExercise> reordered) async {
+  Future<void> reorderExercises(dynamic workoutKey,
+      List<HiveWorkoutExercise> reordered) async {
     _currentExercises = reordered;
     notifyListeners();
-    await HiveDatabase.instance.reorderWorkoutExercises(reordered);
+    await HiveDatabase.instance
+        .reorderWorkoutExercises(reordered);
+  }
+
+  Future<void> updateExerciseSortOrder(
+      dynamic key, int sortOrder) async {
+    final we = HiveDatabase.instance
+        .getWorkoutExerciseByKey(key);
+    if (we != null) {
+      we.sortOrder = sortOrder;
+      await HiveDatabase.instance
+          .updateWorkoutExercise(key, we);
+    }
+    notifyListeners();
+  }
+
+  Future<void> reorderWorkoutExercises(
+      dynamic workoutId,
+      List<HiveWorkoutExercise> exercises) async {
+    for (int i = 0; i < exercises.length; i++) {
+      final updated = HiveWorkoutExercise(
+        workoutKey: exercises[i].workoutKey,
+        exerciseKey: exercises[i].exerciseKey,
+        exerciseName: exercises[i].exerciseName,
+        muscleGroup: exercises[i].muscleGroup,
+        sets: exercises[i].sets,
+        targetReps: exercises[i].targetReps,
+        targetWeight: exercises[i].targetWeight,
+        restSeconds: exercises[i].restSeconds,
+        notes: exercises[i].notes,
+        sortOrder: i,
+      );
+      await HiveDatabase.instance
+          .updateWorkoutExercise(
+              exercises[i].key, updated);
+    }
+    // FIX: loadWorkoutExercises è void, non Future
+    loadWorkoutExercises(workoutId);
   }
 }

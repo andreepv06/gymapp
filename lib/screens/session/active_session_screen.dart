@@ -306,55 +306,86 @@ class _ActiveSessionScreenState
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: ListView(
+              child: ReorderableListView(
                 padding: const EdgeInsets.fromLTRB(
                     16, 0, 16, 24),
+                buildDefaultDragHandles: false,
+                proxyDecorator:
+                    (child, index, animation) =>
+                        AnimatedBuilder(
+                  animation: animation,
+                  builder: (_, __) => Material(
+                    elevation: 8,
+                    borderRadius:
+                        BorderRadius.circular(16),
+                    shadowColor: Colors.black38,
+                    child: child,
+                  ),
+                ),
+                onReorder: (oldIndex, newIndex) {
+                  if (newIndex > oldIndex) newIndex--;
+                  sessionProvider
+                      .reorderSessionExercises(
+                          oldIndex, newIndex);
+                },
                 children: [
                   // Esercizi liberi
-                  ...freeExercises.map((ex) {
+                  ...freeExercises
+                      .asMap()
+                      .entries
+                      .map((e) {
+                    final ex = e.value;
                     final sets =
-                        exerciseSets[ex.exerciseKey] ??
-                            [];
-                    return _ExerciseSessionCard(
-                      key: ValueKey(ex.exerciseKey),
-                      sessionExercise: ex,
-                      sets: sets,
-                      onToggle: (index) =>
-                          sessionProvider.toggleSet(
-                              ex.exerciseKey, index),
-                      onUpdate: (index, weight, reps) =>
-                          sessionProvider.updateSet(
-                              ex.exerciseKey,
-                              index,
-                              weight,
-                              reps),
-                      onAddSet: () => sessionProvider
-                          .addSetToExercise(
-                              ex.exerciseKey),
-                      onRemoveSet: () => sessionProvider
-                          .removeSetFromExercise(
-                              ex.exerciseKey),
-                      onRemoveExercise: () => sessionProvider
-                          .removeExerciseFromSession(
-                              ex.exerciseKey),
-                      onEditNote: (note) =>
-                          sessionProvider
-                              .updateExerciseNote(
-                                  ex.exerciseKey, note),
+                        exerciseSets[ex.exerciseKey] ?? [];
+                    return ReorderableDelayedDragStartListener(
+                      key: ValueKey(
+                          'free_${ex.exerciseKey}'),
+                      index: e.key,
+                      child: _ExerciseSessionCard(
+                        sessionExercise: ex,
+                        sets: sets,
+                        onToggle: (index) =>
+                            sessionProvider.toggleSet(
+                                ex.exerciseKey, index),
+                        onUpdate: (index, weight, reps) =>
+                            sessionProvider.updateSet(
+                                ex.exerciseKey,
+                                index,
+                                weight,
+                                reps),
+                        onAddSet: () => sessionProvider
+                            .addSetToExercise(
+                                ex.exerciseKey),
+                        onRemoveSet: () => sessionProvider
+                            .removeSetFromExercise(
+                                ex.exerciseKey),
+                        onRemoveExercise: () => sessionProvider
+                            .removeExerciseFromSession(
+                                ex.exerciseKey),
+                        onEditNote: (note) =>
+                            sessionProvider.updateExerciseNote(
+                                ex.exerciseKey, note),
+                      ),
                     );
                   }),
-
+            
                   // Circuiti
-                  ...circuitIds.map((circuitId) {
+                  ...circuitIds
+                      .asMap()
+                      .entries
+                      .map((e) {
+                    final circuitId = e.value;
                     final circuitExercises = exercises
-                        .where((e) =>
-                            e.circuitId == circuitId)
+                        .where(
+                            (ex) => ex.circuitId == circuitId)
                         .toList();
-                    return _CircuitSessionBlock(
-                      key: ValueKey(
-                          'circuit_$circuitId'),
-                      circuitId: circuitId,
-                      exercises: circuitExercises,
+                    return ReorderableDelayedDragStartListener(
+                      key: ValueKey('circuit_$circuitId'),
+                      index: freeExercises.length + e.key,
+                      child: _CircuitSessionBlock(
+                        circuitId: circuitId,
+                        exercises: circuitExercises,
+                      ),
                     );
                   }),
                 ],
