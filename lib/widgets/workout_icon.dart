@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../widgets/glass_action_buttons.dart';
+// Import necessario per HiveWorkout
+import '../../models/hive_models.dart';
 
-/// Definizione di un'icona predefinita per le schede
 class WorkoutIconDef {
   final String id;
   final String label;
@@ -16,10 +19,8 @@ class WorkoutIconDef {
   });
 }
 
-/// Libreria completa di icone fitness
 class WorkoutIcons {
   static const List<WorkoutIconDef> all = [
-    // Gruppi muscolari specifici
     WorkoutIconDef(
         id: 'chest',
         label: 'Petto',
@@ -65,8 +66,6 @@ class WorkoutIcons {
         label: 'Glutei',
         icon: Icons.airline_seat_recline_extra,
         category: 'Muscoli'),
-
-    // Split
     WorkoutIconDef(
         id: 'push',
         label: 'Push',
@@ -84,12 +83,12 @@ class WorkoutIcons {
         category: 'Split'),
     WorkoutIconDef(
         id: 'upper',
-        label: 'Upper Body',
+        label: 'Upper',
         icon: Icons.person,
         category: 'Split'),
     WorkoutIconDef(
         id: 'lower',
-        label: 'Lower Body',
+        label: 'Lower',
         icon: Icons.transfer_within_a_station,
         category: 'Split'),
     WorkoutIconDef(
@@ -97,8 +96,6 @@ class WorkoutIcons {
         label: 'Full Body',
         icon: Icons.accessibility,
         category: 'Split'),
-
-    // Obiettivi
     WorkoutIconDef(
         id: 'strength',
         label: 'Forza',
@@ -111,7 +108,7 @@ class WorkoutIcons {
         category: 'Obiettivi'),
     WorkoutIconDef(
         id: 'definition',
-        label: 'Definizione',
+        label: 'Defin.',
         icon: Icons.show_chart,
         category: 'Obiettivi'),
     WorkoutIconDef(
@@ -126,11 +123,9 @@ class WorkoutIcons {
         category: 'Obiettivi'),
     WorkoutIconDef(
         id: 'endurance',
-        label: 'Resistenza',
+        label: 'Resist.',
         icon: Icons.timer,
         category: 'Obiettivi'),
-
-    // Recupero
     WorkoutIconDef(
         id: 'mobility',
         label: 'Mobilità',
@@ -138,7 +133,7 @@ class WorkoutIcons {
         category: 'Recupero'),
     WorkoutIconDef(
         id: 'stretching',
-        label: 'Stretching',
+        label: 'Stretch',
         icon: Icons.spa,
         category: 'Recupero'),
     WorkoutIconDef(
@@ -147,20 +142,8 @@ class WorkoutIcons {
         icon: Icons.healing,
         category: 'Recupero'),
     WorkoutIconDef(
-        id: 'yoga',
-        label: 'Yoga',
-        icon: Icons.self_improvement,
-        category: 'Recupero'),
-
-    // Sport
-    WorkoutIconDef(
-        id: 'sport',
-        label: 'Sport',
-        icon: Icons.sports,
-        category: 'Sport'),
-    WorkoutIconDef(
         id: 'cycling',
-        label: 'Ciclismo',
+        label: 'Bici',
         icon: Icons.directions_bike,
         category: 'Sport'),
     WorkoutIconDef(
@@ -180,18 +163,17 @@ class WorkoutIcons {
         category: 'Sport'),
   ];
 
-  /// Colori disponibili per le icone
   static const List<Color> colors = [
-    Color(0xFF6750A4), // Viola (default)
-    Color(0xFF2196F3), // Blu
-    Color(0xFF4CAF50), // Verde
-    Color(0xFFF44336), // Rosso
-    Color(0xFFFF9800), // Arancione
-    Color(0xFF00BCD4), // Ciano
-    Color(0xFFE91E63), // Rosa
-    Color(0xFF795548), // Marrone
-    Color(0xFF607D8B), // Grigio blu
-    Color(0xFF9C27B0), // Viola scuro
+    Color(0xFF6750A4),
+    Color(0xFF2196F3),
+    Color(0xFF4CAF50),
+    Color(0xFFF44336),
+    Color(0xFFFF9800),
+    Color(0xFF00BCD4),
+    Color(0xFFE91E63),
+    Color(0xFF795548),
+    Color(0xFF607D8B),
+    Color(0xFF9C27B0),
   ];
 
   static WorkoutIconDef? getById(String? id) {
@@ -204,10 +186,9 @@ class WorkoutIcons {
   }
 
   static Color getColor(int? index) {
-    if (index == null || index < 0 ||
-        index >= colors.length) {
-      return colors[0];
-    }
+    if (index == null ||
+        index < 0 ||
+        index >= colors.length) return colors[0];
     return colors[index];
   }
 
@@ -215,14 +196,13 @@ class WorkoutIcons {
       get byCategory {
     final map = <String, List<WorkoutIconDef>>{};
     for (final icon in all) {
-      map.putIfAbsent(icon.category, () => [])
-          .add(icon);
+      map.putIfAbsent(icon.category, () => []).add(icon);
     }
     return map;
   }
 }
 
-/// Widget che mostra l'avatar della scheda
+/// Avatar della scheda — usato ovunque
 class WorkoutAvatar extends StatelessWidget {
   final String? iconId;
   final int? iconColorIndex;
@@ -246,7 +226,6 @@ class WorkoutAvatar extends StatelessWidget {
     final color = WorkoutIcons.getColor(iconColorIndex);
     final iconDef = WorkoutIcons.getById(iconId);
 
-    // Immagine custom (base64)
     if (customImagePath != null &&
         customImagePath!.isNotEmpty) {
       try {
@@ -264,14 +243,12 @@ class WorkoutAvatar extends StatelessWidget {
       } catch (_) {}
     }
 
-    // Icona predefinita
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         color: color.withOpacity(0.15),
-        borderRadius:
-            BorderRadius.circular(borderRadius),
+        borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(
             color: color.withOpacity(0.3), width: 1),
       ),
@@ -280,6 +257,277 @@ class WorkoutAvatar extends StatelessWidget {
         color: color,
         size: iconSize,
       ),
+    );
+  }
+}
+
+/// Selettore icona completo — riutilizzabile
+class WorkoutIconSelector extends StatelessWidget {
+  final String? selectedIconId;
+  final int selectedColorIndex;
+  final String? customImageBase64;
+  final void Function(
+      String? iconId, int colorIndex, String? imgBase64) onChanged;
+
+  const WorkoutIconSelector({
+    super.key,
+    required this.selectedIconId,
+    required this.selectedColorIndex,
+    required this.customImageBase64,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final color =
+        WorkoutIcons.getColor(selectedColorIndex);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Preview + bottone galleria
+        Row(
+          children: [
+            WorkoutAvatar(
+              iconId: selectedIconId,
+              iconColorIndex: selectedColorIndex,
+              customImagePath: customImageBase64,
+              size: 64,
+              iconSize: 32,
+              borderRadius: 16,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Text('Icona scheda',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleSmall
+                          ?.copyWith(
+                              fontWeight:
+                                  FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  GlassOutlinedButton(
+                    onPressed: () async {
+                      try {
+                        final picker = ImagePicker();
+                        final file =
+                            await picker.pickImage(
+                          source: ImageSource.gallery,
+                          maxWidth: 400,
+                          maxHeight: 400,
+                          imageQuality: 80,
+                        );
+                        if (file != null) {
+                          final bytes =
+                              await file.readAsBytes();
+                          onChanged(
+                              null,
+                              selectedColorIndex,
+                              base64Encode(bytes));
+                        }
+                      } catch (_) {}
+                    },
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment:
+                          MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                            Icons.photo_library_outlined,
+                            size: 16),
+                        SizedBox(width: 6),
+                        Text('Usa foto galleria',
+                            style: TextStyle(
+                                fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Selezione colore
+        Text('Colore',
+            style: Theme.of(context)
+                .textTheme
+                .labelMedium),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 40,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: WorkoutIcons.colors.length,
+            separatorBuilder: (_, __) =>
+                const SizedBox(width: 8),
+            itemBuilder: (_, i) {
+              final c = WorkoutIcons.colors[i];
+              final isSelected = selectedColorIndex == i;
+              return GestureDetector(
+                onTap: () => onChanged(
+                    selectedIconId, i, customImageBase64),
+                child: AnimatedContainer(
+                  duration:
+                      const Duration(milliseconds: 150),
+                  width: isSelected ? 40 : 34,
+                  height: isSelected ? 40 : 34,
+                  decoration: BoxDecoration(
+                    color: c,
+                    shape: BoxShape.circle,
+                    border: isSelected
+                        ? Border.all(
+                            color: Colors.white,
+                            width: 3)
+                        : null,
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                                color: c.withOpacity(0.5),
+                                blurRadius: 8)
+                          ]
+                        : null,
+                  ),
+                  child: isSelected
+                      ? const Icon(Icons.check,
+                          color: Colors.white, size: 18)
+                      : null,
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Griglia icone per categoria
+        ...WorkoutIcons.byCategory.entries.map((entry) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding:
+                    const EdgeInsets.only(bottom: 8, top: 4),
+                child: Text(
+                  entry.key.toUpperCase(),
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelSmall
+                      ?.copyWith(
+                          color: cs.outline,
+                          letterSpacing: 1.0),
+                ),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: entry.value.map((iconDef) {
+                  final isSelected =
+                      selectedIconId == iconDef.id;
+                  return GestureDetector(
+                    onTap: () => onChanged(
+                        iconDef.id,
+                        selectedColorIndex,
+                        null),
+                    child: Tooltip(
+                      message: iconDef.label,
+                      child: AnimatedContainer(
+                        duration: const Duration(
+                            milliseconds: 150),
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? color.withOpacity(0.2)
+                              : cs.surfaceContainerHighest
+                                  .withOpacity(0.5),
+                          borderRadius:
+                              BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected
+                                ? color
+                                : cs.outlineVariant,
+                            width: isSelected ? 2 : 1,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment:
+                              MainAxisAlignment.center,
+                          children: [
+                            Icon(iconDef.icon,
+                                color: isSelected
+                                    ? color
+                                    : cs.outline,
+                                size: 22),
+                            const SizedBox(height: 2),
+                            Text(
+                              iconDef.label,
+                              style: TextStyle(
+                                  fontSize: 7,
+                                  color: isSelected
+                                      ? color
+                                      : cs.outline),
+                              maxLines: 1,
+                              overflow:
+                                  TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 8),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+}
+
+/// Widget per mostrare workout con icona inline
+class WorkoutIconLabel extends StatelessWidget {
+  final HiveWorkout workout;
+  final double avatarSize;
+  final TextStyle? textStyle;
+
+  const WorkoutIconLabel({
+    super.key,
+    required this.workout,
+    this.avatarSize = 32,
+    this.textStyle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        WorkoutAvatar(
+          iconId: workout.iconId,
+          iconColorIndex: workout.iconColorIndex,
+          customImagePath: workout.customImagePath,
+          size: avatarSize,
+          iconSize: avatarSize * 0.5,
+          borderRadius: avatarSize * 0.25,
+        ),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            workout.name,
+            style: textStyle,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
