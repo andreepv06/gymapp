@@ -29,8 +29,20 @@ class HiveWorkout extends HiveObject {
   late String name;
   @HiveField(1)
   late String createdAt;
+  @HiveField(2)
+  String? iconId; // ID icona predefinita (es. 'chest', 'legs')
+  @HiveField(3)
+  int? iconColorIndex; // indice colore (0-9)
+  @HiveField(4)
+  String? customImagePath; // path immagine custom (base64 o path)
 
-  HiveWorkout({required this.name, required this.createdAt});
+  HiveWorkout({
+    required this.name,
+    required this.createdAt,
+    this.iconId,
+    this.iconColorIndex,
+    this.customImagePath,
+  });
 
   dynamic get id => key;
 }
@@ -75,11 +87,9 @@ class HiveWorkoutExercise extends HiveObject {
   int get exerciseId => exerciseKey;
   int get workoutId => workoutKey;
 
-  /// True se questo esercizio appartiene a un ciclo
   bool get isInCircuit =>
       notes != null && notes!.startsWith('__circuit_');
 
-  /// Restituisce la chiave del circuito se presente
   String? get circuitId {
     if (!isInCircuit) return null;
     return notes!.replaceFirst('__circuit_', '');

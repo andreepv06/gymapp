@@ -60,17 +60,26 @@ class HiveWorkoutAdapter extends TypeAdapter<HiveWorkout> {
     return HiveWorkout(
       name: fields[0] as String,
       createdAt: fields[1] as String,
+      iconId: fields[2] as String?,
+      iconColorIndex: fields[3] as int?,
+      customImagePath: fields[4] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, HiveWorkout obj) {
     writer
-      ..writeByte(2)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(2)
+      ..write(obj.iconId)
+      ..writeByte(3)
+      ..write(obj.iconColorIndex)
+      ..writeByte(4)
+      ..write(obj.customImagePath);
   }
 
   @override
@@ -111,7 +120,8 @@ class HiveWorkoutExerciseAdapter
   }
 
   @override
-  void write(BinaryWriter writer, HiveWorkoutExercise obj) {
+  void write(
+      BinaryWriter writer, HiveWorkoutExercise obj) {
     writer
       ..writeByte(10)
       ..writeByte(0)
@@ -147,7 +157,8 @@ class HiveWorkoutExerciseAdapter
           typeId == other.typeId;
 }
 
-class HiveSessionAdapter extends TypeAdapter<HiveSession> {
+class HiveSessionAdapter
+    extends TypeAdapter<HiveSession> {
   @override
   final int typeId = 3;
 
@@ -217,7 +228,8 @@ class HiveSessionSetAdapter
   }
 
   @override
-  void write(BinaryWriter writer, HiveSessionSet obj) {
+  void write(
+      BinaryWriter writer, HiveSessionSet obj) {
     writer
       ..writeByte(9)
       ..writeByte(0)
@@ -271,7 +283,8 @@ class HiveExerciseNoteAdapter
   }
 
   @override
-  void write(BinaryWriter writer, HiveExerciseNote obj) {
+  void write(
+      BinaryWriter writer, HiveExerciseNote obj) {
     writer
       ..writeByte(3)
       ..writeByte(0)
@@ -293,7 +306,8 @@ class HiveExerciseNoteAdapter
           typeId == other.typeId;
 }
 
-class HiveCircuitAdapter extends TypeAdapter<HiveCircuit> {
+class HiveCircuitAdapter
+    extends TypeAdapter<HiveCircuit> {
   @override
   final int typeId = 6;
 

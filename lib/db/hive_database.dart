@@ -184,6 +184,21 @@ class HiveDatabase {
     await _ciBox.deleteAll(circuitsToDelete);
   }
 
+  Future<void> updateWorkoutIcon(
+    dynamic key, {
+    String? iconId,
+    int? iconColorIndex,
+    String? customImagePath,
+  }) async {
+    final w = _woBox.get(key);
+    if (w != null) {
+      w.iconId = iconId;
+      w.iconColorIndex = iconColorIndex;
+      w.customImagePath = customImagePath;
+      await w.save();
+    }
+  }
+
   // ── WORKOUT EXERCISES ──
 
   List<HiveWorkoutExercise> getWorkoutExercises(
@@ -382,6 +397,8 @@ class HiveDatabase {
       await c.save();
     }
   }
+
+
 
   HiveWorkoutExercise? getWorkoutExerciseByKey(
       dynamic key) {

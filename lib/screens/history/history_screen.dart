@@ -17,12 +17,16 @@ class HistoryScreen extends StatefulWidget {
       _HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
+class _HistoryScreenState
+    extends State<HistoryScreen> {
   List<HiveSession> _sessions = [];
   DateTime _focusedMonth = DateTime.now();
   bool _loading = true;
   Map<String, List<HiveSession>> _sessionsByDate = {};
   int _lastIndex = -1;
+
+  // Modalità calendario: 'day' | 'month' | 'year'
+  String _calendarMode = 'day';
 
   @override
   void initState() {
@@ -84,7 +88,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-                'Eliminare la sessione "${session.workoutName}" del $timeStr?'),
+                'Eliminare "${session.workoutName}" del $timeStr?'),
             const SizedBox(height: 24),
             GlassDialogActions(
               cancelLabel: 'Annulla',
@@ -128,15 +132,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
           weekStart.add(const Duration(days: 6));
       final hasSession = _sessions.any((s) {
         final date = DateTime.parse(s.date);
-        return date.isAfter(weekStart
-                .subtract(const Duration(seconds: 1))) &&
+        return date.isAfter(weekStart.subtract(
+                const Duration(seconds: 1))) &&
             date.isBefore(
                 weekEnd.add(const Duration(days: 1)));
       });
       if (!hasSession) break;
       streak++;
-      weekStart =
-          weekStart.subtract(const Duration(days: 7));
+      weekStart = weekStart
+          .subtract(const Duration(days: 7));
       if (streak > 200) break;
     }
     return streak;
@@ -179,8 +183,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ChangeNotifierProvider.value(
                   value:
                       context.read<ExerciseProvider>(),
-                  child:
-                      const ExerciseProgressScreen(),
+                  child: const ExerciseProgressScreen(),
                 ),
               ),
             ),
@@ -201,15 +204,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
             if (_sessions.isNotEmpty)
               const SizedBox(height: 14),
-            _CalendarCard(
+
+            // Calendario con modalità avanzata
+            _AdvancedCalendar(
               focusedMonth: _focusedMonth,
               sessionsByDate: _sessionsByDate,
+              calendarMode: _calendarMode,
+              onModeChanged: (mode) =>
+                  setState(() => _calendarMode = mode),
               onMonthChanged: (month) =>
                   setState(() => _focusedMonth = month),
               onDayTapped: (dateStr, sessions) =>
                   _showDayDetail(
                       context, dateStr, sessions),
             ),
+
             const SizedBox(height: 16),
             if (_sessions.isNotEmpty) ...[
               Text('Sessioni recenti',
@@ -277,163 +286,199 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (sessions.isEmpty) return;
     showGlassDialog(
       context: context,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_formatDateLabel(dateStr),
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(
-                        fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            ...sessions.map((s) {
-              final dt = DateTime.tryParse(s.date);
-              final timeStr = dt != null
-                  ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
-                  : '';
-              final sets = HiveDatabase.instance
-                  .getSessionSets(s.key);
-              // Prendi i primi 3 esercizi completati
-              final topSets = sets
-                  .where((ss) => ss.completed)
-                  .fold<Map<String, HiveSessionSet>>(
-                      {},
-                      (map, ss) => map
-                        ..putIfAbsent(
-                            ss.exerciseName, () => ss))
-                  .values
-                  .take(3)
-                  .toList();
+      child: _DayDetailDialog(
+        dateStr: dateStr,
+        sessions: sessions,
+        onDelete: (s) {
+          Navigator.pop(context);
+          _confirmDeleteSession(context, s);
+        },
+        onOpen: (s) {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SessionDetailScreen(
+                sessionKey: s.key,
+                workoutName: s.workoutName,
+                date: s.date,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
 
-              return Container(
-                margin:
-                    const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest
-                      .withOpacity(0.3),
-                  borderRadius:
-                      BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .outlineVariant
-                        .withOpacity(0.5),
-                  ),
-                ),
-                child: Row(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: [
-                          Row(
+/// Dialog compatto con espansione per ogni sessione
+class _DayDetailDialog extends StatefulWidget {
+  final String dateStr;
+  final List<HiveSession> sessions;
+  final void Function(HiveSession) onDelete;
+  final void Function(HiveSession) onOpen;
+
+  const _DayDetailDialog({
+    required this.dateStr,
+    required this.sessions,
+    required this.onDelete,
+    required this.onOpen,
+  });
+
+  @override
+  State<_DayDetailDialog> createState() =>
+      _DayDetailDialogState();
+}
+
+class _DayDetailDialogState
+    extends State<_DayDetailDialog> {
+  final Set<dynamic> _expanded = {};
+
+  String _formatDateLabel(String dateStr) {
+    final dt = DateTime.parse(dateStr);
+    const months = [
+      '', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile',
+      'Maggio', 'Giugno', 'Luglio', 'Agosto',
+      'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+    ];
+    return '${dt.day} ${months[dt.month]} ${dt.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_formatDateLabel(widget.dateStr),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(
+                      fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          ...widget.sessions.map((s) {
+            final dt = DateTime.tryParse(s.date);
+            final timeStr = dt != null
+                ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
+                : '';
+            final isExpanded =
+                _expanded.contains(s.key);
+            final sets =
+                HiveDatabase.instance.getSessionSets(s.key);
+            final completedSets =
+                sets.where((ss) => ss.completed).toList();
+
+            // Raggruppa per esercizio
+            final Map<String, HiveSessionSet>
+                topByExercise = {};
+            for (final ss in completedSets) {
+              topByExercise.putIfAbsent(
+                  ss.exerciseName, () => ss);
+            }
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest
+                    .withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: cs.outlineVariant
+                        .withOpacity(0.4)),
+              ),
+              child: Column(
+                children: [
+                  // Riga compatta sempre visibile
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    child: Row(
+                      children: [
+                        Icon(Icons.fitness_center,
+                            size: 16,
+                            color: cs.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
                             children: [
-                              Icon(
-                                  Icons.fitness_center,
-                                  size: 14,
-                                  color: Theme.of(
-                                          context)
-                                      .colorScheme
-                                      .primary),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                    s.workoutName,
-                                    style: const TextStyle(
-                                        fontWeight:
-                                            FontWeight
-                                                .w600,
-                                        fontSize: 14)),
-                              ),
+                              Text(s.workoutName,
+                                  style: const TextStyle(
+                                      fontWeight:
+                                          FontWeight.w600,
+                                      fontSize: 14)),
                               if (timeStr.isNotEmpty)
                                 Text(timeStr,
                                     style: TextStyle(
                                         fontSize: 11,
-                                        color: Theme.of(
-                                                context)
-                                            .colorScheme
-                                            .outline)),
+                                        color:
+                                            cs.outline)),
                             ],
                           ),
-                          if (topSets.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            ...topSets.map((ss) =>
-                                Text(
-                                  '• ${ss.exerciseName}: ${ss.weight > 0 ? '${ss.weight % 1 == 0 ? ss.weight.toInt() : ss.weight} kg × ' : ''}${ss.reps} reps',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Theme.of(
-                                              context)
-                                          .colorScheme
-                                          .outline),
-                                )),
-                          ],
-                        ],
-                      ),
-                    ),
-                    Column(
-                      children: [
-                        // Bottone vai ai dettagli
+                        ),
+                        // Bottone espandi
                         GestureDetector(
-                          onTap: () {
-                            Navigator.pop(context);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    SessionDetailScreen(
-                                  sessionKey: s.key,
-                                  workoutName:
-                                      s.workoutName,
-                                  date: s.date,
-                                ),
-                              ),
-                            );
-                          },
+                          onTap: () => setState(() {
+                            if (isExpanded) {
+                              _expanded.remove(s.key);
+                            } else {
+                              _expanded.add(s.key);
+                            }
+                          }),
                           child: Container(
                             padding:
-                                const EdgeInsets.all(
-                                    6),
+                                const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primary
+                              color: cs.primary
                                   .withOpacity(0.1),
                               borderRadius:
                                   BorderRadius.circular(
                                       8),
                             ),
                             child: Icon(
-                                Icons
-                                    .arrow_forward_ios,
-                                size: 14,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primary),
+                              isExpanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              size: 18,
+                              color: cs.primary,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        // Bottone elimina
+                        const SizedBox(width: 6),
+                        // Vai ai dettagli
                         GestureDetector(
-                          onTap: () {
-                            Navigator.pop(context);
-                            _confirmDeleteSession(
-                                context, s);
-                          },
+                          onTap: () =>
+                              widget.onOpen(s),
                           child: Container(
                             padding:
-                                const EdgeInsets.all(
-                                    6),
+                                const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: cs.primary
+                                  .withOpacity(0.1),
+                              borderRadius:
+                                  BorderRadius.circular(
+                                      8),
+                            ),
+                            child: Icon(
+                                Icons.arrow_forward_ios,
+                                size: 14,
+                                color: cs.primary),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        // Elimina
+                        GestureDetector(
+                          onTap: () =>
+                              widget.onDelete(s),
+                          child: Container(
+                            padding:
+                                const EdgeInsets.all(6),
                             decoration: BoxDecoration(
                               color: Colors.red
                                   .withOpacity(0.1),
@@ -449,41 +494,476 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         ),
                       ],
                     ),
-                  ],
-                ),
-              );
-            }),
+                  ),
+                  // Dettagli espansi
+                  if (isExpanded &&
+                      topByExercise.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                          12, 0, 12, 10),
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          Divider(
+                              color: cs.outlineVariant
+                                  .withOpacity(0.5)),
+                          ...topByExercise.values
+                              .map((ss) => Padding(
+                                    padding:
+                                        const EdgeInsets
+                                            .symmetric(
+                                            vertical: 2),
+                                    child: Text(
+                                      '• ${ss.exerciseName}: ${ss.weight > 0 ? '${ss.weight % 1 == 0 ? ss.weight.toInt() : ss.weight} kg × ' : ''}${ss.reps} reps',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color:
+                                              cs.outline),
+                                    ),
+                                  )),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 8),
+          GlassOutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Chiudi'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Calendario avanzato con modalità giorno/mese/anno
+class _AdvancedCalendar extends StatelessWidget {
+  final DateTime focusedMonth;
+  final Map<String, List<HiveSession>> sessionsByDate;
+  final String calendarMode;
+  final void Function(String) onModeChanged;
+  final void Function(DateTime) onMonthChanged;
+  final void Function(String, List<HiveSession>)
+      onDayTapped;
+
+  const _AdvancedCalendar({
+    required this.focusedMonth,
+    required this.sessionsByDate,
+    required this.calendarMode,
+    required this.onModeChanged,
+    required this.onMonthChanged,
+    required this.onDayTapped,
+  });
+
+  static const _monthNames = [
+    '', 'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu',
+    'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
+  ];
+  static const _monthNamesFull = [
+    '', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile',
+    'Maggio', 'Giugno', 'Luglio', 'Agosto',
+    'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            _buildHeader(context),
             const SizedBox(height: 8),
-            GlassOutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Chiudi'),
-            ),
+            if (calendarMode == 'day')
+              _buildDayView(context)
+            else if (calendarMode == 'month')
+              _buildMonthView(context)
+            else
+              _buildYearView(context),
           ],
         ),
       ),
     );
   }
 
-  String _formatDateLabel(String dateStr) {
-    final dt = DateTime.parse(dateStr);
-    const months = [
-      '',
-      'Gennaio',
-      'Febbraio',
-      'Marzo',
-      'Aprile',
-      'Maggio',
-      'Giugno',
-      'Luglio',
-      'Agosto',
-      'Settembre',
-      'Ottobre',
-      'Novembre',
-      'Dicembre'
-    ];
-    return '${dt.day} ${months[dt.month]} ${dt.year}';
+  Widget _buildHeader(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    String titleText;
+    if (calendarMode == 'day') {
+      titleText =
+          '${_monthNamesFull[focusedMonth.month]} ${focusedMonth.year}';
+    } else if (calendarMode == 'month') {
+      titleText = '${focusedMonth.year}';
+    } else {
+      final decade =
+          (focusedMonth.year ~/ 10) * 10;
+      titleText = '$decade – ${decade + 9}';
+    }
+
+    return Row(
+      children: [
+        // Freccia sinistra
+        IconButton(
+          icon: const Icon(Icons.chevron_left),
+          onPressed: () {
+            if (calendarMode == 'day') {
+              onMonthChanged(DateTime(
+                  focusedMonth.year,
+                  focusedMonth.month - 1));
+            } else if (calendarMode == 'month') {
+              onMonthChanged(DateTime(
+                  focusedMonth.year - 1,
+                  focusedMonth.month));
+            } else {
+              onMonthChanged(DateTime(
+                  focusedMonth.year - 10,
+                  focusedMonth.month));
+            }
+          },
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          iconSize: 22,
+        ),
+        // Titolo cliccabile per cambiare modalità
+        Expanded(
+          child: GestureDetector(
+            onTap: () {
+              if (calendarMode == 'day') {
+                onModeChanged('month');
+              } else if (calendarMode == 'month') {
+                onModeChanged('year');
+              } else {
+                onModeChanged('day');
+              }
+            },
+            child: Row(
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
+              children: [
+                Text(titleText,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(
+                            fontWeight:
+                                FontWeight.w700)),
+                const SizedBox(width: 4),
+                Icon(Icons.unfold_more,
+                    size: 16, color: cs.outline),
+              ],
+            ),
+          ),
+        ),
+        // Freccia destra
+        IconButton(
+          icon: const Icon(Icons.chevron_right),
+          onPressed: () {
+            if (calendarMode == 'day') {
+              onMonthChanged(DateTime(
+                  focusedMonth.year,
+                  focusedMonth.month + 1));
+            } else if (calendarMode == 'month') {
+              onMonthChanged(DateTime(
+                  focusedMonth.year + 1,
+                  focusedMonth.month));
+            } else {
+              onMonthChanged(DateTime(
+                  focusedMonth.year + 10,
+                  focusedMonth.month));
+            }
+          },
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          iconSize: 22,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDayView(BuildContext context) {
+    final firstDay = DateTime(
+        focusedMonth.year, focusedMonth.month, 1);
+    final daysInMonth = DateTime(
+            focusedMonth.year, focusedMonth.month + 1, 0)
+        .day;
+    final startOffset = (firstDay.weekday - 1) % 7;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cellSize = constraints.maxWidth / 7;
+        final circleSize =
+            (cellSize * 0.72).clamp(28.0, 52.0);
+        final fontSize =
+            (circleSize * 0.38).clamp(10.0, 18.0);
+
+        return Column(
+          children: [
+            Row(
+              children: ['L', 'M', 'M', 'G', 'V', 'S', 'D']
+                  .map((d) => SizedBox(
+                        width: cellSize,
+                        height: cellSize * 0.45,
+                        child: Center(
+                          child: Text(d,
+                              style: TextStyle(
+                                fontSize: fontSize * 0.85,
+                                fontWeight:
+                                    FontWeight.bold,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outline,
+                              )),
+                        ),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 4),
+            GridView.builder(
+              shrinkWrap: true,
+              physics:
+                  const NeverScrollableScrollPhysics(),
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                childAspectRatio: 1,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 0,
+              ),
+              itemCount: startOffset + daysInMonth,
+              itemBuilder: (_, index) {
+                if (index < startOffset)
+                  return const SizedBox.shrink();
+                final day =
+                    index - startOffset + 1;
+                final date = DateTime(
+                    focusedMonth.year,
+                    focusedMonth.month,
+                    day);
+                final dateStr =
+                    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+                final sessions =
+                    sessionsByDate[dateStr] ?? [];
+                final hasSession =
+                    sessions.isNotEmpty;
+                final isToday =
+                    date.year == DateTime.now().year &&
+                        date.month ==
+                            DateTime.now().month &&
+                        date.day == DateTime.now().day;
+
+                return _DayCell(
+                  day: day,
+                  hasSession: hasSession,
+                  isToday: isToday,
+                  sessions: sessions,
+                  circleSize: circleSize,
+                  fontSize: fontSize,
+                  onTap: hasSession
+                      ? () => onDayTapped(
+                          dateStr, sessions)
+                      : null,
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMonthView(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final now = DateTime.now();
+
+    // Conta sessioni per mese
+    final sessionsByMonth = <int, int>{};
+    for (final entry in sessionsByDate.entries) {
+      final dt = DateTime.tryParse(entry.key);
+      if (dt != null &&
+          dt.year == focusedMonth.year) {
+        sessionsByMonth[dt.month] =
+            (sessionsByMonth[dt.month] ?? 0) +
+                entry.value.length;
+      }
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate:
+          const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 1.8,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+      ),
+      itemCount: 12,
+      itemBuilder: (_, i) {
+        final month = i + 1;
+        final isCurrentMonth =
+            focusedMonth.year == now.year &&
+                month == now.month;
+        final isSelected =
+            month == focusedMonth.month;
+        final count = sessionsByMonth[month] ?? 0;
+
+        return GestureDetector(
+          onTap: () {
+            onMonthChanged(DateTime(
+                focusedMonth.year, month));
+            onModeChanged('day');
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? cs.primary.withOpacity(0.15)
+                  : isCurrentMonth
+                      ? cs.primaryContainer
+                          .withOpacity(0.3)
+                      : cs.surfaceContainerHighest
+                          .withOpacity(0.3),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isSelected
+                    ? cs.primary
+                    : isCurrentMonth
+                        ? cs.primary.withOpacity(0.3)
+                        : cs.outlineVariant
+                            .withOpacity(0.3),
+                width: isSelected ? 2 : 1,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
+              children: [
+                Text(_monthNames[month],
+                    style: TextStyle(
+                      fontWeight: isSelected ||
+                              isCurrentMonth
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      fontSize: 13,
+                      color: isSelected
+                          ? cs.primary
+                          : cs.onSurface,
+                    )),
+                if (count > 0)
+                  Text('$count',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: cs.primary,
+                          fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildYearView(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final now = DateTime.now();
+    final decade =
+        (focusedMonth.year ~/ 10) * 10;
+
+    // Conta sessioni per anno
+    final sessionsByYear = <int, int>{};
+    for (final entry in sessionsByDate.entries) {
+      final dt = DateTime.tryParse(entry.key);
+      if (dt != null) {
+        sessionsByYear[dt.year] =
+            (sessionsByYear[dt.year] ?? 0) +
+                entry.value.length;
+      }
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate:
+          const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 1.8,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+      ),
+      itemCount: 12,
+      itemBuilder: (_, i) {
+        final year = decade - 1 + i;
+        final isCurrentYear = year == now.year;
+        final isSelected =
+            year == focusedMonth.year;
+        final count = sessionsByYear[year] ?? 0;
+        final isOutOfRange = i == 0 || i == 11;
+
+        return GestureDetector(
+          onTap: () {
+            onMonthChanged(
+                DateTime(year, focusedMonth.month));
+            onModeChanged('month');
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? cs.primary.withOpacity(0.15)
+                  : isCurrentYear
+                      ? cs.primaryContainer
+                          .withOpacity(0.3)
+                      : isOutOfRange
+                          ? cs.surfaceContainerHighest
+                              .withOpacity(0.15)
+                          : cs.surfaceContainerHighest
+                              .withOpacity(0.3),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isSelected
+                    ? cs.primary
+                    : cs.outlineVariant.withOpacity(
+                        isOutOfRange ? 0.15 : 0.3),
+                width: isSelected ? 2 : 1,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
+              children: [
+                Text('$year',
+                    style: TextStyle(
+                      fontWeight: isSelected ||
+                              isCurrentYear
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      fontSize: 13,
+                      color: isOutOfRange
+                          ? cs.outline.withOpacity(0.4)
+                          : isSelected
+                              ? cs.primary
+                              : cs.onSurface,
+                    )),
+                if (count > 0)
+                  Text('$count',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: cs.primary,
+                          fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
+
+// ── Stats bar, DayCell, SessionTile ──
 
 class _CompactStatsBar extends StatelessWidget {
   final int totalSessions;
@@ -524,8 +1004,7 @@ class _CompactStatsBar extends StatelessWidget {
                       height: 1)),
               Text('allenamenti',
                   style: TextStyle(
-                      fontSize: 10,
-                      color: cs.outline)),
+                      fontSize: 10, color: cs.outline)),
             ],
           ),
           const SizedBox(width: 12),
@@ -552,8 +1031,7 @@ class _CompactStatsBar extends StatelessWidget {
                       ? 'settimana'
                       : 'settimane',
                   style: TextStyle(
-                      fontSize: 10,
-                      color: cs.outline)),
+                      fontSize: 10, color: cs.outline)),
             ],
           ),
           const SizedBox(width: 12),
@@ -598,166 +1076,6 @@ class _CompactStatsBar extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CalendarCard extends StatelessWidget {
-  final DateTime focusedMonth;
-  final Map<String, List<HiveSession>> sessionsByDate;
-  final void Function(DateTime) onMonthChanged;
-  final void Function(String, List<HiveSession>)
-      onDayTapped;
-
-  const _CalendarCard({
-    required this.focusedMonth,
-    required this.sessionsByDate,
-    required this.onMonthChanged,
-    required this.onDayTapped,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final firstDay = DateTime(
-        focusedMonth.year, focusedMonth.month, 1);
-    final daysInMonth = DateTime(
-            focusedMonth.year, focusedMonth.month + 1, 0)
-        .day;
-    final startOffset =
-        (firstDay.weekday - 1) % 7;
-    const months = [
-      '', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile',
-      'Maggio', 'Giugno', 'Luglio', 'Agosto',
-      'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
-    ];
-
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon:
-                      const Icon(Icons.chevron_left),
-                  onPressed: () =>
-                      onMonthChanged(DateTime(
-                          focusedMonth.year,
-                          focusedMonth.month - 1)),
-                ),
-                Text(
-                  '${months[focusedMonth.month]} ${focusedMonth.year}',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium,
-                ),
-                IconButton(
-                  icon: const Icon(
-                      Icons.chevron_right),
-                  onPressed: () =>
-                      onMonthChanged(DateTime(
-                          focusedMonth.year,
-                          focusedMonth.month + 1)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final cellSize =
-                    constraints.maxWidth / 7;
-                final circleSize =
-                    (cellSize * 0.72).clamp(28.0, 52.0);
-                final fontSize =
-                    (circleSize * 0.38).clamp(10.0, 18.0);
-
-                return Column(
-                  children: [
-                    Row(
-                      children: ['L', 'M', 'M', 'G', 'V', 'S', 'D']
-                          .map((d) => SizedBox(
-                                width: cellSize,
-                                height: cellSize * 0.45,
-                                child: Center(
-                                  child: Text(d,
-                                      style: TextStyle(
-                                        fontSize:
-                                            fontSize *
-                                                0.85,
-                                        fontWeight:
-                                            FontWeight
-                                                .bold,
-                                        color: Theme.of(
-                                                context)
-                                            .colorScheme
-                                            .outline,
-                                      )),
-                                ),
-                              ))
-                          .toList(),
-                    ),
-                    const SizedBox(height: 4),
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics:
-                          const NeverScrollableScrollPhysics(),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 7,
-                        childAspectRatio: 1,
-                        mainAxisSpacing: 4,
-                        crossAxisSpacing: 0,
-                      ),
-                      itemCount:
-                          startOffset + daysInMonth,
-                      itemBuilder: (_, index) {
-                        if (index < startOffset)
-                          return const SizedBox.shrink();
-                        final day =
-                            index - startOffset + 1;
-                        final date = DateTime(
-                            focusedMonth.year,
-                            focusedMonth.month,
-                            day);
-                        final dateStr =
-                            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-                        final sessions =
-                            sessionsByDate[dateStr] ??
-                                [];
-                        final hasSession =
-                            sessions.isNotEmpty;
-                        final isToday = date.year ==
-                                DateTime.now().year &&
-                            date.month ==
-                                DateTime.now().month &&
-                            date.day ==
-                                DateTime.now().day;
-
-                        return _DayCell(
-                          day: day,
-                          hasSession: hasSession,
-                          isToday: isToday,
-                          sessions: sessions,
-                          circleSize: circleSize,
-                          fontSize: fontSize,
-                          onTap: hasSession
-                              ? () => onDayTapped(
-                                  dateStr, sessions)
-                              : null,
-                        );
-                      },
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -809,8 +1127,9 @@ class _DayCellState extends State<_DayCell> {
             constraints:
                 const BoxConstraints(maxWidth: 200),
             decoration: BoxDecoration(
-              color:
-                  Theme.of(context).colorScheme.surface,
+              color: Theme.of(context)
+                  .colorScheme
+                  .surface,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                   color: Theme.of(context)
@@ -867,8 +1186,7 @@ class _DayCellState extends State<_DayCell> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme =
-        Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
     final hoverSize = widget.circleSize * 1.12;
 
     if (!widget.hasSession && !widget.isToday) {
@@ -876,8 +1194,7 @@ class _DayCellState extends State<_DayCell> {
         child: Text('${widget.day}',
             style: TextStyle(
                 fontSize: widget.fontSize,
-                color: colorScheme.onSurface
-                    .withOpacity(0.6))),
+                color: cs.onSurface.withOpacity(0.6))),
       );
     }
 
@@ -909,27 +1226,24 @@ class _DayCellState extends State<_DayCell> {
               shape: BoxShape.circle,
               color: widget.hasSession
                   ? _hovered
-                      ? colorScheme.primary
-                          .withOpacity(0.8)
-                      : colorScheme.primary
-                  : colorScheme.primaryContainer,
+                      ? cs.primary.withOpacity(0.8)
+                      : cs.primary
+                  : cs.primaryContainer,
               border: widget.isToday &&
                       !widget.hasSession
                   ? Border.all(
-                      color: colorScheme.primary,
-                      width: 1.5)
+                      color: cs.primary, width: 1.5)
                   : null,
-              boxShadow:
-                  _hovered && widget.hasSession
-                      ? [
-                          BoxShadow(
-                            color: colorScheme.primary
-                                .withOpacity(0.4),
-                            blurRadius: 8,
-                            spreadRadius: 2,
-                          )
-                        ]
-                      : null,
+              boxShadow: _hovered && widget.hasSession
+                  ? [
+                      BoxShadow(
+                        color:
+                            cs.primary.withOpacity(0.4),
+                        blurRadius: 8,
+                        spreadRadius: 2,
+                      )
+                    ]
+                  : null,
             ),
             child: Center(
               child: Text('${widget.day}',
@@ -937,8 +1251,8 @@ class _DayCellState extends State<_DayCell> {
                     fontSize: widget.fontSize,
                     fontWeight: FontWeight.bold,
                     color: widget.hasSession
-                        ? colorScheme.onPrimary
-                        : colorScheme.primary,
+                        ? cs.onPrimary
+                        : cs.primary,
                   )),
             ),
           ),
@@ -978,10 +1292,8 @@ class _SessionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
-    // Carica i principali set completati per il preview
-    final sets =
-        HiveDatabase.instance.getSessionSets(session.key);
+    final sets = HiveDatabase.instance
+        .getSessionSets(session.key);
     final topSets = sets
         .where((s) => s.completed)
         .fold<Map<String, HiveSessionSet>>(
@@ -1050,11 +1362,10 @@ class _SessionTile extends StatelessWidget {
                   GestureDetector(
                     onTap: onDelete,
                     child: Container(
-                      padding:
-                          const EdgeInsets.all(6),
+                      padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.red
-                            .withOpacity(0.1),
+                        color:
+                            Colors.red.withOpacity(0.1),
                         borderRadius:
                             BorderRadius.circular(8),
                         border: Border.all(
