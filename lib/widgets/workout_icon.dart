@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../widgets/glass_action_buttons.dart';
-// Import necessario per HiveWorkout
 import '../../models/hive_models.dart';
 
 class WorkoutIconDef {
@@ -202,7 +200,7 @@ class WorkoutIcons {
   }
 }
 
-/// Avatar della scheda — usato ovunque
+/// Avatar della scheda — usato in tutta l'app
 class WorkoutAvatar extends StatelessWidget {
   final String? iconId;
   final int? iconColorIndex;
@@ -261,13 +259,15 @@ class WorkoutAvatar extends StatelessWidget {
   }
 }
 
-/// Selettore icona completo — riutilizzabile
+/// Selettore icona completo e riutilizzabile
 class WorkoutIconSelector extends StatelessWidget {
   final String? selectedIconId;
   final int selectedColorIndex;
   final String? customImageBase64;
   final void Function(
-      String? iconId, int colorIndex, String? imgBase64) onChanged;
+      String? iconId,
+      int colorIndex,
+      String? imgBase64) onChanged;
 
   const WorkoutIconSelector({
     super.key,
@@ -286,7 +286,7 @@ class WorkoutIconSelector extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Preview + bottone galleria
+        // Preview + pulsante galleria
         Row(
           children: [
             WorkoutAvatar(
@@ -311,8 +311,8 @@ class WorkoutIconSelector extends StatelessWidget {
                               fontWeight:
                                   FontWeight.w600)),
                   const SizedBox(height: 6),
-                  GlassOutlinedButton(
-                    onPressed: () async {
+                  _GlassOutlinedSmallButton(
+                    onTap: () async {
                       try {
                         final picker = ImagePicker();
                         final file =
@@ -332,21 +332,21 @@ class WorkoutIconSelector extends StatelessWidget {
                         }
                       } catch (_) {}
                     },
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment:
-                          MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                            Icons.photo_library_outlined,
-                            size: 16),
-                        SizedBox(width: 6),
-                        Text('Usa foto galleria',
-                            style: TextStyle(
-                                fontSize: 13)),
-                      ],
-                    ),
+                    label: 'Usa foto galleria',
+                    icon: Icons.photo_library_outlined,
+                    color: cs.primary,
                   ),
+                  if (customImageBase64 != null ||
+                      selectedIconId != null) ...[
+                    const SizedBox(height: 6),
+                    _GlassOutlinedSmallButton(
+                      onTap: () =>
+                          onChanged(null, selectedColorIndex, null),
+                      label: 'Rimuovi',
+                      icon: Icons.close,
+                      color: Colors.red,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -354,14 +354,12 @@ class WorkoutIconSelector extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // Selezione colore
+        // Colori
         Text('Colore',
-            style: Theme.of(context)
-                .textTheme
-                .labelMedium),
+            style: Theme.of(context).textTheme.labelMedium),
         const SizedBox(height: 8),
         SizedBox(
-          height: 40,
+          height: 44,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: WorkoutIcons.colors.length,
@@ -383,8 +381,7 @@ class WorkoutIconSelector extends StatelessWidget {
                     shape: BoxShape.circle,
                     border: isSelected
                         ? Border.all(
-                            color: Colors.white,
-                            width: 3)
+                            color: Colors.white, width: 3)
                         : null,
                     boxShadow: isSelected
                         ? [
@@ -405,7 +402,7 @@ class WorkoutIconSelector extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // Griglia icone per categoria
+        // Icone per categoria
         ...WorkoutIcons.byCategory.entries.map((entry) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -493,17 +490,62 @@ class WorkoutIconSelector extends StatelessWidget {
   }
 }
 
-/// Widget per mostrare workout con icona inline
-class WorkoutIconLabel extends StatelessWidget {
+class _GlassOutlinedSmallButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const _GlassOutlinedSmallButton({
+    required this.onTap,
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+              color: color.withOpacity(0.35), width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Label scheda con icona — usata ovunque compare il nome
+class WorkoutLabel extends StatelessWidget {
   final HiveWorkout workout;
   final double avatarSize;
-  final TextStyle? textStyle;
+  final TextStyle? nameStyle;
+  final int maxLines;
 
-  const WorkoutIconLabel({
+  const WorkoutLabel({
     super.key,
     required this.workout,
     this.avatarSize = 32,
-    this.textStyle,
+    this.nameStyle,
+    this.maxLines = 1,
   });
 
   @override
@@ -523,7 +565,8 @@ class WorkoutIconLabel extends StatelessWidget {
         Flexible(
           child: Text(
             workout.name,
-            style: textStyle,
+            style: nameStyle,
+            maxLines: maxLines,
             overflow: TextOverflow.ellipsis,
           ),
         ),

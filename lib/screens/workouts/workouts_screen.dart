@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/hive_models.dart';
 import '../../providers/workout_provider.dart';
@@ -42,18 +40,16 @@ class _WorkoutsScreenState
       ),
       body: provider.workouts.isEmpty
           ? _EmptyState(
-              onAdd: () =>
-                  _showAddWorkoutSheet(context))
+              onAdd: () => _showAddWorkoutSheet(context))
           : _WorkoutList(
               workouts: provider.workouts,
-              onAdd: () =>
-                  _showAddWorkoutSheet(context),
+              onAdd: () => _showAddWorkoutSheet(context),
             ),
     );
   }
 
   void _showAddWorkoutSheet(BuildContext context) {
-    final controller = TextEditingController();
+    final nameCtrl = TextEditingController();
     String? selectedIconId;
     int selectedColorIndex = 0;
     String? customImageBase64;
@@ -61,10 +57,9 @@ class _WorkoutsScreenState
     showGlassBottomSheet(
       context: context,
       child: StatefulBuilder(
-        builder: (ctx, setModalState) => Padding(
+        builder: (ctx, setModal) => Padding(
           padding: EdgeInsets.only(
-            bottom:
-                MediaQuery.of(ctx).viewInsets.bottom,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
             left: 24,
             right: 24,
             top: 20,
@@ -76,23 +71,14 @@ class _WorkoutsScreenState
                   CrossAxisAlignment.start,
               children: [
                 const GlassSheetHandle(),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 Text('Nuova scheda',
                     style: Theme.of(context)
                         .textTheme
                         .titleLarge),
-                const SizedBox(height: 4),
-                Text('Dai un nome alla tua scheda',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .outline)),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 TextField(
-                  controller: controller,
+                  controller: nameCtrl,
                   autofocus: false,
                   textCapitalization:
                       TextCapitalization.sentences,
@@ -104,64 +90,18 @@ class _WorkoutsScreenState
                   ),
                 ),
                 const SizedBox(height: 20),
-                // Preview avatar
-                Row(
-                  children: [
-                    WorkoutAvatar(
-                      iconId: selectedIconId,
-                      iconColorIndex:
-                          selectedColorIndex,
-                      customImagePath: customImageBase64,
-                      size: 56,
-                      iconSize: 28,
-                      borderRadius: 14,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: [
-                          GlassOutlinedButton(
-                            onPressed: () async {
-                              final result =
-                                  await _showIconPickerSheet(
-                                      ctx,
-                                      selectedIconId,
-                                      selectedColorIndex);
-                              if (result != null) {
-                                setModalState(() {
-                                  selectedIconId =
-                                      result['iconId'];
-                                  selectedColorIndex =
-                                      result['colorIndex'];
-                                  customImageBase64 =
-                                      null;
-                                });
-                              }
-                            },
-                            child: const Text(
-                                'Scegli icona'),
-                          ),
-                          const SizedBox(height: 8),
-                          GlassOutlinedButton(
-                            onPressed: () async {
-                              final img =
-                                  await _pickImage();
-                              if (img != null) {
-                                setModalState(() {
-                                  customImageBase64 = img;
-                                  selectedIconId = null;
-                                });
-                              }
-                            },
-                            child: const Text(
-                                'Usa foto'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                // Selettore icona integrato
+                WorkoutIconSelector(
+                  selectedIconId: selectedIconId,
+                  selectedColorIndex: selectedColorIndex,
+                  customImageBase64: customImageBase64,
+                  onChanged: (id, colorIdx, img) {
+                    setModal(() {
+                      selectedIconId = id;
+                      selectedColorIndex = colorIdx;
+                      customImageBase64 = img;
+                    });
+                  },
                 ),
                 const SizedBox(height: 20),
                 GlassDialogActions(
@@ -169,47 +109,40 @@ class _WorkoutsScreenState
                   confirmLabel: 'Crea',
                   onCancel: () => Navigator.pop(ctx),
                   onConfirm: () async {
+                    if (nameCtrl.text.trim().isEmpty)
+                      return;
                     Navigator.pop(ctx);
-                    if (controller.text
-                        .trim()
-                        .isNotEmpty) {
-                      final id = await context
+                    final id = await context
+                        .read<WorkoutProvider>()
+                        .addWorkout(nameCtrl.text.trim());
+                    await HiveDatabase.instance
+                        .updateWorkoutIcon(
+                      id,
+                      iconId: selectedIconId,
+                      iconColorIndex: selectedColorIndex,
+                      customImagePath: customImageBase64,
+                    );
+                    if (context.mounted) {
+                      context
                           .read<WorkoutProvider>()
-                          .addWorkout(
-                              controller.text.trim());
-                      // Salva icona
-                      await HiveDatabase.instance
-                          .updateWorkoutIcon(
-                        id,
-                        iconId: selectedIconId,
-                        iconColorIndex:
-                            selectedColorIndex,
-                        customImagePath:
-                            customImageBase64,
-                      );
-                      if (context.mounted) {
-                        context
-                            .read<WorkoutProvider>()
-                            .loadWorkouts();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                WorkoutDetailScreen(
-                              workoutId: id,
-                              workoutName:
-                                  controller.text
-                                      .trim(),
-                            ),
+                          .loadWorkouts();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              WorkoutDetailScreen(
+                            workoutId: id,
+                            workoutName:
+                                nameCtrl.text.trim(),
                           ),
-                        ).then((_) {
-                          if (context.mounted) {
-                            context
-                                .read<WorkoutProvider>()
-                                .loadWorkouts();
-                          }
-                        });
-                      }
+                        ),
+                      ).then((_) {
+                        if (context.mounted) {
+                          context
+                              .read<WorkoutProvider>()
+                              .loadWorkouts();
+                        }
+                      });
                     }
                   },
                 ),
@@ -220,56 +153,6 @@ class _WorkoutsScreenState
         ),
       ),
     );
-  }
-
-  Future<String?> _pickImage() async {
-    try {
-      final picker = ImagePicker();
-      final file = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 400,
-        maxHeight: 400,
-        imageQuality: 80,
-      );
-      if (file == null) return null;
-      final bytes = await file.readAsBytes();
-      return base64Encode(bytes);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<Map<String, dynamic>?> _showIconPickerSheet(
-      BuildContext ctx,
-      String? currentIconId,
-      int currentColorIndex) async {
-    String? selectedId = currentIconId;
-    int selectedColor = currentColorIndex;
-    final result =
-        await showModalBottomSheet<Map<String, dynamic>>(
-      context: ctx,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => StatefulBuilder(
-        builder: (bCtx, setInner) =>
-            _IconPickerSheet(
-          selectedIconId: selectedId,
-          selectedColorIndex: selectedColor,
-          onChanged: (id, colorIdx) {
-            setInner(() {
-              selectedId = id;
-              selectedColor = colorIdx;
-            });
-          },
-          onConfirm: () {
-            Navigator.pop(bCtx,
-                {'iconId': selectedId, 'colorIndex': selectedColor});
-          },
-          onCancel: () => Navigator.pop(bCtx),
-        ),
-      ),
-    );
-    return result;
   }
 }
 
@@ -289,8 +172,8 @@ class _WorkoutList extends StatelessWidget {
       children: [
         Expanded(
           child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(
-                16, 16, 16, 12),
+            padding:
+                const EdgeInsets.fromLTRB(16, 16, 16, 12),
             itemCount: workouts.length,
             separatorBuilder: (_, __) =>
                 const SizedBox(height: 8),
@@ -321,8 +204,6 @@ class _WorkoutCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark =
         Theme.of(context).brightness == Brightness.dark;
-    final iconColor =
-        WorkoutIcons.getColor(workout.iconColorIndex);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -342,8 +223,8 @@ class _WorkoutCard extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(
-                    isDark ? 0.2 : 0.05),
+                color: Colors.black
+                    .withOpacity(isDark ? 0.2 : 0.05),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -352,14 +233,12 @@ class _WorkoutCard extends StatelessWidget {
           child: Material(
             color: Colors.transparent,
             child: ListTile(
-              contentPadding:
-                  const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 6),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 6),
               leading: WorkoutAvatar(
                 iconId: workout.iconId,
                 iconColorIndex: workout.iconColorIndex,
-                customImagePath:
-                    workout.customImagePath,
+                customImagePath: workout.customImagePath,
                 size: 48,
                 iconSize: 24,
                 borderRadius: 12,
@@ -370,8 +249,7 @@ class _WorkoutCard extends StatelessWidget {
               subtitle: Text(
                   _formatDate(workout.createdAt),
                   style: TextStyle(
-                      fontSize: 12,
-                      color: cs.outline)),
+                      fontSize: 12, color: cs.outline)),
               trailing: IconButton(
                 icon: Icon(Icons.more_vert,
                     color: cs.outline),
@@ -427,8 +305,7 @@ class _WorkoutCard extends StatelessWidget {
                 WorkoutAvatar(
                   iconId: workout.iconId,
                   iconColorIndex: workout.iconColorIndex,
-                  customImagePath:
-                      workout.customImagePath,
+                  customImagePath: workout.customImagePath,
                   size: 36,
                   iconSize: 18,
                   borderRadius: 10,
@@ -484,18 +361,16 @@ class _WorkoutCard extends StatelessWidget {
   }
 
   void _showChangeIconSheet(BuildContext context) {
-    String? selectedIconId = workout.iconId;
-    int selectedColorIndex =
-        workout.iconColorIndex ?? 0;
-    String? customImageBase64 = workout.customImagePath;
+    String? selIconId = workout.iconId;
+    int selColorIndex = workout.iconColorIndex ?? 0;
+    String? selImageBase64 = workout.customImagePath;
 
     showGlassBottomSheet(
       context: context,
       child: StatefulBuilder(
         builder: (ctx, setModal) => Padding(
           padding: EdgeInsets.only(
-            bottom:
-                MediaQuery.of(ctx).viewInsets.bottom,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
             left: 24,
             right: 24,
             top: 20,
@@ -503,8 +378,7 @@ class _WorkoutCard extends StatelessWidget {
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const GlassSheetHandle(),
                 const SizedBox(height: 16),
@@ -513,218 +387,19 @@ class _WorkoutCard extends StatelessWidget {
                         .textTheme
                         .titleMedium
                         ?.copyWith(
-                            fontWeight:
-                                FontWeight.w700)),
+                            fontWeight: FontWeight.w700)),
                 const SizedBox(height: 20),
-                // Preview
-                Center(
-                  child: WorkoutAvatar(
-                    iconId: selectedIconId,
-                    iconColorIndex: selectedColorIndex,
-                    customImagePath: customImageBase64,
-                    size: 80,
-                    iconSize: 40,
-                    borderRadius: 20,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Selezione colore
-                Text('Colore',
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelMedium),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 44,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: WorkoutIcons.colors.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(width: 8),
-                    itemBuilder: (_, i) {
-                      final color = WorkoutIcons.colors[i];
-                      final isSelected =
-                          selectedColorIndex == i;
-                      return GestureDetector(
-                        onTap: () => setModal(() =>
-                            selectedColorIndex = i),
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: isSelected
-                                ? Border.all(
-                                    color: Colors.white,
-                                    width: 3)
-                                : null,
-                            boxShadow: isSelected
-                                ? [
-                                    BoxShadow(
-                                        color: color
-                                            .withOpacity(
-                                                0.5),
-                                        blurRadius: 8)
-                                  ]
-                                : null,
-                          ),
-                          child: isSelected
-                              ? const Icon(Icons.check,
-                                  color: Colors.white,
-                                  size: 18)
-                              : null,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Icone predefinite
-                Text('Icone predefinite',
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelMedium),
-                const SizedBox(height: 8),
-                ...WorkoutIcons.byCategory.entries
-                    .map((entry) {
-                  return Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(
-                            bottom: 6, top: 4),
-                        child: Text(
-                          entry.key.toUpperCase(),
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelSmall
-                              ?.copyWith(
-                                  color:
-                                      Theme.of(context)
-                                          .colorScheme
-                                          .outline,
-                                  letterSpacing: 1.0),
-                        ),
-                      ),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: entry.value
-                            .map((iconDef) {
-                          final isSelected =
-                              selectedIconId ==
-                                  iconDef.id;
-                          final color =
-                              WorkoutIcons.getColor(
-                                  selectedColorIndex);
-                          return GestureDetector(
-                            onTap: () => setModal(() {
-                              selectedIconId = iconDef.id;
-                              customImageBase64 = null;
-                            }),
-                            child: Tooltip(
-                              message: iconDef.label,
-                              child: Container(
-                                width: 52,
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? color
-                                          .withOpacity(0.2)
-                                      : Theme.of(context)
-                                          .colorScheme
-                                          .surfaceContainerHighest
-                                          .withOpacity(0.5),
-                                  borderRadius:
-                                      BorderRadius.circular(
-                                          12),
-                                  border: isSelected
-                                      ? Border.all(
-                                          color: color,
-                                          width: 2)
-                                      : Border.all(
-                                          color: Theme.of(
-                                                  context)
-                                              .colorScheme
-                                              .outlineVariant,
-                                          width: 1),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment
-                                          .center,
-                                  children: [
-                                    Icon(iconDef.icon,
-                                        color: isSelected
-                                            ? color
-                                            : Theme.of(context)
-                                                .colorScheme
-                                                .outline,
-                                        size: 22),
-                                    const SizedBox(
-                                        height: 2),
-                                    Text(
-                                      iconDef.label,
-                                      style: TextStyle(
-                                          fontSize: 7,
-                                          color: isSelected
-                                              ? color
-                                              : Theme.of(context)
-                                                  .colorScheme
-                                                  .outline),
-                                      maxLines: 1,
-                                      overflow:
-                                          TextOverflow.ellipsis,
-                                      textAlign:
-                                          TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  );
-                }),
-                const SizedBox(height: 8),
-                // Foto personale
-                GlassOutlinedButton(
-                  onPressed: () async {
-                    try {
-                      final picker = ImagePicker();
-                      final file =
-                          await picker.pickImage(
-                        source: ImageSource.gallery,
-                        maxWidth: 400,
-                        maxHeight: 400,
-                        imageQuality: 80,
-                      );
-                      if (file != null) {
-                        final bytes =
-                            await file.readAsBytes();
-                        setModal(() {
-                          customImageBase64 =
-                              base64Encode(bytes);
-                          selectedIconId = null;
-                        });
-                      }
-                    } catch (_) {}
+                WorkoutIconSelector(
+                  selectedIconId: selIconId,
+                  selectedColorIndex: selColorIndex,
+                  customImageBase64: selImageBase64,
+                  onChanged: (id, colorIdx, img) {
+                    setModal(() {
+                      selIconId = id;
+                      selColorIndex = colorIdx;
+                      selImageBase64 = img;
+                    });
                   },
-                  child: const Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.photo_library_outlined,
-                          size: 18),
-                      SizedBox(width: 8),
-                      Text('Carica foto dalla galleria'),
-                    ],
-                  ),
                 ),
                 const SizedBox(height: 16),
                 GlassDialogActions(
@@ -735,9 +410,9 @@ class _WorkoutCard extends StatelessWidget {
                     await HiveDatabase.instance
                         .updateWorkoutIcon(
                       workout.key,
-                      iconId: selectedIconId,
-                      iconColorIndex: selectedColorIndex,
-                      customImagePath: customImageBase64,
+                      iconId: selIconId,
+                      iconColorIndex: selColorIndex,
+                      customImagePath: selImageBase64,
                     );
                     if (ctx.mounted) {
                       context
@@ -796,9 +471,7 @@ class _WorkoutCard extends StatelessWidget {
               confirmLabel: 'Salva',
               onCancel: () => Navigator.pop(context),
               onConfirm: () {
-                if (controller.text
-                    .trim()
-                    .isNotEmpty) {
+                if (controller.text.trim().isNotEmpty) {
                   context
                       .read<WorkoutProvider>()
                       .renameWorkout(workout.key,
@@ -874,7 +547,6 @@ class _OptionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark =
         Theme.of(context).brightness == Brightness.dark;
-
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -913,59 +585,6 @@ class _OptionTile extends StatelessWidget {
   }
 }
 
-class _IconPickerSheet extends StatelessWidget {
-  final String? selectedIconId;
-  final int selectedColorIndex;
-  final void Function(String? id, int colorIdx)
-      onChanged;
-  final VoidCallback onConfirm;
-  final VoidCallback onCancel;
-
-  const _IconPickerSheet({
-    required this.selectedIconId,
-    required this.selectedColorIndex,
-    required this.onChanged,
-    required this.onConfirm,
-    required this.onCancel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(24)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-            24, 20, 24, 24),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
-            children: [
-              const GlassSheetHandle(),
-              const SizedBox(height: 16),
-              Text('Scegli icona',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium),
-              const SizedBox(height: 16),
-              GlassDialogActions(
-                cancelLabel: 'Annulla',
-                confirmLabel: 'Conferma',
-                onCancel: onCancel,
-                onConfirm: onConfirm,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _EmptyState extends StatelessWidget {
   final VoidCallback onAdd;
   const _EmptyState({required this.onAdd});
@@ -973,7 +592,6 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),

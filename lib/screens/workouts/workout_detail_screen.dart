@@ -7,16 +7,22 @@ import '../../providers/workout_provider.dart';
 import '../../widgets/glass_button.dart';
 import '../../widgets/glass_action_buttons.dart';
 import '../../widgets/glass_bottom_sheet.dart';
-import '../../widgets/workout_icon.dart';
 import '../../db/hive_database.dart';
 
-// Item tipizzato per la lista piatta
 enum _ItemType { exercise, circuit }
 
 class _ListItem {
   final _ItemType type;
-  final dynamic data; // HiveWorkoutExercise o HiveCircuit
+  final dynamic data;
   _ListItem({required this.type, required this.data});
+
+  String get key {
+    if (type == _ItemType.exercise) {
+      return 'ex_${(data as HiveWorkoutExercise).key}';
+    } else {
+      return 'circuit_${(data as HiveCircuit).key}';
+    }
+  }
 }
 
 class WorkoutDetailScreen extends StatefulWidget {
@@ -40,6 +46,10 @@ class _WorkoutDetailScreenState
   late WorkoutProvider _workoutProvider;
   List<HiveCircuit> _circuits = [];
 
+  // Lista piatta locale per drag & drop stabile
+  List<_ListItem> _items = [];
+  bool _isDirty = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -50,20 +60,86 @@ class _WorkoutDetailScreenState
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
+    Future.microtask(() async {
       context
           .read<WorkoutProvider>()
           .loadWorkoutExercises(widget.workoutId);
       context.read<ExerciseProvider>().loadExercises();
-      _loadCircuits();
+      _circuits = HiveDatabase.instance
+          .getCircuits(widget.workoutId);
+      _rebuildItems();
+    });
+  }
+
+  void _rebuildItems() {
+    if (!mounted) return;
+    final allEx = _workoutProvider.currentExercises;
+    final freeEx =
+        allEx.where((e) => !e.isInCircuit).toList();
+
+    final newItems = <_ListItem>[];
+    for (final ex in freeEx) {
+      newItems.add(
+          _ListItem(type: _ItemType.exercise, data: ex));
+    }
+    for (final c in _circuits) {
+      newItems.add(
+          _ListItem(type: _ItemType.circuit, data: c));
+    }
+
+    setState(() {
+      _items = newItems;
+      _isDirty = false;
     });
   }
 
   void _loadCircuits() {
     setState(() {
-      _circuits =
-          HiveDatabase.instance.getCircuits(widget.workoutId);
+      _circuits = HiveDatabase.instance
+          .getCircuits(widget.workoutId);
     });
+    _workoutProvider.loadWorkoutExercises(widget.workoutId);
+    Future.microtask(() => _rebuildItems());
+  }
+
+  Future<void> _onReorder(
+      int oldIndex, int newIndex) async {
+    if (newIndex > oldIndex) newIndex--;
+    if (oldIndex == newIndex) return;
+
+    setState(() {
+      final item = _items.removeAt(oldIndex);
+      _items.insert(newIndex, item);
+      _isDirty = true;
+    });
+
+    // Persisti il nuovo ordine
+    int exOrder = 0;
+    int circuitOrder = 0;
+    for (final it in _items) {
+      if (it.type == _ItemType.exercise) {
+        final we = it.data as HiveWorkoutExercise;
+        final updated = HiveWorkoutExercise(
+          workoutKey: we.workoutKey,
+          exerciseKey: we.exerciseKey,
+          exerciseName: we.exerciseName,
+          muscleGroup: we.muscleGroup,
+          sets: we.sets,
+          targetReps: we.targetReps,
+          targetWeight: we.targetWeight,
+          restSeconds: we.restSeconds,
+          notes: we.notes,
+          sortOrder: exOrder++,
+        );
+        await HiveDatabase.instance
+            .updateWorkoutExercise(we.key, updated);
+      } else {
+        final c = it.data as HiveCircuit;
+        await HiveDatabase.instance
+            .updateCircuitSortOrder(c.key, circuitOrder++);
+      }
+    }
+    setState(() => _isDirty = false);
   }
 
   void _showAddExercisesSheet() {
@@ -81,7 +157,7 @@ class _WorkoutDetailScreenState
               workoutId: widget.workoutId),
         ),
       ),
-    );
+    ).then((_) => _loadCircuits());
   }
 
   void _showEditSheet(HiveWorkoutExercise we) {
@@ -91,7 +167,7 @@ class _WorkoutDetailScreenState
         value: _workoutProvider,
         child: _EditExerciseSheet(workoutExercise: we),
       ),
-    );
+    ).then((_) => _loadCircuits());
   }
 
   void _confirmDeleteExercise(HiveWorkoutExercise we) {
@@ -128,6 +204,7 @@ class _WorkoutDetailScreenState
                 _workoutProvider.removeExerciseFromWorkout(
                     we.key, widget.workoutId);
                 Navigator.pop(context);
+                _loadCircuits();
               },
             ),
           ],
@@ -326,10 +403,8 @@ class _WorkoutDetailScreenState
                 onCancel: () => Navigator.pop(ctx),
                 onConfirm: () async {
                   await HiveDatabase.instance
-                      .updateCircuit(
-                          circuit.key,
-                          nameCtrl.text.trim(),
-                          rounds);
+                      .updateCircuit(circuit.key,
+                          nameCtrl.text.trim(), rounds);
                   _loadCircuits();
                   if (ctx.mounted) Navigator.pop(ctx);
                 },
@@ -375,8 +450,6 @@ class _WorkoutDetailScreenState
                 await HiveDatabase.instance
                     .deleteCircuit(circuit.key);
                 _loadCircuits();
-                _workoutProvider.loadWorkoutExercises(
-                    widget.workoutId);
                 if (mounted) Navigator.pop(context);
               },
             ),
@@ -386,81 +459,29 @@ class _WorkoutDetailScreenState
     );
   }
 
-  Future<void> _onReorder(
-      int oldIndex, int newIndex) async {
-    if (newIndex > oldIndex) newIndex--;
-
-    final allExercises =
-        _workoutProvider.currentExercises;
-    final freeExercises =
-        allExercises.where((e) => !e.isInCircuit).toList();
-
-    // Costruisci lista piatta ordinata
-    final items = <_ListItem>[];
-    for (final ex in freeExercises) {
-      items.add(_ListItem(
-          type: _ItemType.exercise, data: ex));
-    }
-    for (final c in _circuits) {
-      items.add(
-          _ListItem(type: _ItemType.circuit, data: c));
-    }
-
-    final item = items.removeAt(oldIndex);
-    items.insert(newIndex, item);
-
-    // Aggiorna sortOrder per tipo
-    int exOrder = 0;
-    int circuitOrder = 0;
-    for (final it in items) {
-      if (it.type == _ItemType.exercise) {
-        final we = it.data as HiveWorkoutExercise;
-        final updated = HiveWorkoutExercise(
-          workoutKey: we.workoutKey,
-          exerciseKey: we.exerciseKey,
-          exerciseName: we.exerciseName,
-          muscleGroup: we.muscleGroup,
-          sets: we.sets,
-          targetReps: we.targetReps,
-          targetWeight: we.targetWeight,
-          restSeconds: we.restSeconds,
-          notes: we.notes,
-          sortOrder: exOrder++,
-        );
-        await HiveDatabase.instance
-            .updateWorkoutExercise(we.key, updated);
-      } else {
-        final c = it.data as HiveCircuit;
-        await HiveDatabase.instance
-            .updateCircuitSortOrder(c.key, circuitOrder++);
-      }
-    }
-
-    _workoutProvider.loadWorkoutExercises(widget.workoutId);
-    _loadCircuits();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final allExercises =
-        context.watch<WorkoutProvider>().currentExercises;
+    // Aggiorna items dal provider se non in drag
+    if (!_isDirty) {
+      final allEx =
+          context.watch<WorkoutProvider>().currentExercises;
+      final freeEx =
+          allEx.where((e) => !e.isInCircuit).toList();
+      final newItems = <_ListItem>[];
+      for (final ex in freeEx) {
+        newItems.add(_ListItem(
+            type: _ItemType.exercise, data: ex));
+      }
+      for (final c in _circuits) {
+        newItems.add(_ListItem(
+            type: _ItemType.circuit, data: c));
+      }
+      _items = newItems;
+    }
+
     final cs = Theme.of(context).colorScheme;
-
-    final freeExercises =
-        allExercises.where((e) => !e.isInCircuit).toList();
-
-    // Lista piatta per il ReorderableListView
-    final items = <_ListItem>[];
-    for (final ex in freeExercises) {
-      items.add(_ListItem(
-          type: _ItemType.exercise, data: ex));
-    }
-    for (final c in _circuits) {
-      items.add(
-          _ListItem(type: _ItemType.circuit, data: c));
-    }
-
-    final isEmpty = items.isEmpty;
+    final allEx = _workoutProvider.currentExercises;
+    final isEmpty = _items.isEmpty;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -507,7 +528,7 @@ class _WorkoutDetailScreenState
                 ),
               ),
               onReorder: _onReorder,
-              children: items.asMap().entries.map((e) {
+              children: _items.asMap().entries.map((e) {
                 final index = e.key;
                 final item = e.value;
 
@@ -515,7 +536,7 @@ class _WorkoutDetailScreenState
                   final we =
                       item.data as HiveWorkoutExercise;
                   return ReorderableDelayedDragStartListener(
-                    key: ValueKey('ex_${we.key}'),
+                    key: ValueKey(item.key),
                     index: index,
                     child: _ExerciseRow(
                       workoutExercise: we,
@@ -530,42 +551,39 @@ class _WorkoutDetailScreenState
                   final circuitTag =
                       '__circuit_${circuit.key}';
                   final circuitExercises =
-                      allExercises
+                      allEx
                           .where((ex) =>
                               ex.notes == circuitTag)
                           .toList();
                   return ReorderableDelayedDragStartListener(
-                    key: ValueKey(
-                        'circuit_${circuit.key}'),
+                    key: ValueKey(item.key),
                     index: index,
                     child: _CircuitCard(
                       circuit: circuit,
                       exercises: circuitExercises,
-                      onAddExercise: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                MultiProvider(
-                              providers: [
-                                ChangeNotifierProvider
-                                    .value(
-                                        value:
-                                            _exerciseProvider),
-                                ChangeNotifierProvider
-                                    .value(
-                                        value:
-                                            _workoutProvider),
-                              ],
-                              child:
-                                  _SelectExercisesScreen(
-                                workoutId: widget.workoutId,
-                                circuitKey: circuit.key,
-                              ),
+                      onAddExercise: () =>
+                          Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => MultiProvider(
+                            providers: [
+                              ChangeNotifierProvider
+                                  .value(
+                                      value:
+                                          _exerciseProvider),
+                              ChangeNotifierProvider
+                                  .value(
+                                      value:
+                                          _workoutProvider),
+                            ],
+                            child:
+                                _SelectExercisesScreen(
+                              workoutId: widget.workoutId,
+                              circuitKey: circuit.key,
                             ),
                           ),
-                        );
-                      },
+                        ),
+                      ).then((_) => _loadCircuits()),
                       onEdit: (we) =>
                           _showEditSheet(we),
                       onDelete: (we) =>
@@ -579,6 +597,7 @@ class _WorkoutDetailScreenState
                             .reorderWorkoutExercises(
                                 widget.workoutId,
                                 exercises);
+                        _loadCircuits();
                       },
                     ),
                   );
@@ -604,12 +623,11 @@ class _WorkoutDetailScreenState
   }
 }
 
-// ── Widget helpers ──
+// ── Helpers ──
 
 class _RoundsButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
-
   const _RoundsButton(
       {required this.icon, required this.onTap});
 
@@ -745,7 +763,8 @@ class _CircuitCard extends StatelessWidget {
           else
             ReorderableListView(
               shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
+              physics:
+                  const NeverScrollableScrollPhysics(),
               buildDefaultDragHandles: false,
               padding:
                   const EdgeInsets.symmetric(horizontal: 8),
@@ -1066,7 +1085,6 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
-// ── Selezione esercizi ──
 class _SelectExercisesScreen extends StatefulWidget {
   final dynamic workoutId;
   final dynamic circuitKey;
@@ -1284,7 +1302,8 @@ class _SelectExercisesScreenState
                   16,
                   8,
                   16,
-                  MediaQuery.of(context).padding.bottom + 16),
+                  MediaQuery.of(context).padding.bottom +
+                      16),
               child: GlassButton(
                 onTap: _loading ? () {} : _confirmAdd,
                 icon: Icons.add_rounded,
