@@ -8,6 +8,7 @@ import 'exercise_progress_screen.dart';
 import '../../main.dart';
 import '../../widgets/glass_action_buttons.dart';
 import '../../widgets/glass_bottom_sheet.dart';
+import '../../widgets/workout_icon.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -23,9 +24,9 @@ class _HistoryScreenState
   DateTime _focusedMonth = DateTime.now();
   bool _loading = true;
   Map<String, List<HiveSession>> _sessionsByDate = {};
+  // Cache schede per mostrare icone
+  Map<int, HiveWorkout> _workoutsCache = {};
   int _lastIndex = -1;
-
-  // Modalità calendario: 'day' | 'month' | 'year'
   String _calendarMode = 'day';
 
   @override
@@ -53,12 +54,24 @@ class _HistoryScreenState
       final dateStr = s.date.substring(0, 10);
       byDate.putIfAbsent(dateStr, () => []).add(s);
     }
+
+    // Carica tutte le schede per le icone
+    final workouts = HiveDatabase.instance.getWorkouts();
+    final Map<int, HiveWorkout> wCache = {};
+    for (final w in workouts) {
+      wCache[w.key as int] = w;
+    }
+
     setState(() {
       _sessions = sessions;
       _sessionsByDate = byDate;
+      _workoutsCache = wCache;
       _loading = false;
     });
   }
+
+  HiveWorkout? _getWorkout(int workoutKey) =>
+      _workoutsCache[workoutKey];
 
   Future<void> _confirmDeleteSession(
       BuildContext ctx, HiveSession session) async {
@@ -73,7 +86,8 @@ class _HistoryScreenState
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             const Row(
               children: [
@@ -134,8 +148,8 @@ class _HistoryScreenState
         final date = DateTime.parse(s.date);
         return date.isAfter(weekStart.subtract(
                 const Duration(seconds: 1))) &&
-            date.isBefore(
-                weekEnd.add(const Duration(days: 1)));
+            date.isBefore(weekEnd
+                .add(const Duration(days: 1)));
       });
       if (!hasSession) break;
       streak++;
@@ -183,7 +197,8 @@ class _HistoryScreenState
                     ChangeNotifierProvider.value(
                   value:
                       context.read<ExerciseProvider>(),
-                  child: const ExerciseProgressScreen(),
+                  child:
+                      const ExerciseProgressScreen(),
                 ),
               ),
             ),
@@ -204,8 +219,6 @@ class _HistoryScreenState
               ),
             if (_sessions.isNotEmpty)
               const SizedBox(height: 14),
-
-            // Calendario con modalità avanzata
             _AdvancedCalendar(
               focusedMonth: _focusedMonth,
               sessionsByDate: _sessionsByDate,
@@ -218,7 +231,6 @@ class _HistoryScreenState
                   _showDayDetail(
                       context, dateStr, sessions),
             ),
-
             const SizedBox(height: 16),
             if (_sessions.isNotEmpty) ...[
               Text('Sessioni recenti',
@@ -226,24 +238,28 @@ class _HistoryScreenState
                       .textTheme
                       .titleMedium),
               const SizedBox(height: 8),
-              ..._sessions.take(20).map((s) =>
-                  _SessionTile(
-                    session: s,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            SessionDetailScreen(
-                          sessionKey: s.key,
-                          workoutName: s.workoutName,
-                          date: s.date,
-                        ),
+              ..._sessions.take(20).map((s) {
+                final workout =
+                    _getWorkout(s.workoutKey);
+                return _SessionTile(
+                  session: s,
+                  workout: workout,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          SessionDetailScreen(
+                        sessionKey: s.key,
+                        workoutName: s.workoutName,
+                        date: s.date,
                       ),
                     ),
-                    onDelete: () =>
-                        _confirmDeleteSession(
-                            context, s),
-                  )),
+                  ),
+                  onDelete: () =>
+                      _confirmDeleteSession(
+                          context, s),
+                );
+              }),
             ] else
               Center(
                 child: Padding(
@@ -289,6 +305,7 @@ class _HistoryScreenState
       child: _DayDetailDialog(
         dateStr: dateStr,
         sessions: sessions,
+        workoutsCache: _workoutsCache,
         onDelete: (s) {
           Navigator.pop(context);
           _confirmDeleteSession(context, s);
@@ -311,16 +328,17 @@ class _HistoryScreenState
   }
 }
 
-/// Dialog compatto con espansione per ogni sessione
 class _DayDetailDialog extends StatefulWidget {
   final String dateStr;
   final List<HiveSession> sessions;
+  final Map<int, HiveWorkout> workoutsCache;
   final void Function(HiveSession) onDelete;
   final void Function(HiveSession) onOpen;
 
   const _DayDetailDialog({
     required this.dateStr,
     required this.sessions,
+    required this.workoutsCache,
     required this.onDelete,
     required this.onOpen,
   });
@@ -337,9 +355,19 @@ class _DayDetailDialogState
   String _formatDateLabel(String dateStr) {
     final dt = DateTime.parse(dateStr);
     const months = [
-      '', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile',
-      'Maggio', 'Giugno', 'Luglio', 'Agosto',
-      'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+      '',
+      'Gennaio',
+      'Febbraio',
+      'Marzo',
+      'Aprile',
+      'Maggio',
+      'Giugno',
+      'Luglio',
+      'Agosto',
+      'Settembre',
+      'Ottobre',
+      'Novembre',
+      'Dicembre'
     ];
     return '${dt.day} ${months[dt.month]} ${dt.year}';
   }
@@ -372,14 +400,15 @@ class _DayDetailDialogState
                 HiveDatabase.instance.getSessionSets(s.key);
             final completedSets =
                 sets.where((ss) => ss.completed).toList();
-
-            // Raggruppa per esercizio
             final Map<String, HiveSessionSet>
                 topByExercise = {};
             for (final ss in completedSets) {
               topByExercise.putIfAbsent(
                   ss.exerciseName, () => ss);
             }
+
+            final workout =
+                widget.workoutsCache[s.workoutKey];
 
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
@@ -393,16 +422,23 @@ class _DayDetailDialogState
               ),
               child: Column(
                 children: [
-                  // Riga compatta sempre visibile
                   Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 10),
                     child: Row(
                       children: [
-                        Icon(Icons.fitness_center,
-                            size: 16,
-                            color: cs.primary),
-                        const SizedBox(width: 8),
+                        // Icona scheda
+                        WorkoutAvatar(
+                          iconId: workout?.iconId,
+                          iconColorIndex:
+                              workout?.iconColorIndex,
+                          customImagePath:
+                              workout?.customImagePath,
+                          size: 32,
+                          iconSize: 16,
+                          borderRadius: 8,
+                        ),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment:
@@ -422,7 +458,7 @@ class _DayDetailDialogState
                             ],
                           ),
                         ),
-                        // Bottone espandi
+                        // Espandi
                         GestureDetector(
                           onTap: () => setState(() {
                             if (isExpanded) {
@@ -451,7 +487,7 @@ class _DayDetailDialogState
                           ),
                         ),
                         const SizedBox(width: 6),
-                        // Vai ai dettagli
+                        // Dettagli
                         GestureDetector(
                           onTap: () =>
                               widget.onOpen(s),
@@ -495,7 +531,6 @@ class _DayDetailDialogState
                       ],
                     ),
                   ),
-                  // Dettagli espansi
                   if (isExpanded &&
                       topByExercise.isNotEmpty)
                     Padding(
@@ -540,7 +575,6 @@ class _DayDetailDialogState
   }
 }
 
-/// Calendario avanzato con modalità giorno/mese/anno
 class _AdvancedCalendar extends StatelessWidget {
   final DateTime focusedMonth;
   final Map<String, List<HiveSession>> sessionsByDate;
@@ -560,13 +594,34 @@ class _AdvancedCalendar extends StatelessWidget {
   });
 
   static const _monthNames = [
-    '', 'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu',
-    'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
+    '',
+    'Gen',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mag',
+    'Giu',
+    'Lug',
+    'Ago',
+    'Set',
+    'Ott',
+    'Nov',
+    'Dic'
   ];
   static const _monthNamesFull = [
-    '', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile',
-    'Maggio', 'Giugno', 'Luglio', 'Agosto',
-    'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+    '',
+    'Gennaio',
+    'Febbraio',
+    'Marzo',
+    'Aprile',
+    'Maggio',
+    'Giugno',
+    'Luglio',
+    'Agosto',
+    'Settembre',
+    'Ottobre',
+    'Novembre',
+    'Dicembre'
   ];
 
   @override
@@ -608,7 +663,6 @@ class _AdvancedCalendar extends StatelessWidget {
 
     return Row(
       children: [
-        // Freccia sinistra
         IconButton(
           icon: const Icon(Icons.chevron_left),
           onPressed: () {
@@ -630,7 +684,6 @@ class _AdvancedCalendar extends StatelessWidget {
           constraints: const BoxConstraints(),
           iconSize: 22,
         ),
-        // Titolo cliccabile per cambiare modalità
         Expanded(
           child: GestureDetector(
             onTap: () {
@@ -660,7 +713,6 @@ class _AdvancedCalendar extends StatelessWidget {
             ),
           ),
         ),
-        // Freccia destra
         IconButton(
           icon: const Icon(Icons.chevron_right),
           onPressed: () {
@@ -690,9 +742,12 @@ class _AdvancedCalendar extends StatelessWidget {
     final firstDay = DateTime(
         focusedMonth.year, focusedMonth.month, 1);
     final daysInMonth = DateTime(
-            focusedMonth.year, focusedMonth.month + 1, 0)
+            focusedMonth.year,
+            focusedMonth.month + 1,
+            0)
         .day;
-    final startOffset = (firstDay.weekday - 1) % 7;
+    final startOffset =
+        (firstDay.weekday - 1) % 7;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -705,17 +760,27 @@ class _AdvancedCalendar extends StatelessWidget {
         return Column(
           children: [
             Row(
-              children: ['L', 'M', 'M', 'G', 'V', 'S', 'D']
+              children: [
+                'L',
+                'M',
+                'M',
+                'G',
+                'V',
+                'S',
+                'D'
+              ]
                   .map((d) => SizedBox(
                         width: cellSize,
                         height: cellSize * 0.45,
                         child: Center(
                           child: Text(d,
                               style: TextStyle(
-                                fontSize: fontSize * 0.85,
+                                fontSize:
+                                    fontSize * 0.85,
                                 fontWeight:
                                     FontWeight.bold,
-                                color: Theme.of(context)
+                                color: Theme.of(
+                                        context)
                                     .colorScheme
                                     .outline,
                               )),
@@ -739,8 +804,7 @@ class _AdvancedCalendar extends StatelessWidget {
               itemBuilder: (_, index) {
                 if (index < startOffset)
                   return const SizedBox.shrink();
-                final day =
-                    index - startOffset + 1;
+                final day = index - startOffset + 1;
                 final date = DateTime(
                     focusedMonth.year,
                     focusedMonth.month,
@@ -781,7 +845,6 @@ class _AdvancedCalendar extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final now = DateTime.now();
 
-    // Conta sessioni per mese
     final sessionsByMonth = <int, int>{};
     for (final entry in sessionsByDate.entries) {
       final dt = DateTime.tryParse(entry.key);
@@ -811,7 +874,8 @@ class _AdvancedCalendar extends StatelessWidget {
                 month == now.month;
         final isSelected =
             month == focusedMonth.month;
-        final count = sessionsByMonth[month] ?? 0;
+        final count =
+            sessionsByMonth[month] ?? 0;
 
         return GestureDetector(
           onTap: () {
@@ -845,10 +909,10 @@ class _AdvancedCalendar extends StatelessWidget {
               children: [
                 Text(_monthNames[month],
                     style: TextStyle(
-                      fontWeight: isSelected ||
-                              isCurrentMonth
-                          ? FontWeight.w700
-                          : FontWeight.w500,
+                      fontWeight:
+                          isSelected || isCurrentMonth
+                              ? FontWeight.w700
+                              : FontWeight.w500,
                       fontSize: 13,
                       color: isSelected
                           ? cs.primary
@@ -859,7 +923,8 @@ class _AdvancedCalendar extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 10,
                           color: cs.primary,
-                          fontWeight: FontWeight.w600)),
+                          fontWeight:
+                              FontWeight.w600)),
               ],
             ),
           ),
@@ -874,7 +939,6 @@ class _AdvancedCalendar extends StatelessWidget {
     final decade =
         (focusedMonth.year ~/ 10) * 10;
 
-    // Conta sessioni per anno
     final sessionsByYear = <int, int>{};
     for (final entry in sessionsByDate.entries) {
       final dt = DateTime.tryParse(entry.key);
@@ -937,10 +1001,10 @@ class _AdvancedCalendar extends StatelessWidget {
               children: [
                 Text('$year',
                     style: TextStyle(
-                      fontWeight: isSelected ||
-                              isCurrentYear
-                          ? FontWeight.w700
-                          : FontWeight.w500,
+                      fontWeight:
+                          isSelected || isCurrentYear
+                              ? FontWeight.w700
+                              : FontWeight.w500,
                       fontSize: 13,
                       color: isOutOfRange
                           ? cs.outline.withOpacity(0.4)
@@ -953,7 +1017,8 @@ class _AdvancedCalendar extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 10,
                           color: cs.primary,
-                          fontWeight: FontWeight.w600)),
+                          fontWeight:
+                              FontWeight.w600)),
               ],
             ),
           ),
@@ -962,8 +1027,6 @@ class _AdvancedCalendar extends StatelessWidget {
     );
   }
 }
-
-// ── Stats bar, DayCell, SessionTile ──
 
 class _CompactStatsBar extends StatelessWidget {
   final int totalSessions;
@@ -980,7 +1043,13 @@ class _CompactStatsBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     const dayLabels = [
-      'L', 'M', 'M', 'G', 'V', 'S', 'D'
+      'L',
+      'M',
+      'M',
+      'G',
+      'V',
+      'S',
+      'D'
     ];
 
     return Container(
@@ -1004,7 +1073,8 @@ class _CompactStatsBar extends StatelessWidget {
                       height: 1)),
               Text('allenamenti',
                   style: TextStyle(
-                      fontSize: 10, color: cs.outline)),
+                      fontSize: 10,
+                      color: cs.outline)),
             ],
           ),
           const SizedBox(width: 12),
@@ -1031,7 +1101,8 @@ class _CompactStatsBar extends StatelessWidget {
                       ? 'settimana'
                       : 'settimane',
                   style: TextStyle(
-                      fontSize: 10, color: cs.outline)),
+                      fontSize: 10,
+                      color: cs.outline)),
             ],
           ),
           const SizedBox(width: 12),
@@ -1156,8 +1227,9 @@ class _DayCellState extends State<_DayCell> {
                             Flexible(
                               child: Text(
                                   s.workoutName,
-                                  style: const TextStyle(
-                                      fontSize: 13),
+                                  style:
+                                      const TextStyle(
+                                          fontSize: 13),
                                   overflow: TextOverflow
                                       .ellipsis),
                             ),
@@ -1234,16 +1306,17 @@ class _DayCellState extends State<_DayCell> {
                   ? Border.all(
                       color: cs.primary, width: 1.5)
                   : null,
-              boxShadow: _hovered && widget.hasSession
-                  ? [
-                      BoxShadow(
-                        color:
-                            cs.primary.withOpacity(0.4),
-                        blurRadius: 8,
-                        spreadRadius: 2,
-                      )
-                    ]
-                  : null,
+              boxShadow:
+                  _hovered && widget.hasSession
+                      ? [
+                          BoxShadow(
+                            color: cs.primary
+                                .withOpacity(0.4),
+                            blurRadius: 8,
+                            spreadRadius: 2,
+                          )
+                        ]
+                      : null,
             ),
             child: Center(
               child: Text('${widget.day}',
@@ -1264,11 +1337,13 @@ class _DayCellState extends State<_DayCell> {
 
 class _SessionTile extends StatelessWidget {
   final HiveSession session;
+  final HiveWorkout? workout;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _SessionTile({
     required this.session,
+    required this.workout,
     required this.onTap,
     required this.onDelete,
   });
@@ -1276,8 +1351,19 @@ class _SessionTile extends StatelessWidget {
   String _formatDate(String iso) {
     final dt = DateTime.parse(iso);
     const months = [
-      '', 'Gen', 'Feb', 'Mar', 'Apr', 'Mag',
-      'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
+      '',
+      'Gen',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mag',
+      'Giu',
+      'Lug',
+      'Ago',
+      'Set',
+      'Ott',
+      'Nov',
+      'Dic'
     ];
     return '${dt.day} ${months[dt.month]} ${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
@@ -1298,8 +1384,8 @@ class _SessionTile extends StatelessWidget {
         .where((s) => s.completed)
         .fold<Map<String, HiveSessionSet>>(
             {},
-            (map, s) =>
-                map..putIfAbsent(s.exerciseName, () => s))
+            (map, s) => map
+              ..putIfAbsent(s.exerciseName, () => s))
         .values
         .take(2)
         .toList();
@@ -1315,12 +1401,15 @@ class _SessionTile extends StatelessWidget {
             crossAxisAlignment:
                 CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                backgroundColor: cs.primaryContainer,
-                radius: 20,
-                child: Icon(Icons.fitness_center,
-                    color: cs.onPrimaryContainer,
-                    size: 18),
+              // Icona scheda
+              WorkoutAvatar(
+                iconId: workout?.iconId,
+                iconColorIndex: workout?.iconColorIndex,
+                customImagePath:
+                    workout?.customImagePath,
+                size: 44,
+                iconSize: 22,
+                borderRadius: 11,
               ),
               const SizedBox(width: 12),
               Expanded(
