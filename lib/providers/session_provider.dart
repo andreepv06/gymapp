@@ -108,7 +108,6 @@ class SessionProvider extends ChangeNotifier {
   final Map<String, int> _currentRound = {};
   final Map<String, int> _circuitTotalRounds = {};
 
-  // Box per persistenza sessione in pausa
   Box? _pauseBox;
   static const _pauseBoxName = 'paused_session';
   static const _pauseKey = 'current';
@@ -180,15 +179,69 @@ class SessionProvider extends ChangeNotifier {
     }
   }
 
-  /// Inizializza la box di persistenza
+  /// Riordina la lista piatta degli esercizi della sessione
+  /// (usato dal drag & drop della sessione attiva)
+  void reorderSessionExercisesFlat(
+      List<SessionExercise> newOrder) {
+    _sessionExercises.clear();
+    _sessionExercises.addAll(newOrder);
+    _savePausedState();
+    notifyListeners();
+  }
+
+  /// Riordina esercizi dentro un circuito — propaga a TUTTI i round
+  void reorderCircuitExercises(
+      String circuitId, List<SessionExercise> reordered) {
+    // Trova gli exerciseKey nel nuovo ordine
+    final newKeyOrder =
+        reordered.map((e) => e.exerciseKey).toList();
+
+    // Aggiorna l'ordine in _sessionExercises
+    final circuitExes = _sessionExercises
+        .where((e) => e.circuitId == circuitId)
+        .toList();
+
+    // Rimuovi vecchi esercizi del circuito e reinserisci nel nuovo ordine
+    _sessionExercises
+        .removeWhere((e) => e.circuitId == circuitId);
+
+    // Trova la posizione di inserimento (dove erano prima)
+    // Per semplicità li appendiamo in coda dopo gli altri
+    final insertIdx = _sessionExercises
+        .indexWhere((e) => e.circuitId == circuitId);
+
+    for (final key in newKeyOrder) {
+      try {
+        final ex = circuitExes
+            .firstWhere((e) => e.exerciseKey == key);
+        _sessionExercises.add(ex);
+      } catch (_) {}
+    }
+
+    // Propaga a TUTTI i round del circuito (solo ordine, non dati)
+    final rounds = _circuitRoundSets[circuitId];
+    if (rounds != null) {
+      for (int r = 0; r < rounds.length; r++) {
+        final oldRound =
+            Map<dynamic, List<ActiveSet>>.from(rounds[r]);
+        final newRound = <dynamic, List<ActiveSet>>{};
+        for (final key in newKeyOrder) {
+          newRound[key] = oldRound[key] ?? [];
+        }
+        rounds[r] = newRound;
+      }
+    }
+
+    _savePausedState();
+    notifyListeners();
+  }
+
   Future<void> initPauseBox() async {
     if (_pauseBox == null || !_pauseBox!.isOpen) {
-      _pauseBox =
-          await Hive.openBox(_pauseBoxName);
+      _pauseBox = await Hive.openBox(_pauseBoxName);
     }
   }
 
-  /// Tenta di recuperare una sessione salvata
   Future<bool> tryRestoreSession() async {
     await initPauseBox();
     final raw = _pauseBox?.get(_pauseKey);
@@ -203,22 +256,19 @@ class SessionProvider extends ChangeNotifier {
           ? DateTime.parse(data['startTime'] as String)
           : null;
 
-      // Ripristina esercizi
       _sessionExercises.clear();
       for (final e
           in (data['exercises'] as List)) {
-        _sessionExercises.add(
-            SessionExercise.fromJson(
-                e as Map<String, dynamic>));
+        _sessionExercises.add(SessionExercise.fromJson(
+            e as Map<String, dynamic>));
       }
 
-      // Ripristina set liberi
       _exerciseSets.clear();
       final setsData =
           data['exerciseSets'] as Map<String, dynamic>;
       for (final entry in setsData.entries) {
-        final key = int.tryParse(entry.key) ??
-            entry.key;
+        final key =
+            int.tryParse(entry.key) ?? entry.key;
         final setsList = (entry.value as List)
             .map((s) => ActiveSet.fromJson(
                 s as Map<String, dynamic>))
@@ -226,7 +276,6 @@ class SessionProvider extends ChangeNotifier {
         _exerciseSets[key] = setsList;
       }
 
-      // Ripristina circuiti
       _circuitRoundSets.clear();
       _currentRound.clear();
       _circuitTotalRounds.clear();
@@ -240,9 +289,10 @@ class SessionProvider extends ChangeNotifier {
           final rounds =
               <Map<dynamic, List<ActiveSet>>>[];
           for (final roundData in roundsList) {
-            final round = <dynamic, List<ActiveSet>>{};
-            for (final exEntry
-                in (roundData as Map<String, dynamic>)
+            final round =
+                <dynamic, List<ActiveSet>>{};
+            for (final exEntry in
+                (roundData as Map<String, dynamic>)
                     .entries) {
               final exKey =
                   int.tryParse(exEntry.key) ??
@@ -256,8 +306,7 @@ class SessionProvider extends ChangeNotifier {
             rounds.add(round);
           }
           _circuitRoundSets[circuitId] = rounds;
-          _circuitTotalRounds[circuitId] =
-              rounds.length;
+          _circuitTotalRounds[circuitId] = rounds.length;
         }
       }
 
@@ -269,14 +318,13 @@ class SessionProvider extends ChangeNotifier {
         }
       }
 
-      // Recupera la scheda
       final workoutKey = data['workoutKey'];
       if (workoutKey != null) {
         final workouts =
             HiveDatabase.instance.getWorkouts();
         try {
-          _currentWorkout = workouts.firstWhere(
-              (w) => w.key == workoutKey);
+          _currentWorkout = workouts
+              .firstWhere((w) => w.key == workoutKey);
         } catch (_) {}
       }
 
@@ -289,7 +337,6 @@ class SessionProvider extends ChangeNotifier {
     }
   }
 
-  /// Salva lo stato corrente per il recupero
   Future<void> _savePausedState() async {
     if (currentSessionKey == null) return;
     await initPauseBox();
@@ -306,9 +353,7 @@ class SessionProvider extends ChangeNotifier {
         final roundData = <String, dynamic>{};
         for (final exEntry in round.entries) {
           roundData[exEntry.key.toString()] =
-              exEntry.value
-                  .map((s) => s.toJson())
-                  .toList();
+              exEntry.value.map((s) => s.toJson()).toList();
         }
         return roundData;
       }).toList();
@@ -335,7 +380,6 @@ class SessionProvider extends ChangeNotifier {
     await _pauseBox?.put(_pauseKey, jsonEncode(data));
   }
 
-  /// Cancella lo stato salvato
   Future<void> _clearPausedState() async {
     await initPauseBox();
     await _pauseBox?.delete(_pauseKey);
@@ -348,7 +392,6 @@ class SessionProvider extends ChangeNotifier {
     HiveWorkout workout, {
     List<HiveCircuit> circuits = const [],
   }) async {
-    // Se c'è già una sessione attiva per questa scheda, non ricreare
     if (currentSessionKey != null &&
         _currentWorkout?.key == workoutKey) {
       return;
@@ -381,8 +424,7 @@ class SessionProvider extends ChangeNotifier {
     for (final ex in exercises) {
       final lastSets = HiveDatabase.instance
           .getLastExerciseSets(ex.exerciseKey);
-      final Map<int, HiveSessionSet> lastBySetNumber =
-          {};
+      final Map<int, HiveSessionSet> lastBySetNumber = {};
       for (final s in lastSets) {
         lastBySetNumber[s.setNumber] = s;
       }
@@ -531,8 +573,7 @@ class SessionProvider extends ChangeNotifier {
       if (rounds == null) return;
       for (int r = 0; r < totalRounds; r++) {
         final sets = rounds[r][exerciseKey] ?? [];
-        final last =
-            sets.isNotEmpty ? sets.last : null;
+        final last = sets.isNotEmpty ? sets.last : null;
         sets.add(ActiveSet(
           setNumber: sets.length + 1,
           weight: last?.weight ?? 0,
@@ -647,8 +688,8 @@ class SessionProvider extends ChangeNotifier {
   Future<void> updateExerciseNote(
       dynamic exerciseKey, String note) async {
     try {
-      final ex = _sessionExercises.firstWhere(
-          (e) => e.exerciseKey == exerciseKey);
+      final ex = _sessionExercises
+          .firstWhere((e) => e.exerciseKey == exerciseKey);
       ex.sessionNote = note.isEmpty ? null : note;
     } catch (_) {}
 
@@ -673,8 +714,8 @@ class SessionProvider extends ChangeNotifier {
 
     SessionExercise? ex;
     try {
-      ex = _sessionExercises.firstWhere(
-          (e) => e.exerciseKey == exerciseKey);
+      ex = _sessionExercises
+          .firstWhere((e) => e.exerciseKey == exerciseKey);
     } catch (_) {}
     final targetRest = ex?.restSeconds;
 
@@ -754,7 +795,8 @@ class SessionProvider extends ChangeNotifier {
       if (rounds == null) continue;
 
       for (int r = 0; r < totalRounds; r++) {
-        final sets = rounds[r][ex.exerciseKey] ?? [];
+        final sets =
+            rounds[r][ex.exerciseKey] ?? [];
         for (final set in sets) {
           await HiveDatabase.instance
               .addSessionSet(HiveSessionSet(

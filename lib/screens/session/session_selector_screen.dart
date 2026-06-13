@@ -8,6 +8,7 @@ import '../../main.dart';
 import '../../widgets/glass_button.dart';
 import '../../widgets/glass_action_buttons.dart';
 import '../../widgets/glass_bottom_sheet.dart';
+import '../../widgets/workout_icon.dart';
 import 'active_session_screen.dart';
 
 class SessionSelectorScreen extends StatefulWidget {
@@ -60,14 +61,12 @@ class _SessionSelectorScreenState
                       color: cs.onSecondaryContainer),
                 ),
                 const SizedBox(height: 20),
-                Text(
-                  'Nessuna scheda disponibile',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(
-                          fontWeight: FontWeight.w700),
-                ),
+                Text('Nessuna scheda disponibile',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(
+                            fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 Text(
                   'Crea prima una scheda\nper iniziare una sessione',
@@ -149,11 +148,9 @@ class _SessionSelectorScreenState
                           confirmLabel: 'Abbandona',
                           confirmColor: Colors.red,
                           onCancel: () =>
-                              Navigator.pop(context,
-                                  false),
+                              Navigator.pop(context, false),
                           onConfirm: () =>
-                              Navigator.pop(
-                                  context, true),
+                              Navigator.pop(context, true),
                         ),
                       ],
                     ),
@@ -216,7 +213,6 @@ class _SessionSelectorScreenState
   }
 }
 
-/// Banner mostrato quando c'è una sessione in pausa
 class _PausedSessionBanner extends StatelessWidget {
   final HiveWorkout workout;
   final VoidCallback onResume;
@@ -255,9 +251,15 @@ class _PausedSessionBanner extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(Icons.pause_circle_filled,
-                    color: cs.primary, size: 28),
-                const SizedBox(width: 12),
+                WorkoutAvatar(
+                  iconId: workout.iconId,
+                  iconColorIndex: workout.iconColorIndex,
+                  customImagePath: workout.customImagePath,
+                  size: 36,
+                  iconSize: 18,
+                  borderRadius: 9,
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment:
@@ -374,17 +376,13 @@ class _WorkoutSessionCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  borderRadius:
-                      BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.list_alt,
-                    color: cs.onPrimaryContainer,
-                    size: 24),
+              WorkoutAvatar(
+                iconId: workout.iconId,
+                iconColorIndex: workout.iconColorIndex,
+                customImagePath: workout.customImagePath,
+                size: 48,
+                iconSize: 24,
+                borderRadius: 12,
               ),
               const SizedBox(width: 16),
               Expanded(

@@ -7,7 +7,25 @@ import '../../providers/exercise_provider.dart';
 import '../../providers/workout_provider.dart';
 import '../../widgets/glass_action_buttons.dart';
 import '../../widgets/glass_bottom_sheet.dart';
+import '../../widgets/workout_icon.dart';
 import '../../db/hive_database.dart';
+
+// ── Tipi per lista piatta drag & drop ──
+enum _SessionItemType { exercise, circuit }
+
+class _SessionItem {
+  final _SessionItemType type;
+  final dynamic data; // SessionExercise o String (circuitId)
+  _SessionItem({required this.type, required this.data});
+
+  String get key {
+    if (type == _SessionItemType.exercise) {
+      return 'ex_${(data as SessionExercise).exerciseKey}';
+    } else {
+      return 'circuit_${data as String}';
+    }
+  }
+}
 
 class ActiveSessionScreen extends StatefulWidget {
   final HiveWorkout workout;
@@ -23,6 +41,10 @@ class _ActiveSessionScreenState
     extends State<ActiveSessionScreen> {
   bool _started = false;
 
+  // Lista piatta locale per drag & drop stabile
+  List<_SessionItem> _items = [];
+  bool _isDragging = false;
+
   @override
   void initState() {
     super.initState();
@@ -32,8 +54,8 @@ class _ActiveSessionScreenState
   Future<void> _startSession() async {
     final exercises =
         context.read<WorkoutProvider>().currentExercises;
-    final circuits = HiveDatabase.instance
-        .getCircuits(widget.workout.key);
+    final circuits =
+        HiveDatabase.instance.getCircuits(widget.workout.key);
     await context.read<SessionProvider>().startSession(
           exercises,
           widget.workout.key,
@@ -41,7 +63,70 @@ class _ActiveSessionScreenState
           widget.workout,
           circuits: circuits,
         );
+    _rebuildItems();
     if (mounted) setState(() => _started = true);
+  }
+
+  void _rebuildItems() {
+    if (!mounted) return;
+    final session = context.read<SessionProvider>();
+    final exercises = session.sessionExercises;
+
+    final freeEx =
+        exercises.where((e) => !e.isInCircuit).toList();
+    final circuitIds = exercises
+        .where((e) => e.isInCircuit)
+        .map((e) => e.circuitId!)
+        .toSet()
+        .toList();
+
+    final items = <_SessionItem>[];
+    for (final ex in freeEx) {
+      items.add(_SessionItem(
+          type: _SessionItemType.exercise, data: ex));
+    }
+    for (final cid in circuitIds) {
+      items.add(_SessionItem(
+          type: _SessionItemType.circuit, data: cid));
+    }
+
+    setState(() {
+      _items = items;
+      _isDragging = false;
+    });
+  }
+
+  void _onReorder(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex--;
+    if (oldIndex == newIndex) return;
+
+    setState(() {
+      final item = _items.removeAt(oldIndex);
+      _items.insert(newIndex, item);
+      _isDragging = false;
+    });
+
+    // Propaga il nuovo ordine al provider
+    final session = context.read<SessionProvider>();
+    final exercises = session.sessionExercises;
+
+    // Costruisci il nuovo ordine basato su _items
+    final newOrder = <SessionExercise>[];
+    for (final item in _items) {
+      if (item.type == _SessionItemType.exercise) {
+        final ex = item.data as SessionExercise;
+        newOrder.add(ex);
+      } else {
+        final cid = item.data as String;
+        // Aggiungi tutti gli esercizi del circuito
+        final circuitExes = exercises
+            .where((e) => e.circuitId == cid)
+            .toList();
+        newOrder.addAll(circuitExes);
+      }
+    }
+
+    session.reorderSessionExercisesFlat(newOrder);
   }
 
   Future<bool> _onWillPop() async {
@@ -62,8 +147,7 @@ class _ActiveSessionScreenState
           children: [
             Row(
               children: [
-                Icon(
-                    Icons.pause_circle_outline,
+                Icon(Icons.pause_circle_outline,
                     color: Theme.of(context)
                         .colorScheme
                         .primary,
@@ -74,8 +158,7 @@ class _ActiveSessionScreenState
                         .textTheme
                         .titleMedium
                         ?.copyWith(
-                            fontWeight:
-                                FontWeight.w700)),
+                            fontWeight: FontWeight.w700)),
               ],
             ),
             const SizedBox(height: 12),
@@ -94,13 +177,12 @@ class _ActiveSessionScreenState
                   onPressed: () =>
                       Navigator.pop(context, 'finish'),
                   backgroundColor: Colors.green,
-                  child:
-                      const Text('Termina e salva'),
+                  child: const Text('Termina e salva'),
                 ),
                 const SizedBox(height: 10),
                 GlassOutlinedButton(
-                  onPressed: () => Navigator.pop(
-                      context, 'abandon'),
+                  onPressed: () =>
+                      Navigator.pop(context, 'abandon'),
                   foregroundColor: Colors.red,
                   child: const Text(
                       'Abbandona senza salvare'),
@@ -156,8 +238,7 @@ class _ActiveSessionScreenState
                         .textTheme
                         .titleMedium
                         ?.copyWith(
-                            fontWeight:
-                                FontWeight.w700)),
+                            fontWeight: FontWeight.w700)),
               ],
             ),
             const SizedBox(height: 12),
@@ -183,8 +264,7 @@ class _ActiveSessionScreenState
     await context.read<SessionProvider>().finishSession();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Sessione salvata!')),
+        const SnackBar(content: Text('Sessione salvata!')),
       );
       Navigator.pop(context);
     }
@@ -206,31 +286,44 @@ class _ActiveSessionScreenState
         ],
         child: const _AddMultipleExercisesSheet(),
       ),
-    );
+    ).then((_) => _rebuildItems());
   }
 
   @override
   Widget build(BuildContext context) {
     if (!_started) {
       return const Scaffold(
-          body: Center(
-              child: CircularProgressIndicator()));
+          body:
+              Center(child: CircularProgressIndicator()));
     }
 
     final sessionProvider =
         context.watch<SessionProvider>();
+
+    // Aggiorna items dal provider se non in drag
+    if (!_isDragging) {
+      final exercises = sessionProvider.sessionExercises;
+      final freeEx =
+          exercises.where((e) => !e.isInCircuit).toList();
+      final circuitIds = exercises
+          .where((e) => e.isInCircuit)
+          .map((e) => e.circuitId!)
+          .toSet()
+          .toList();
+
+      _items = [];
+      for (final ex in freeEx) {
+        _items.add(_SessionItem(
+            type: _SessionItemType.exercise, data: ex));
+      }
+      for (final cid in circuitIds) {
+        _items.add(_SessionItem(
+            type: _SessionItemType.circuit, data: cid));
+      }
+    }
+
     final exercises = sessionProvider.sessionExercises;
     final exerciseSets = sessionProvider.exerciseSets;
-
-    // Raggruppa esercizi per circuito
-    final freeExercises = exercises
-        .where((e) => !e.isInCircuit)
-        .toList();
-    final circuitIds = exercises
-        .where((e) => e.isInCircuit)
-        .map((e) => e.circuitId!)
-        .toSet()
-        .toList();
 
     final allSets =
         exerciseSets.values.expand((s) => s).toList();
@@ -249,7 +342,23 @@ class _ActiveSessionScreenState
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.workout.name),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              WorkoutAvatar(
+                iconId: widget.workout.iconId,
+                iconColorIndex:
+                    widget.workout.iconColorIndex,
+                customImagePath:
+                    widget.workout.customImagePath,
+                size: 28,
+                iconSize: 14,
+                borderRadius: 7,
+              ),
+              const SizedBox(width: 8),
+              Text(widget.workout.name),
+            ],
+          ),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios),
             onPressed: () async {
@@ -281,8 +390,8 @@ class _ActiveSessionScreenState
         body: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  16, 12, 16, 4),
+              padding:
+                  const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Row(
                 children: [
                   Expanded(
@@ -322,73 +431,75 @@ class _ActiveSessionScreenState
                     child: child,
                   ),
                 ),
-                onReorder: (oldIndex, newIndex) {
-                  if (newIndex > oldIndex) newIndex--;
-                  sessionProvider
-                      .reorderSessionExercises(
-                          oldIndex, newIndex);
-                },
-                children: [
-                  // Esercizi liberi
-                  ...freeExercises
-                      .asMap()
-                      .entries
-                      .map((e) {
-                    final ex = e.value;
+                onReorder: _onReorder,
+                children: _items
+                    .asMap()
+                    .entries
+                    .map((e) {
+                  final index = e.key;
+                  final item = e.value;
+
+                  if (item.type ==
+                      _SessionItemType.exercise) {
+                    final ex =
+                        item.data as SessionExercise;
                     final sets =
-                        exerciseSets[ex.exerciseKey] ?? [];
+                        exerciseSets[ex.exerciseKey] ??
+                            [];
                     return ReorderableDelayedDragStartListener(
-                      key: ValueKey(
-                          'free_${ex.exerciseKey}'),
-                      index: e.key,
+                      key: ValueKey(item.key),
+                      index: index,
                       child: _ExerciseSessionCard(
                         sessionExercise: ex,
                         sets: sets,
-                        onToggle: (index) =>
+                        onToggle: (i) =>
                             sessionProvider.toggleSet(
-                                ex.exerciseKey, index),
-                        onUpdate: (index, weight, reps) =>
+                                ex.exerciseKey, i),
+                        onUpdate: (i, w, r) =>
                             sessionProvider.updateSet(
-                                ex.exerciseKey,
-                                index,
-                                weight,
-                                reps),
-                        onAddSet: () => sessionProvider
-                            .addSetToExercise(
-                                ex.exerciseKey),
-                        onRemoveSet: () => sessionProvider
-                            .removeSetFromExercise(
-                                ex.exerciseKey),
-                        onRemoveExercise: () => sessionProvider
-                            .removeExerciseFromSession(
-                                ex.exerciseKey),
+                                ex.exerciseKey, i, w, r),
+                        onAddSet: () =>
+                            sessionProvider
+                                .addSetToExercise(
+                                    ex.exerciseKey),
+                        onRemoveSet: () =>
+                            sessionProvider
+                                .removeSetFromExercise(
+                                    ex.exerciseKey),
+                        onRemoveExercise: () {
+                          sessionProvider
+                              .removeExerciseFromSession(
+                                  ex.exerciseKey);
+                          _rebuildItems();
+                        },
                         onEditNote: (note) =>
-                            sessionProvider.updateExerciseNote(
-                                ex.exerciseKey, note),
+                            sessionProvider
+                                .updateExerciseNote(
+                                    ex.exerciseKey, note),
                       ),
                     );
-                  }),
-            
-                  // Circuiti
-                  ...circuitIds
-                      .asMap()
-                      .entries
-                      .map((e) {
-                    final circuitId = e.value;
+                  } else {
+                    final circuitId =
+                        item.data as String;
                     final circuitExercises = exercises
                         .where(
                             (ex) => ex.circuitId == circuitId)
                         .toList();
                     return ReorderableDelayedDragStartListener(
-                      key: ValueKey('circuit_$circuitId'),
-                      index: freeExercises.length + e.key,
+                      key: ValueKey(item.key),
+                      index: index,
                       child: _CircuitSessionBlock(
                         circuitId: circuitId,
                         exercises: circuitExercises,
+                        onReorderExercises: (reordered) {
+                          sessionProvider
+                              .reorderCircuitExercises(
+                                  circuitId, reordered);
+                        },
                       ),
                     );
-                  }),
-                ],
+                  }
+                }).toList(),
               ),
             ),
           ],
@@ -398,15 +509,18 @@ class _ActiveSessionScreenState
   }
 }
 
-/// Blocco circuito con navigazione tra round
+// ── Blocco circuito con drag & drop interno ──
 class _CircuitSessionBlock extends StatelessWidget {
   final String circuitId;
   final List<SessionExercise> exercises;
+  final void Function(List<SessionExercise>)
+      onReorderExercises;
 
   const _CircuitSessionBlock({
     super.key,
     required this.circuitId,
     required this.exercises,
+    required this.onReorderExercises,
   });
 
   @override
@@ -416,8 +530,10 @@ class _CircuitSessionBlock extends StatelessWidget {
     final isDark =
         Theme.of(context).brightness == Brightness.dark;
 
-    final currentRound = session.getCurrentRound(circuitId);
-    final totalRounds = session.getTotalRounds(circuitId);
+    final currentRound =
+        session.getCurrentRound(circuitId);
+    final totalRounds =
+        session.getTotalRounds(circuitId);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -453,8 +569,7 @@ class _CircuitSessionBlock extends StatelessWidget {
                         color: cs.tertiary,
                         fontSize: 14)),
                 const Spacer(),
-                // Freccia sinistra
-                _RoundNavButton(
+                _RoundNavBtn(
                   icon: Icons.chevron_left,
                   enabled: currentRound > 0,
                   color: cs.tertiary,
@@ -462,7 +577,6 @@ class _CircuitSessionBlock extends StatelessWidget {
                       session.prevRound(circuitId),
                 ),
                 const SizedBox(width: 8),
-                // Indicatore round
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 4),
@@ -481,11 +595,9 @@ class _CircuitSessionBlock extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Freccia destra
-                _RoundNavButton(
+                _RoundNavBtn(
                   icon: Icons.chevron_right,
-                  enabled:
-                      currentRound < totalRounds - 1,
+                  enabled: currentRound < totalRounds - 1,
                   color: cs.tertiary,
                   onTap: () =>
                       session.nextRound(circuitId),
@@ -494,47 +606,88 @@ class _CircuitSessionBlock extends StatelessWidget {
             ),
           ),
 
-          // Esercizi del round corrente
+          // Esercizi del round con drag & drop interno
           Padding(
             padding: const EdgeInsets.all(8),
-            child: Column(
-              children: exercises.map((ex) {
-                final sets = session.getCircuitSets(
-                    circuitId, ex.exerciseKey);
-                return _ExerciseSessionCard(
-                  key: ValueKey(
-                    '${ex.exerciseKey}_${circuitId}_$currentRound'),
-                  sessionExercise: ex,
-                  sets: sets,
-                  onToggle: (index) =>
-                      session.toggleSet(
-                          ex.exerciseKey, index,
-                          circuitId: circuitId),
-                  onUpdate: (index, weight, reps) =>
-                      session.updateSet(
-                          ex.exerciseKey,
-                          index,
-                          weight,
-                          reps,
-                          circuitId: circuitId),
-                  onAddSet: () =>
-                      session.addSetToExercise(
-                          ex.exerciseKey,
-                          circuitId: circuitId),
-                  onRemoveSet: () =>
-                      session.removeSetFromExercise(
-                          ex.exerciseKey,
-                          circuitId: circuitId),
-                  onRemoveExercise: () => session
-                      .removeExerciseFromSession(
-                          ex.exerciseKey),
-                  onEditNote: (note) =>
-                      session.updateExerciseNote(
-                          ex.exerciseKey, note),
-                  isInCircuit: true,
-                );
-              }).toList(),
-            ),
+            child: exercises.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text('Nessun esercizio',
+                        style: TextStyle(
+                            color: cs.outline,
+                            fontStyle: FontStyle.italic)),
+                  )
+                : ReorderableListView(
+                    shrinkWrap: true,
+                    physics:
+                        const NeverScrollableScrollPhysics(),
+                    buildDefaultDragHandles: false,
+                    proxyDecorator:
+                        (child, index, animation) =>
+                            AnimatedBuilder(
+                      animation: animation,
+                      builder: (_, __) => Material(
+                        elevation: 6,
+                        borderRadius:
+                            BorderRadius.circular(14),
+                        child: child,
+                      ),
+                    ),
+                    onReorder: (oldIndex, newIndex) {
+                      if (newIndex > oldIndex)
+                        newIndex--;
+                      final reordered =
+                          List<SessionExercise>.from(
+                              exercises);
+                      final item =
+                          reordered.removeAt(oldIndex);
+                      reordered.insert(newIndex, item);
+                      onReorderExercises(reordered);
+                    },
+                    children: exercises
+                        .asMap()
+                        .entries
+                        .map((e) {
+                      final ex = e.value;
+                      final sets = session.getCircuitSets(
+                          circuitId, ex.exerciseKey);
+                      return ReorderableDelayedDragStartListener(
+                        key: ValueKey(
+                            '${ex.exerciseKey}_$circuitId'),
+                        index: e.key,
+                        child: _ExerciseSessionCard(
+                          key: ValueKey(
+                              '${ex.exerciseKey}_${circuitId}_$currentRound'),
+                          sessionExercise: ex,
+                          sets: sets,
+                          isInCircuit: true,
+                          onToggle: (i) =>
+                              session.toggleSet(
+                                  ex.exerciseKey, i,
+                                  circuitId: circuitId),
+                          onUpdate: (i, w, r) =>
+                              session.updateSet(
+                                  ex.exerciseKey, i, w, r,
+                                  circuitId: circuitId),
+                          onAddSet: () =>
+                              session.addSetToExercise(
+                                  ex.exerciseKey,
+                                  circuitId: circuitId),
+                          onRemoveSet: () =>
+                              session.removeSetFromExercise(
+                                  ex.exerciseKey,
+                                  circuitId: circuitId),
+                          onRemoveExercise: () =>
+                              session
+                                  .removeExerciseFromSession(
+                                      ex.exerciseKey),
+                          onEditNote: (note) =>
+                              session.updateExerciseNote(
+                                  ex.exerciseKey, note),
+                        ),
+                      );
+                    }).toList(),
+                  ),
           ),
         ],
       ),
@@ -542,13 +695,13 @@ class _CircuitSessionBlock extends StatelessWidget {
   }
 }
 
-class _RoundNavButton extends StatelessWidget {
+class _RoundNavBtn extends StatelessWidget {
   final IconData icon;
   final bool enabled;
   final Color color;
   final VoidCallback onTap;
 
-  const _RoundNavButton({
+  const _RoundNavBtn({
     required this.icon,
     required this.enabled,
     required this.color,
@@ -573,13 +726,10 @@ class _RoundNavButton extends StatelessWidget {
                 : color.withOpacity(0.15),
           ),
         ),
-        child: Icon(
-          icon,
-          color: enabled
-              ? color
-              : color.withOpacity(0.3),
-          size: 20,
-        ),
+        child: Icon(icon,
+            color:
+                enabled ? color : color.withOpacity(0.3),
+            size: 20),
       ),
     );
   }
@@ -630,8 +780,8 @@ class _AddMultipleExercisesSheetState
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(
-                vertical: 12),
+            padding:
+                const EdgeInsets.symmetric(vertical: 12),
             child: const GlassSheetHandle(),
           ),
           Padding(
@@ -653,8 +803,7 @@ class _AddMultipleExercisesSheetState
                   GlassTextButton(
                     onPressed: () => setState(
                         () => _selected.clear()),
-                    child: const Text(
-                        'Deseleziona tutto'),
+                    child: const Text('Deseleziona tutto'),
                   ),
               ],
             ),
@@ -716,8 +865,7 @@ class _AddMultipleExercisesSheetState
                           onChanged: (_) {
                             setState(() {
                               if (isSelected) {
-                                _selected
-                                    .remove(ex.key);
+                                _selected.remove(ex.key);
                               } else {
                                 _selected.add(ex.key);
                               }
@@ -760,19 +908,17 @@ class _AddMultipleExercisesSheetState
                 onPressed: _loading
                     ? null
                     : () async {
-                        setState(
-                            () => _loading = true);
+                        setState(() => _loading = true);
                         final allEx = context
                             .read<ExerciseProvider>()
                             .exercises;
                         for (final key in _selected) {
                           try {
-                            final ex =
-                                allEx.firstWhere(
-                                    (e) =>
-                                        e.key == key);
-                            await context.read<SessionProvider>()
-                              .addExerciseToSession(
+                            final ex = allEx.firstWhere(
+                                (e) => e.key == key);
+                            await context
+                                .read<SessionProvider>()
+                                .addExerciseToSession(
                                   exerciseKey: ex.key,
                                   exerciseName: ex.name,
                                   muscleGroup:
@@ -968,9 +1114,8 @@ class _ExerciseSessionCard extends StatelessWidget {
                       ),
                     ),
                     Container(
-                      padding:
-                          const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: allDone
                             ? cs.primaryContainer
@@ -995,12 +1140,10 @@ class _ExerciseSessionCard extends StatelessWidget {
                     onTap: () =>
                         _showNoteDialog(context),
                     child: Container(
-                      margin: const EdgeInsets.only(
-                          top: 8),
-                      padding:
-                          const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6),
+                      margin:
+                          const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: cs.tertiaryContainer
                             .withOpacity(0.5),
@@ -1015,8 +1158,7 @@ class _ExerciseSessionCard extends StatelessWidget {
                       child: Row(
                         children: [
                           Icon(
-                              Icons
-                                  .sticky_note_2_outlined,
+                              Icons.sticky_note_2_outlined,
                               size: 14,
                               color: cs.tertiary),
                           const SizedBox(width: 6),
@@ -1035,7 +1177,6 @@ class _ExerciseSessionCard extends StatelessWidget {
                     ),
                   ),
                 const SizedBox(height: 10),
-                // Header colonne
                 Row(
                   children: [
                     const SizedBox(width: 28),
@@ -1076,19 +1217,19 @@ class _ExerciseSessionCard extends StatelessWidget {
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    _MiniGlassButton(
+                    _MiniBtn(
                       label: '– Serie',
                       color: Colors.red,
                       onTap: sets.length > 1
                           ? onRemoveSet
                           : null,
                     ),
-                    _MiniGlassButton(
+                    _MiniBtn(
                       label: '+ Serie',
                       color: cs.primary,
                       onTap: onAddSet,
                     ),
-                    _MiniGlassButton(
+                    _MiniBtn(
                       label: hasNote
                           ? 'Modifica nota'
                           : 'Nota',
@@ -1096,7 +1237,7 @@ class _ExerciseSessionCard extends StatelessWidget {
                       onTap: () =>
                           _showNoteDialog(context),
                     ),
-                    _MiniGlassButton(
+                    _MiniBtn(
                       label: 'Rimuovi',
                       color: Colors.red,
                       onTap: () {
@@ -1104,8 +1245,7 @@ class _ExerciseSessionCard extends StatelessWidget {
                           context: context,
                           child: Padding(
                             padding:
-                                const EdgeInsets.all(
-                                    24),
+                                const EdgeInsets.all(24),
                             child: Column(
                               mainAxisSize:
                                   MainAxisSize.min,
@@ -1126,12 +1266,9 @@ class _ExerciseSessionCard extends StatelessWidget {
                                 const SizedBox(
                                     height: 20),
                                 GlassDialogActions(
-                                  cancelLabel:
-                                      'Annulla',
-                                  confirmLabel:
-                                      'Rimuovi',
-                                  confirmColor:
-                                      Colors.red,
+                                  cancelLabel: 'Annulla',
+                                  confirmLabel: 'Rimuovi',
+                                  confirmColor: Colors.red,
                                   onCancel: () =>
                                       Navigator.pop(
                                           context),
@@ -1174,12 +1311,12 @@ class _ExerciseSessionCard extends StatelessWidget {
   }
 }
 
-class _MiniGlassButton extends StatelessWidget {
+class _MiniBtn extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback? onTap;
 
-  const _MiniGlassButton({
+  const _MiniBtn({
     required this.label,
     required this.color,
     this.onTap,
@@ -1211,19 +1348,17 @@ class _MiniGlassButton extends StatelessWidget {
             width: 1,
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: isDisabled
-                ? Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withOpacity(0.3)
-                : color,
-          ),
-        ),
+        child: Text(label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isDisabled
+                  ? Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withOpacity(0.3)
+                  : color,
+            )),
       ),
     );
   }
@@ -1267,25 +1402,20 @@ class _SetRowState extends State<_SetRow> {
         text: _currentReps.toString());
   }
 
-  // FIX: aggiorna i controller quando cambiano i dati
-  // (es. navigazione tra round del circuito)
   @override
   void didUpdateWidget(_SetRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.set != widget.set) {
       _currentReps =
           widget.set.lastReps ?? widget.set.reps;
-
       final newWeight = widget.set.weight > 0
           ? (widget.set.weight % 1 == 0
               ? widget.set.weight.toInt().toString()
               : widget.set.weight.toString())
           : '';
-
       if (_weightCtrl.text != newWeight) {
         _weightCtrl.text = newWeight;
       }
-
       final newReps = _currentReps.toString();
       if (_repsCtrl.text != newReps) {
         _repsCtrl.text = newReps;
@@ -1406,8 +1536,7 @@ class _SetRowState extends State<_SetRow> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: isCompleted
-                      ? cs.outlineVariant
-                          .withOpacity(0.3)
+                      ? cs.outlineVariant.withOpacity(0.3)
                       : cs.outlineVariant,
                   width: 1,
                 ),
@@ -1426,8 +1555,7 @@ class _SetRowState extends State<_SetRow> {
                       controller: _repsCtrl,
                       enabled: !isCompleted,
                       textAlign: TextAlign.center,
-                      keyboardType:
-                          TextInputType.number,
+                      keyboardType: TextInputType.number,
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -1495,7 +1623,6 @@ class _SetRowState extends State<_SetRow> {
   }
 }
 
-
 class _RepsBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
@@ -1514,13 +1641,11 @@ class _RepsBtn extends StatelessWidget {
       child: SizedBox(
         width: 28,
         height: 36,
-        child: Icon(
-          icon,
-          size: 16,
-          color: onTap == null
-              ? color.withOpacity(0.3)
-              : color,
-        ),
+        child: Icon(icon,
+            size: 16,
+            color: onTap == null
+                ? color.withOpacity(0.3)
+                : color),
       ),
     );
   }
@@ -1550,9 +1675,8 @@ class _RestBanner extends StatelessWidget {
         Theme.of(context).brightness == Brightness.dark;
     final isOver =
         targetRest != null && elapsed >= targetRest!;
-    final bg = isOver
-        ? cs.errorContainer
-        : cs.secondaryContainer;
+    final bg =
+        isOver ? cs.errorContainer : cs.secondaryContainer;
     final fg = isOver
         ? cs.onErrorContainer
         : cs.onSecondaryContainer;
@@ -1569,8 +1693,7 @@ class _RestBanner extends StatelessWidget {
             padding: const EdgeInsets.symmetric(
                 horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: bg
-                  .withOpacity(isDark ? 0.7 : 0.85),
+              color: bg.withOpacity(isDark ? 0.7 : 0.85),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color:
@@ -1608,8 +1731,8 @@ class _RestBanner extends StatelessWidget {
                         targetRest != null
                             ? '${_format(elapsed)} / ${_format(targetRest!)}'
                             : _format(elapsed),
-                        style: TextStyle(
-                            fontSize: 12, color: fg),
+                        style:
+                            TextStyle(fontSize: 12, color: fg),
                       ),
                     ],
                   ),
