@@ -33,10 +33,41 @@ void main() async {
   runApp(const MyApp());
 }
 
+// ─────────────────────────────────────────────
+// NavigationNotifier ora espone anche il PageController
+// così chiunque può navigare davvero verso una pagina
+// ─────────────────────────────────────────────
 class NavigationNotifier extends ChangeNotifier {
   int _currentIndex = 0;
+  PageController? _pageController;
+
   int get currentIndex => _currentIndex;
+
+  void attachController(PageController controller) {
+    _pageController = controller;
+  }
+
+  void detachController() {
+    _pageController = null;
+  }
+
+  /// Naviga effettivamente alla pagina indicata:
+  /// aggiorna l'indice E sposta il PageView.
   void navigateTo(int index) {
+    if (_currentIndex == index) return;
+    _currentIndex = index;
+    notifyListeners();
+    _pageController?.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  /// Aggiorna solo l'indice senza muovere il controller
+  /// (usato internamente dallo swipe del PageView).
+  void setIndexSilent(int index) {
+    if (_currentIndex == index) return;
     _currentIndex = index;
     notifyListeners();
   }
@@ -49,18 +80,12 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(
-            create: (_) => ExerciseProvider()),
-        ChangeNotifierProvider(
-            create: (_) => WorkoutProvider()),
-        ChangeNotifierProvider(
-            create: (_) => NavigationNotifier()),
-        ChangeNotifierProvider(
-            create: (_) => SessionProvider()),
-        ChangeNotifierProvider(
-            create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(
-            create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ExerciseProvider()),
+        ChangeNotifierProvider(create: (_) => WorkoutProvider()),
+        ChangeNotifierProvider(create: (_) => NavigationNotifier()),
+        ChangeNotifierProvider(create: (_) => SessionProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (_, themeProvider, __) {
@@ -73,17 +98,14 @@ class MyApp extends StatelessWidget {
             builder: (context, child) {
               final cs = Theme.of(context).colorScheme;
               final isDark =
-                  Theme.of(context).brightness ==
-                      Brightness.dark;
+                  Theme.of(context).brightness == Brightness.dark;
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: SystemUiOverlayStyle(
                   statusBarColor: Colors.transparent,
-                  statusBarIconBrightness: isDark
-                      ? Brightness.light
-                      : Brightness.dark,
-                  statusBarBrightness: isDark
-                      ? Brightness.dark
-                      : Brightness.light,
+                  statusBarIconBrightness:
+                      isDark ? Brightness.light : Brightness.dark,
+                  statusBarBrightness:
+                      isDark ? Brightness.dark : Brightness.light,
                 ),
                 child: ColoredBox(
                   color: cs.surface,
@@ -109,37 +131,25 @@ class MyApp extends StatelessWidget {
       scaffoldBackgroundColor: colorScheme.surface,
       canvasColor: colorScheme.surface,
       dialogBackgroundColor: colorScheme.surface,
-      pageTransitionsTheme:
-          const PageTransitionsTheme(
+      pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.iOS:
-              ZoomPageTransitionsBuilder(),
-          TargetPlatform.macOS:
-              ZoomPageTransitionsBuilder(),
-          TargetPlatform.android:
-              ZoomPageTransitionsBuilder(),
-          TargetPlatform.windows:
-              ZoomPageTransitionsBuilder(),
-          TargetPlatform.linux:
-              ZoomPageTransitionsBuilder(),
-          TargetPlatform.fuchsia:
-              ZoomPageTransitionsBuilder(),
+          TargetPlatform.iOS: ZoomPageTransitionsBuilder(),
+          TargetPlatform.macOS: ZoomPageTransitionsBuilder(),
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.windows: ZoomPageTransitionsBuilder(),
+          TargetPlatform.linux: ZoomPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: ZoomPageTransitionsBuilder(),
         },
       ),
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.5),
-        headlineMedium: TextStyle(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.5),
-        headlineSmall: TextStyle(
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.3),
-        titleLarge:
-            TextStyle(fontWeight: FontWeight.w600),
-        titleMedium:
-            TextStyle(fontWeight: FontWeight.w600),
+        headlineLarge:
+            TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineMedium:
+            TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineSmall:
+            TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
+        titleLarge: TextStyle(fontWeight: FontWeight.w600),
+        titleMedium: TextStyle(fontWeight: FontWeight.w600),
         bodyLarge: TextStyle(letterSpacing: 0.1),
       ),
       cardTheme: CardThemeData(
@@ -155,12 +165,11 @@ class MyApp extends StatelessWidget {
         centerTitle: true,
         backgroundColor: colorScheme.surface,
         surfaceTintColor: colorScheme.surfaceTint,
-        systemOverlayStyle:
-            brightness == Brightness.dark
-                ? SystemUiOverlayStyle.light.copyWith(
-                    statusBarColor: Colors.transparent)
-                : SystemUiOverlayStyle.dark.copyWith(
-                    statusBarColor: Colors.transparent),
+        systemOverlayStyle: brightness == Brightness.dark
+            ? SystemUiOverlayStyle.light
+                .copyWith(statusBarColor: Colors.transparent)
+            : SystemUiOverlayStyle.dark
+                .copyWith(statusBarColor: Colors.transparent),
         titleTextStyle: TextStyle(
           color: colorScheme.onSurface,
           fontSize: 18,
@@ -170,30 +179,27 @@ class MyApp extends StatelessWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: colorScheme.surfaceContainerHighest
-            .withOpacity(0.4),
+        fillColor:
+            colorScheme.surfaceContainerHighest.withOpacity(0.4),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-              color: colorScheme.outlineVariant,
-              width: 1),
+          borderSide:
+              BorderSide(color: colorScheme.outlineVariant, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-              color: colorScheme.primary, width: 2),
+          borderSide: BorderSide(color: colorScheme.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-              color: colorScheme.error, width: 1),
+          borderSide: BorderSide(color: colorScheme.error, width: 1),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 14),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -201,16 +207,15 @@ class MyApp extends StatelessWidget {
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12)),
           textStyle: const TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 15),
+              fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(
-              fontWeight: FontWeight.w600),
+          textStyle:
+              const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       dialogTheme: DialogThemeData(
@@ -222,8 +227,8 @@ class MyApp extends StatelessWidget {
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colorScheme.surface,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-              top: Radius.circular(24)),
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(24)),
         ),
         elevation: 0,
       ),
@@ -236,6 +241,9 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────
+// AppEntry
+// ─────────────────────────────────────────────
 class AppEntry extends StatefulWidget {
   const AppEntry({super.key});
 
@@ -255,9 +263,7 @@ class _AppEntryState extends State<AppEntry> {
   Future<void> _checkAuth() async {
     await context.read<AuthProvider>().checkLogin();
     if (context.read<AuthProvider>().isLoggedIn) {
-      await context
-          .read<SessionProvider>()
-          .tryRestoreSession();
+      await context.read<SessionProvider>().tryRestoreSession();
     }
     setState(() => _checked = true);
   }
@@ -273,26 +279,22 @@ class _AppEntryState extends State<AppEntry> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.fitness_center,
-                  size: 48, color: cs.primary),
+              Icon(Icons.fitness_center, size: 48, color: cs.primary),
               const SizedBox(height: 16),
-              CircularProgressIndicator(
-                  color: cs.primary),
+              CircularProgressIndicator(color: cs.primary),
             ],
           ),
         ),
       );
     }
 
-    final isLoggedIn =
-        context.watch<AuthProvider>().isLoggedIn;
+    final isLoggedIn = context.watch<AuthProvider>().isLoggedIn;
 
     if (!isLoggedIn) {
       return LoginScreen(
         onLoginSuccess: () {
           context.read<AuthProvider>().setLoggedIn(
-              context.read<AuthProvider>().userEmail ??
-                  '');
+              context.read<AuthProvider>().userEmail ?? '');
           setState(() {});
         },
       );
@@ -302,6 +304,12 @@ class _AppEntryState extends State<AppEntry> {
   }
 }
 
+// ─────────────────────────────────────────────
+// MainShell
+// Il PageController viene registrato nel NavigationNotifier
+// così qualsiasi chiamata a navigateTo() da qualunque
+// parte dell'app esegue la navigazione reale.
+// ─────────────────────────────────────────────
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -316,21 +324,26 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _pageController = PageController();
+    // Registra il controller subito dopo il primo frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context
+            .read<NavigationNotifier>()
+            .attachController(_pageController);
+      }
+    });
   }
 
   @override
   void dispose() {
+    context.read<NavigationNotifier>().detachController();
     _pageController.dispose();
     super.dispose();
   }
 
   void _onNavTap(int index) {
+    // navigateTo aggiorna sia lo stato sia il PageController
     context.read<NavigationNotifier>().navigateTo(index);
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeInOut,
-    );
   }
 
   @override
@@ -342,15 +355,12 @@ class _MainShellState extends State<MainShell> {
     final cs = Theme.of(context).colorScheme;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      SystemChrome.setSystemUIOverlayStyle(
-          SystemUiOverlayStyle(
+      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: isDark
-            ? Brightness.light
-            : Brightness.dark,
-        statusBarBrightness: isDark
-            ? Brightness.dark
-            : Brightness.light,
+        statusBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness:
+            isDark ? Brightness.dark : Brightness.light,
       ));
     });
 
@@ -361,9 +371,9 @@ class _MainShellState extends State<MainShell> {
         controller: _pageController,
         physics: const ClampingScrollPhysics(),
         onPageChanged: (index) {
-          context
-              .read<NavigationNotifier>()
-              .navigateTo(index);
+          // Solo aggiornamento silenzioso: il controller
+          // si è già spostato tramite swipe manuale
+          context.read<NavigationNotifier>().setIndexSilent(index);
         },
         children: const [
           HomeScreen(),
@@ -382,6 +392,9 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
+// ─────────────────────────────────────────────
+// Navbar Glass
+// ─────────────────────────────────────────────
 class _LiquidGlassNavBar extends StatelessWidget {
   final int currentIndex;
   final void Function(int) onTap;
@@ -395,25 +408,16 @@ class _LiquidGlassNavBar extends StatelessWidget {
 
   static const _items = [
     _NavItem(icon: Icons.home_rounded, label: 'Home'),
-    _NavItem(
-        icon: Icons.list_alt_rounded,
-        label: 'Schede'),
-    _NavItem(
-        icon: Icons.play_circle_fill_rounded,
-        label: 'Sessione'),
-    _NavItem(
-        icon: Icons.bar_chart_rounded,
-        label: 'Storico'),
-    _NavItem(
-        icon: Icons.settings_rounded,
-        label: 'Impostazioni'),
+    _NavItem(icon: Icons.list_alt_rounded, label: 'Schede'),
+    _NavItem(icon: Icons.play_circle_fill_rounded, label: 'Sessione'),
+    _NavItem(icon: Icons.bar_chart_rounded, label: 'Storico'),
+    _NavItem(icon: Icons.settings_rounded, label: 'Impostazioni'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final bottomPadding =
-        MediaQuery.of(context).padding.bottom;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     final glassBg = isDark
         ? Colors.grey.shade900.withOpacity(0.55)
@@ -423,31 +427,28 @@ class _LiquidGlassNavBar extends StatelessWidget {
         : Colors.white.withOpacity(0.7);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-          20, 0, 20, bottomPadding + 16),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding + 16),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(40),
         child: BackdropFilter(
-          filter:
-              ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
             height: 66,
             decoration: BoxDecoration(
               color: glassBg,
               borderRadius: BorderRadius.circular(40),
-              border: Border.all(
-                  color: glassBorder, width: 1.2),
+              border: Border.all(color: glassBorder, width: 1.2),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(
-                      isDark ? 0.35 : 0.1),
+                  color:
+                      Colors.black.withOpacity(isDark ? 0.35 : 0.1),
                   blurRadius: 32,
                   spreadRadius: -4,
                   offset: const Offset(0, 8),
                 ),
                 BoxShadow(
-                  color: Colors.white.withOpacity(
-                      isDark ? 0.04 : 0.6),
+                  color:
+                      Colors.white.withOpacity(isDark ? 0.04 : 0.6),
                   blurRadius: 0,
                   spreadRadius: 0,
                   offset: const Offset(0, 1),
@@ -455,8 +456,7 @@ class _LiquidGlassNavBar extends StatelessWidget {
               ],
             ),
             child: Row(
-              children:
-                  List.generate(_items.length, (i) {
+              children: List.generate(_items.length, (i) {
                 final selected = i == currentIndex;
                 return Expanded(
                   child: GestureDetector(
@@ -482,8 +482,7 @@ class _LiquidGlassNavBar extends StatelessWidget {
 class _NavItem {
   final IconData icon;
   final String label;
-  const _NavItem(
-      {required this.icon, required this.label});
+  const _NavItem({required this.icon, required this.label});
 }
 
 class _LiquidNavItem extends StatelessWidget {
@@ -570,15 +569,12 @@ class _SelectedItem extends StatelessWidget {
                   width: 28,
                   height: 6,
                   decoration: BoxDecoration(
-                    color:
-                        Colors.white.withOpacity(0.3),
-                    borderRadius:
-                        BorderRadius.circular(3),
+                    color: Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(3),
                   ),
                 ),
               ),
-              Icon(item.icon,
-                  color: Colors.white, size: 22),
+              Icon(item.icon, color: Colors.white, size: 22),
             ],
           ),
         ),
