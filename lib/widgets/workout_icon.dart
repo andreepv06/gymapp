@@ -1,7 +1,8 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../models/hive_models.dart';
+import '../models/hive_models.dart';
 
 class WorkoutIconDef {
   final String id;
@@ -184,14 +185,13 @@ class WorkoutIcons {
   }
 
   static Color getColor(int? index) {
-    if (index == null ||
-        index < 0 ||
-        index >= colors.length) return colors[0];
+    if (index == null || index < 0 || index >= colors.length) {
+      return colors[0];
+    }
     return colors[index];
   }
 
-  static Map<String, List<WorkoutIconDef>>
-      get byCategory {
+  static Map<String, List<WorkoutIconDef>> get byCategory {
     final map = <String, List<WorkoutIconDef>>{};
     for (final icon in all) {
       map.putIfAbsent(icon.category, () => []).add(icon);
@@ -224,13 +224,11 @@ class WorkoutAvatar extends StatelessWidget {
     final color = WorkoutIcons.getColor(iconColorIndex);
     final iconDef = WorkoutIcons.getById(iconId);
 
-    if (customImagePath != null &&
-        customImagePath!.isNotEmpty) {
+    if (customImagePath != null && customImagePath!.isNotEmpty) {
       try {
         final bytes = base64Decode(customImagePath!);
         return ClipRRect(
-          borderRadius:
-              BorderRadius.circular(borderRadius),
+          borderRadius: BorderRadius.circular(borderRadius),
           child: Image.memory(
             bytes,
             width: size,
@@ -247,8 +245,7 @@ class WorkoutAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(
-            color: color.withOpacity(0.3), width: 1),
+        border: Border.all(color: color.withOpacity(0.3), width: 1),
       ),
       child: Icon(
         iconDef?.icon ?? Icons.fitness_center,
@@ -259,15 +256,15 @@ class WorkoutAvatar extends StatelessWidget {
   }
 }
 
-/// Selettore icona completo e riutilizzabile
+/// Selettore icona completo e riutilizzabile (solo grid + colori,
+/// SENZA chrome di sheet: il chrome con header/footer fissi e
+/// scroll è gestito da showIconPickerBottomSheet più sotto).
 class WorkoutIconSelector extends StatelessWidget {
   final String? selectedIconId;
   final int selectedColorIndex;
   final String? customImageBase64;
-  final void Function(
-      String? iconId,
-      int colorIndex,
-      String? imgBase64) onChanged;
+  final void Function(String? iconId, int colorIndex, String? imgBase64)
+      onChanged;
 
   const WorkoutIconSelector({
     super.key,
@@ -280,120 +277,76 @@ class WorkoutIconSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final color =
-        WorkoutIcons.getColor(selectedColorIndex);
+    final color = WorkoutIcons.getColor(selectedColorIndex);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Preview + pulsante galleria
         Row(
           children: [
-            WorkoutAvatar(
-              iconId: selectedIconId,
-              iconColorIndex: selectedColorIndex,
-              customImagePath: customImageBase64,
-              size: 64,
-              iconSize: 32,
-              borderRadius: 16,
-            ),
-            const SizedBox(width: 16),
             Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  Text('Icona scheda',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleSmall
-                          ?.copyWith(
-                              fontWeight:
-                                  FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  _GlassOutlinedSmallButton(
-                    onTap: () async {
-                      try {
-                        final picker = ImagePicker();
-                        final file =
-                            await picker.pickImage(
-                          source: ImageSource.gallery,
-                          maxWidth: 400,
-                          maxHeight: 400,
-                          imageQuality: 80,
-                        );
-                        if (file != null) {
-                          final bytes =
-                              await file.readAsBytes();
-                          onChanged(
-                              null,
-                              selectedColorIndex,
-                              base64Encode(bytes));
-                        }
-                      } catch (_) {}
-                    },
-                    label: 'Usa foto galleria',
-                    icon: Icons.photo_library_outlined,
-                    color: cs.primary,
-                  ),
-                  if (customImageBase64 != null ||
-                      selectedIconId != null) ...[
-                    const SizedBox(height: 6),
-                    _GlassOutlinedSmallButton(
-                      onTap: () =>
-                          onChanged(null, selectedColorIndex, null),
-                      label: 'Rimuovi',
-                      icon: Icons.close,
-                      color: Colors.red,
-                    ),
-                  ],
-                ],
+              child: _GlassOutlinedSmallButton(
+                onTap: () async {
+                  try {
+                    final picker = ImagePicker();
+                    final file = await picker.pickImage(
+                      source: ImageSource.gallery,
+                      maxWidth: 400,
+                      maxHeight: 400,
+                      imageQuality: 80,
+                    );
+                    if (file != null) {
+                      final bytes = await file.readAsBytes();
+                      onChanged(null, selectedColorIndex, base64Encode(bytes));
+                    }
+                  } catch (_) {}
+                },
+                label: 'Usa foto galleria',
+                icon: Icons.photo_library_outlined,
+                color: cs.primary,
               ),
             ),
+            if (customImageBase64 != null || selectedIconId != null) ...[
+              const SizedBox(width: 8),
+              _GlassOutlinedSmallButton(
+                onTap: () => onChanged(null, selectedColorIndex, null),
+                label: 'Rimuovi',
+                icon: Icons.close,
+                color: Colors.red,
+              ),
+            ],
           ],
         ),
         const SizedBox(height: 16),
-
-        // Colori
-        Text('Colore',
-            style: Theme.of(context).textTheme.labelMedium),
+        Text('Colore', style: Theme.of(context).textTheme.labelMedium),
         const SizedBox(height: 8),
         SizedBox(
           height: 44,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: WorkoutIcons.colors.length,
-            separatorBuilder: (_, __) =>
-                const SizedBox(width: 8),
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (_, i) {
               final c = WorkoutIcons.colors[i];
               final isSelected = selectedColorIndex == i;
               return GestureDetector(
-                onTap: () => onChanged(
-                    selectedIconId, i, customImageBase64),
+                onTap: () => onChanged(selectedIconId, i, customImageBase64),
                 child: AnimatedContainer(
-                  duration:
-                      const Duration(milliseconds: 150),
+                  duration: const Duration(milliseconds: 150),
                   width: isSelected ? 40 : 34,
                   height: isSelected ? 40 : 34,
                   decoration: BoxDecoration(
                     color: c,
                     shape: BoxShape.circle,
                     border: isSelected
-                        ? Border.all(
-                            color: Colors.white, width: 3)
+                        ? Border.all(color: Colors.white, width: 3)
                         : null,
                     boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                                color: c.withOpacity(0.5),
-                                blurRadius: 8)
-                          ]
+                        ? [BoxShadow(color: c.withOpacity(0.5), blurRadius: 8)]
                         : null,
                   ),
                   child: isSelected
-                      ? const Icon(Icons.check,
-                          color: Colors.white, size: 18)
+                      ? const Icon(Icons.check, color: Colors.white, size: 18)
                       : null,
                 ),
               );
@@ -401,77 +354,58 @@ class WorkoutIconSelector extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-
-        // Icone per categoria
         ...WorkoutIcons.byCategory.entries.map((entry) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding:
-                    const EdgeInsets.only(bottom: 8, top: 4),
+                padding: const EdgeInsets.only(bottom: 8, top: 4),
                 child: Text(
                   entry.key.toUpperCase(),
                   style: Theme.of(context)
                       .textTheme
                       .labelSmall
-                      ?.copyWith(
-                          color: cs.outline,
-                          letterSpacing: 1.0),
+                      ?.copyWith(color: cs.outline, letterSpacing: 1.0),
                 ),
               ),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: entry.value.map((iconDef) {
-                  final isSelected =
-                      selectedIconId == iconDef.id;
+                  final isSelected = selectedIconId == iconDef.id;
                   return GestureDetector(
-                    onTap: () => onChanged(
-                        iconDef.id,
-                        selectedColorIndex,
-                        null),
+                    onTap: () =>
+                        onChanged(iconDef.id, selectedColorIndex, null),
                     child: Tooltip(
                       message: iconDef.label,
                       child: AnimatedContainer(
-                        duration: const Duration(
-                            milliseconds: 150),
+                        duration: const Duration(milliseconds: 150),
                         width: 56,
                         height: 56,
                         decoration: BoxDecoration(
                           color: isSelected
                               ? color.withOpacity(0.2)
-                              : cs.surfaceContainerHighest
-                                  .withOpacity(0.5),
-                          borderRadius:
-                              BorderRadius.circular(12),
+                              : cs.surfaceContainerHighest.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: isSelected
-                                ? color
-                                : cs.outlineVariant,
+                            color: isSelected ? color : cs.outlineVariant,
                             width: isSelected ? 2 : 1,
                           ),
                         ),
                         child: Column(
-                          mainAxisAlignment:
-                              MainAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(iconDef.icon,
-                                color: isSelected
-                                    ? color
-                                    : cs.outline,
+                                color: isSelected ? color : cs.outline,
                                 size: 22),
                             const SizedBox(height: 2),
                             Text(
                               iconDef.label,
                               style: TextStyle(
                                   fontSize: 7,
-                                  color: isSelected
-                                      ? color
-                                      : cs.outline),
+                                  color: isSelected ? color : cs.outline),
                               maxLines: 1,
-                              overflow:
-                                  TextOverflow.ellipsis,
+                              overflow: TextOverflow.ellipsis,
                               textAlign: TextAlign.center,
                             ),
                           ],
@@ -508,13 +442,11 @@ class _GlassOutlinedSmallButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 12, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: color.withOpacity(0.08),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-              color: color.withOpacity(0.35), width: 1),
+          border: Border.all(color: color.withOpacity(0.35), width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -523,9 +455,7 @@ class _GlassOutlinedSmallButton extends StatelessWidget {
             const SizedBox(width: 6),
             Text(label,
                 style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: color)),
+                    fontSize: 12, fontWeight: FontWeight.w600, color: color)),
           ],
         ),
       ),
@@ -573,4 +503,165 @@ class WorkoutLabel extends StatelessWidget {
       ],
     );
   }
+}
+
+// ─────────────────────────────────────────────
+// showIconPickerBottomSheet
+//
+// Componente CONDIVISO per la scelta dell'icona, usato sia in
+// creazione scheda sia in modifica icona scheda esistente.
+//
+// Header sticky: anteprima icona selezionata, sempre visibile.
+// Footer sticky: pulsanti Annulla / Salva, sempre visibili.
+// Contenuto centrale: scrollabile (la griglia delle icone).
+// Chiusura tramite drag verso il basso: comportamento di default
+// di showModalBottomSheet (enableDrag = true), funzionante quando
+// si afferra l'area dell'header/handle (fuori dalla zona scroll).
+// ─────────────────────────────────────────────
+Future<Map<String, dynamic>?> showIconPickerBottomSheet(
+  BuildContext context, {
+  required String? initialIconId,
+  required int initialColorIndex,
+  required String? initialImageBase64,
+}) {
+  String? iconId = initialIconId;
+  int colorIndex = initialColorIndex;
+  String? imageBase64 = initialImageBase64;
+
+  return showModalBottomSheet<Map<String, dynamic>>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
+      final screenHeight = MediaQuery.of(sheetContext).size.height;
+      return StatefulBuilder(
+        builder: (ctx, setModal) {
+          final cs = Theme.of(ctx).colorScheme;
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          return SizedBox(
+            height: screenHeight * 0.85,
+            child: ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? cs.surface.withOpacity(0.92)
+                        : cs.surface.withOpacity(0.96),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(28)),
+                    border: Border(
+                      top: BorderSide(
+                        color: isDark
+                            ? Colors.white.withOpacity(0.12)
+                            : cs.outlineVariant.withOpacity(0.4),
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      // ── Header sticky: handle + anteprima icona ──
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: cs.outlineVariant.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                WorkoutAvatar(
+                                  iconId: iconId,
+                                  iconColorIndex: colorIndex,
+                                  customImagePath: imageBase64,
+                                  size: 48,
+                                  iconSize: 24,
+                                  borderRadius: 12,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Scegli icona',
+                                    style: Theme.of(ctx)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                            fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      Divider(
+                          height: 1, color: cs.outlineVariant.withOpacity(0.3)),
+
+                      // ── Contenuto scrollabile ──
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                          child: WorkoutIconSelector(
+                            selectedIconId: iconId,
+                            selectedColorIndex: colorIndex,
+                            customImageBase64: imageBase64,
+                            onChanged: (id, idx, img) {
+                              setModal(() {
+                                iconId = id;
+                                colorIndex = idx;
+                                imageBase64 = img;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                      Divider(
+                          height: 1, color: cs.outlineVariant.withOpacity(0.3)),
+
+                      // ── Footer sticky: Annulla / Salva ──
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                            20, 12, 20, 12 + MediaQuery.of(ctx).padding.bottom),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.pop(sheetContext),
+                                child: const Text('Annulla'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: () => Navigator.pop(sheetContext, {
+                                  'iconId': iconId,
+                                  'colorIndex': colorIndex,
+                                  'imageBase64': imageBase64,
+                                }),
+                                child: const Text('Salva'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
 }

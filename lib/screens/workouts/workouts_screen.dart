@@ -48,12 +48,11 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   // ─────────────────────────────────────────
   // Nuova scheda
   //
-  // Il nome è in primo piano. L'icona di default appare accanto,
-  // compatta: la selezione completa delle icone è una funzione
-  // SECONDARIA, accessibile toccando l'avatar (apre un sub-sheet
-  // con il selettore completo). Lo stesso selettore completo resta
-  // disponibile in seguito per modificare l'icona (vedi
-  // _showChangeIconSheet più sotto, invariato).
+  // Il nome è in primo piano, l'icona di default appare compatta
+  // di fianco (tocco = apre il selettore completo condiviso).
+  // Il contenuto è avvolto in SingleChildScrollView: questo
+  // risolve il bug per cui, con la tastiera aperta, l'interfaccia
+  // andava in overflow e parte di essa risultava inutilizzabile.
   // ─────────────────────────────────────────
   void _showAddWorkoutSheet(BuildContext context) {
     final nameCtrl = TextEditingController();
@@ -71,162 +70,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
             right: 24,
             top: 20,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const GlassSheetHandle(),
-              const SizedBox(height: 16),
-              Text('Nuova scheda',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 20),
-
-              // ── Nome in primo piano, icona di default di fianco ──
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  GestureDetector(
-                    onTap: () async {
-                      final result = await _showIconPickerSheet(
-                        context,
-                        initialIconId: selectedIconId,
-                        initialColorIndex: selectedColorIndex,
-                        initialImageBase64: customImageBase64,
-                      );
-                      if (result != null) {
-                        setModal(() {
-                          selectedIconId = result['iconId'] as String?;
-                          selectedColorIndex = result['colorIndex'] as int;
-                          customImageBase64 =
-                              result['imageBase64'] as String?;
-                        });
-                      }
-                    },
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        WorkoutAvatar(
-                          iconId: selectedIconId,
-                          iconColorIndex: selectedColorIndex,
-                          customImagePath: customImageBase64,
-                          size: 56,
-                          iconSize: 28,
-                          borderRadius: 14,
-                        ),
-                        Positioned(
-                          right: -2,
-                          bottom: -2,
-                          child: Container(
-                            padding: const EdgeInsets.all(3),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .surface,
-                                  width: 1.5),
-                            ),
-                            child: const Icon(Icons.edit,
-                                size: 10, color: Colors.white),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: TextField(
-                      controller: nameCtrl,
-                      autofocus: true,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        labelText: 'Nome scheda',
-                        hintText: 'Es. Push A, Gambe...',
-                        prefixIcon: Icon(Icons.edit_outlined),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Padding(
-                padding: const EdgeInsets.only(left: 70),
-                child: Text(
-                  "Tocca l'icona per personalizzarla",
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: Theme.of(context).colorScheme.outline),
-                ),
-              ),
-              const SizedBox(height: 24),
-              GlassDialogActions(
-                cancelLabel: 'Annulla',
-                confirmLabel: 'Crea',
-                onCancel: () => Navigator.pop(ctx),
-                onConfirm: () async {
-                  if (nameCtrl.text.trim().isEmpty) return;
-                  Navigator.pop(ctx);
-                  final id = await context
-                      .read<WorkoutProvider>()
-                      .addWorkout(nameCtrl.text.trim());
-                  await HiveDatabase.instance.updateWorkoutIcon(
-                    id,
-                    iconId: selectedIconId,
-                    iconColorIndex: selectedColorIndex,
-                    customImagePath: customImageBase64,
-                  );
-                  if (context.mounted) {
-                    context.read<WorkoutProvider>().loadWorkouts();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => WorkoutDetailScreen(
-                          workoutId: id,
-                          workoutName: nameCtrl.text.trim(),
-                        ),
-                      ),
-                    ).then((_) {
-                      if (context.mounted) {
-                        context.read<WorkoutProvider>().loadWorkouts();
-                      }
-                    });
-                  }
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────
-  // Selettore icona completo, mostrato in un sub-sheet separato.
-  // Usato sia dalla creazione (tocco sull'avatar) sia riutilizzabile
-  // ovunque serva una scelta esplicita di icona.
-  // ─────────────────────────────────────────
-  Future<Map<String, dynamic>?> _showIconPickerSheet(
-    BuildContext context, {
-    required String? initialIconId,
-    required int initialColorIndex,
-    required String? initialImageBase64,
-  }) {
-    String? iconId = initialIconId;
-    int colorIndex = initialColorIndex;
-    String? imageBase64 = initialImageBase64;
-
-    return showGlassBottomSheet<Map<String, dynamic>>(
-      context: context,
-      child: StatefulBuilder(
-        builder: (ctx, setModal) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            left: 24,
-            right: 24,
-            top: 20,
-          ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -234,32 +77,123 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
               children: [
                 const GlassSheetHandle(),
                 const SizedBox(height: 16),
-                Text('Scegli icona',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700)),
+                Text('Nuova scheda',
+                    style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 20),
-                WorkoutIconSelector(
-                  selectedIconId: iconId,
-                  selectedColorIndex: colorIndex,
-                  customImageBase64: imageBase64,
-                  onChanged: (id, idx, img) {
-                    setModal(() {
-                      iconId = id;
-                      colorIndex = idx;
-                      imageBase64 = img;
-                    });
-                  },
+
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    GestureDetector(
+                      onTap: () async {
+                        final result = await showIconPickerBottomSheet(
+                          context,
+                          initialIconId: selectedIconId,
+                          initialColorIndex: selectedColorIndex,
+                          initialImageBase64: customImageBase64,
+                        );
+                        if (result != null) {
+                          setModal(() {
+                            selectedIconId = result['iconId'] as String?;
+                            selectedColorIndex =
+                                result['colorIndex'] as int;
+                            customImageBase64 =
+                                result['imageBase64'] as String?;
+                          });
+                        }
+                      },
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          WorkoutAvatar(
+                            iconId: selectedIconId,
+                            iconColorIndex: selectedColorIndex,
+                            customImagePath: customImageBase64,
+                            size: 56,
+                            iconSize: 28,
+                            borderRadius: 14,
+                          ),
+                          Positioned(
+                            right: -2,
+                            bottom: -2,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color:
+                                    Theme.of(context).colorScheme.primary,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .surface,
+                                    width: 1.5),
+                              ),
+                              child: const Icon(Icons.edit,
+                                  size: 10, color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: TextField(
+                        controller: nameCtrl,
+                        autofocus: true,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          labelText: 'Nome scheda',
+                          hintText: 'Es. Push A, Gambe...',
+                          prefixIcon: Icon(Icons.edit_outlined),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
-                GlassFilledButton(
-                  onPressed: () => Navigator.pop(ctx, {
-                    'iconId': iconId,
-                    'colorIndex': colorIndex,
-                    'imageBase64': imageBase64,
-                  }),
-                  child: const Text('Fatto'),
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.only(left: 70),
+                  child: Text(
+                    "Tocca l'icona per personalizzarla",
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.outline),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                GlassDialogActions(
+                  cancelLabel: 'Annulla',
+                  confirmLabel: 'Crea',
+                  onCancel: () => Navigator.pop(ctx),
+                  onConfirm: () async {
+                    if (nameCtrl.text.trim().isEmpty) return;
+                    Navigator.pop(ctx);
+                    final id = await context
+                        .read<WorkoutProvider>()
+                        .addWorkout(nameCtrl.text.trim());
+                    await HiveDatabase.instance.updateWorkoutIcon(
+                      id,
+                      iconId: selectedIconId,
+                      iconColorIndex: selectedColorIndex,
+                      customImagePath: customImageBase64,
+                    );
+                    if (context.mounted) {
+                      context.read<WorkoutProvider>().loadWorkouts();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => WorkoutDetailScreen(
+                            workoutId: id,
+                            workoutName: nameCtrl.text.trim(),
+                          ),
+                        ),
+                      ).then((_) {
+                        if (context.mounted) {
+                          context.read<WorkoutProvider>().loadWorkouts();
+                        }
+                      });
+                    }
+                  },
                 ),
                 const SizedBox(height: 20),
               ],
@@ -456,74 +390,25 @@ class _WorkoutCard extends StatelessWidget {
     );
   }
 
-  // Selettore completo mostrato immediatamente: qui l'utente ha
-  // già scelto esplicitamente "cambia icona", quindi va dritto al
-  // selettore completo (comportamento invariato rispetto a prima).
-  void _showChangeIconSheet(BuildContext context) {
-    String? selIconId = workout.iconId;
-    int selColorIndex = workout.iconColorIndex ?? 0;
-    String? selImageBase64 = workout.customImagePath;
-
-    showGlassBottomSheet(
-      context: context,
-      child: StatefulBuilder(
-        builder: (ctx, setModal) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            left: 24,
-            right: 24,
-            top: 20,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const GlassSheetHandle(),
-                const SizedBox(height: 16),
-                Text('Cambia icona',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 20),
-                WorkoutIconSelector(
-                  selectedIconId: selIconId,
-                  selectedColorIndex: selColorIndex,
-                  customImageBase64: selImageBase64,
-                  onChanged: (id, colorIdx, img) {
-                    setModal(() {
-                      selIconId = id;
-                      selColorIndex = colorIdx;
-                      selImageBase64 = img;
-                    });
-                  },
-                ),
-                const SizedBox(height: 16),
-                GlassDialogActions(
-                  cancelLabel: 'Annulla',
-                  confirmLabel: 'Salva',
-                  onCancel: () => Navigator.pop(ctx),
-                  onConfirm: () async {
-                    await HiveDatabase.instance.updateWorkoutIcon(
-                      workout.key,
-                      iconId: selIconId,
-                      iconColorIndex: selColorIndex,
-                      customImagePath: selImageBase64,
-                    );
-                    if (ctx.mounted) {
-                      context.read<WorkoutProvider>().loadWorkouts();
-                      Navigator.pop(ctx);
-                    }
-                  },
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
-        ),
-      ),
+  // Stesso componente condiviso usato in creazione scheda.
+  void _showChangeIconSheet(BuildContext context) async {
+    final result = await showIconPickerBottomSheet(
+      context,
+      initialIconId: workout.iconId,
+      initialColorIndex: workout.iconColorIndex ?? 0,
+      initialImageBase64: workout.customImagePath,
     );
+    if (result != null) {
+      await HiveDatabase.instance.updateWorkoutIcon(
+        workout.key,
+        iconId: result['iconId'] as String?,
+        iconColorIndex: result['colorIndex'] as int,
+        customImagePath: result['imageBase64'] as String?,
+      );
+      if (context.mounted) {
+        context.read<WorkoutProvider>().loadWorkouts();
+      }
+    }
   }
 
   void _showRenameSheet(BuildContext context) {
@@ -537,39 +422,42 @@ class _WorkoutCard extends StatelessWidget {
           right: 24,
           top: 20,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const GlassSheetHandle(),
-            const SizedBox(height: 20),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Rinomina scheda',
-                  style: Theme.of(context).textTheme.titleLarge),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              autofocus: false,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Nome scheda'),
-            ),
-            const SizedBox(height: 16),
-            GlassDialogActions(
-              cancelLabel: 'Annulla',
-              confirmLabel: 'Salva',
-              onCancel: () => Navigator.pop(context),
-              onConfirm: () {
-                if (controller.text.trim().isNotEmpty) {
-                  context
-                      .read<WorkoutProvider>()
-                      .renameWorkout(workout.key, controller.text.trim());
-                }
-                Navigator.pop(context);
-              },
-            ),
-            const SizedBox(height: 20),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const GlassSheetHandle(),
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Rinomina scheda',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: false,
+                textCapitalization: TextCapitalization.sentences,
+                decoration:
+                    const InputDecoration(labelText: 'Nome scheda'),
+              ),
+              const SizedBox(height: 16),
+              GlassDialogActions(
+                cancelLabel: 'Annulla',
+                confirmLabel: 'Salva',
+                onCancel: () => Navigator.pop(context),
+                onConfirm: () {
+                  if (controller.text.trim().isNotEmpty) {
+                    context
+                        .read<WorkoutProvider>()
+                        .renameWorkout(workout.key, controller.text.trim());
+                  }
+                  Navigator.pop(context);
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
