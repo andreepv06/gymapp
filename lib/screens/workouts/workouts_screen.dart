@@ -45,17 +45,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
   }
 
-  // ─────────────────────────────────────────
-  // Nuova scheda
-  //
-  // FIX TASTIERA: il pannello è vincolato a un'altezza massima
-  // (ConstrainedBox) anche quando la tastiera è aperta. Senza
-  // questo vincolo, il contenuto cresceva oltre l'altezza dello
-  // schermo e il campo di testo finiva fuori dall'area visibile,
-  // raggiungibile solo chiudendo e riaprendo la tastiera. Con un
-  // bound esplicito, lo SingleChildScrollView ha effettivamente
-  // spazio per scorrere e portare il campo focalizzato in vista.
-  // ─────────────────────────────────────────
+  // Nota: nessun padding manuale per la tastiera qui — è gestito
+  // centralmente da showGlassBottomSheet (vedi glass_bottom_sheet.dart).
   void _showAddWorkoutSheet(BuildContext context) {
     final nameCtrl = TextEditingController();
     String? selectedIconId;
@@ -65,150 +56,136 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     showGlassBottomSheet(
       context: context,
       child: StatefulBuilder(
-        builder: (ctx, setModal) {
-          final maxHeight = MediaQuery.of(ctx).size.height * 0.8;
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxHeight),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        builder: (ctx, setModal) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const GlassSheetHandle(),
+                const SizedBox(height: 16),
+                Text('Nuova scheda',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 20),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const GlassSheetHandle(),
-                    const SizedBox(height: 16),
-                    Text('Nuova scheda',
-                        style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 20),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        GestureDetector(
-                          onTap: () async {
-                            final result = await showIconPickerBottomSheet(
-                              context,
-                              initialIconId: selectedIconId,
-                              initialColorIndex: selectedColorIndex,
-                              initialImageBase64: customImageBase64,
-                            );
-                            if (result != null) {
-                              setModal(() {
-                                selectedIconId = result['iconId'] as String?;
-                                selectedColorIndex =
-                                    result['colorIndex'] as int;
-                                customImageBase64 =
-                                    result['imageBase64'] as String?;
-                              });
-                            }
-                          },
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              WorkoutAvatar(
-                                iconId: selectedIconId,
-                                iconColorIndex: selectedColorIndex,
-                                customImagePath: customImageBase64,
-                                size: 56,
-                                iconSize: 28,
-                                borderRadius: 14,
-                              ),
-                              Positioned(
-                                right: -2,
-                                bottom: -2,
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .surface,
-                                        width: 1.5),
-                                  ),
-                                  child: const Icon(Icons.edit,
-                                      size: 10, color: Colors.white),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: TextField(
-                            controller: nameCtrl,
-                            autofocus: true,
-                            textCapitalization:
-                                TextCapitalization.sentences,
-                            decoration: const InputDecoration(
-                              labelText: 'Nome scheda',
-                              hintText: 'Es. Push A, Gambe...',
-                              prefixIcon: Icon(Icons.edit_outlined),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 70),
-                      child: Text(
-                        "Tocca l'icona per personalizzarla",
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: Theme.of(context).colorScheme.outline),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    GlassDialogActions(
-                      cancelLabel: 'Annulla',
-                      confirmLabel: 'Crea',
-                      onCancel: () => Navigator.pop(ctx),
-                      onConfirm: () async {
-                        if (nameCtrl.text.trim().isEmpty) return;
-                        Navigator.pop(ctx);
-                        final id = await context
-                            .read<WorkoutProvider>()
-                            .addWorkout(nameCtrl.text.trim());
-                        await HiveDatabase.instance.updateWorkoutIcon(
-                          id,
-                          iconId: selectedIconId,
-                          iconColorIndex: selectedColorIndex,
-                          customImagePath: customImageBase64,
+                    GestureDetector(
+                      onTap: () async {
+                        final result = await showIconPickerBottomSheet(
+                          context,
+                          initialIconId: selectedIconId,
+                          initialColorIndex: selectedColorIndex,
+                          initialImageBase64: customImageBase64,
                         );
-                        if (context.mounted) {
-                          context.read<WorkoutProvider>().loadWorkouts();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => WorkoutDetailScreen(
-                                workoutId: id,
-                                workoutName: nameCtrl.text.trim(),
-                              ),
-                            ),
-                          ).then((_) {
-                            if (context.mounted) {
-                              context
-                                  .read<WorkoutProvider>()
-                                  .loadWorkouts();
-                            }
+                        if (result != null) {
+                          setModal(() {
+                            selectedIconId = result['iconId'] as String?;
+                            selectedColorIndex =
+                                result['colorIndex'] as int;
+                            customImageBase64 =
+                                result['imageBase64'] as String?;
                           });
                         }
                       },
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          WorkoutAvatar(
+                            iconId: selectedIconId,
+                            iconColorIndex: selectedColorIndex,
+                            customImagePath: customImageBase64,
+                            size: 56,
+                            iconSize: 28,
+                            borderRadius: 14,
+                          ),
+                          Positioned(
+                            right: -2,
+                            bottom: -2,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color:
+                                    Theme.of(context).colorScheme.primary,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .surface,
+                                    width: 1.5),
+                              ),
+                              child: const Icon(Icons.edit,
+                                  size: 10, color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: TextField(
+                        controller: nameCtrl,
+                        autofocus: true,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          labelText: 'Nome scheda',
+                          hintText: 'Es. Push A, Gambe...',
+                          prefixIcon: Icon(Icons.edit_outlined),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.only(left: 70),
+                  child: Text(
+                    "Tocca l'icona per personalizzarla",
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.outline),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                GlassDialogActions(
+                  cancelLabel: 'Annulla',
+                  confirmLabel: 'Crea',
+                  onCancel: () => Navigator.pop(ctx),
+                  onConfirm: () async {
+                    if (nameCtrl.text.trim().isEmpty) return;
+                    Navigator.pop(ctx);
+                    final id = await context
+                        .read<WorkoutProvider>()
+                        .addWorkout(nameCtrl.text.trim());
+                    await HiveDatabase.instance.updateWorkoutIcon(
+                      id,
+                      iconId: selectedIconId,
+                      iconColorIndex: selectedColorIndex,
+                      customImagePath: customImageBase64,
+                    );
+                    if (context.mounted) {
+                      context.read<WorkoutProvider>().loadWorkouts();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => WorkoutDetailScreen(
+                            workoutId: id,
+                            workoutName: nameCtrl.text.trim(),
+                          ),
+                        ),
+                      ).then((_) {
+                        if (context.mounted) {
+                          context.read<WorkoutProvider>().loadWorkouts();
+                        }
+                      });
+                    }
+                  },
+                ),
+              ],
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -419,66 +396,48 @@ class _WorkoutCard extends StatelessWidget {
     }
   }
 
-  // ─────────────────────────────────────────
-  // Rinomina scheda
-  //
-  // Stesso fix tastiera del pannello "Nuova scheda": altezza
-  // massima vincolata, così il campo di testo non finisce coperto
-  // dalla tastiera al primo tocco.
-  // ─────────────────────────────────────────
   void _showRenameSheet(BuildContext context) {
     final controller = TextEditingController(text: workout.name);
     showGlassBottomSheet(
       context: context,
-      child: StatefulBuilder(
-        builder: (ctx, setModal) {
-          final maxHeight = MediaQuery.of(ctx).size.height * 0.6;
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxHeight),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const GlassSheetHandle(),
-                    const SizedBox(height: 20),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('Rinomina scheda',
-                          style: Theme.of(context).textTheme.titleLarge),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: controller,
-                      autofocus: true,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration:
-                          const InputDecoration(labelText: 'Nome scheda'),
-                    ),
-                    const SizedBox(height: 16),
-                    GlassDialogActions(
-                      cancelLabel: 'Annulla',
-                      confirmLabel: 'Salva',
-                      onCancel: () => Navigator.pop(ctx),
-                      onConfirm: () {
-                        if (controller.text.trim().isNotEmpty) {
-                          context.read<WorkoutProvider>().renameWorkout(
-                              workout.key, controller.text.trim());
-                        }
-                        Navigator.pop(ctx);
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const GlassSheetHandle(),
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Rinomina scheda',
+                    style: Theme.of(context).textTheme.titleLarge),
               ),
-            ),
-          );
-        },
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                decoration:
+                    const InputDecoration(labelText: 'Nome scheda'),
+              ),
+              const SizedBox(height: 16),
+              GlassDialogActions(
+                cancelLabel: 'Annulla',
+                confirmLabel: 'Salva',
+                onCancel: () => Navigator.pop(context),
+                onConfirm: () {
+                  if (controller.text.trim().isNotEmpty) {
+                    context
+                        .read<WorkoutProvider>()
+                        .renameWorkout(workout.key, controller.text.trim());
+                  }
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

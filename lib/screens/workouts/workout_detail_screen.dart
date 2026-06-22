@@ -9,29 +9,29 @@ import '../../widgets/glass_bottom_sheet.dart';
 import '../../db/hive_database.dart';
 
 // ─────────────────────────────────────────────
-// Tipi lista piatta — SOLO RIFERIMENTI, MAI DATI
+// Tipi lista piatta — stesso identico schema usato in
+// active_session_screen.dart: _data contiene l'OGGETTO reale,
+// non un riferimento da risolvere.
 // ─────────────────────────────────────────────
 enum _ItemType { exercise, circuit }
 
 class _ListItem {
   final _ItemType type;
-  final dynamic refKey;
+  final dynamic data; // HiveWorkoutExercise | HiveCircuit
 
-  _ListItem({required this.type, required this.refKey});
+  _ListItem({required this.type, required this.data});
 
-  String get stableId =>
-      type == _ItemType.exercise ? 'ex_$refKey' : 'circuit_$refKey';
-
-  Key get widgetKey => ValueKey(stableId);
+  String get stableId {
+    if (type == _ItemType.exercise) {
+      return 'ex_${(data as HiveWorkoutExercise).key}';
+    } else {
+      return 'circuit_${(data as HiveCircuit).key}';
+    }
+  }
 }
 
 // ─────────────────────────────────────────────
 // WorkoutDetailScreen
-//
-// Il Drag & Drop usa ReorderableListView con
-// ReorderableDelayedDragStartListener, esattamente come in
-// active_session_screen.dart (sia per la lista esterna esercizi+
-// circuiti, sia per la lista interna ai circuiti).
 // ─────────────────────────────────────────────
 class WorkoutDetailScreen extends StatefulWidget {
   final dynamic workoutId;
@@ -48,23 +48,35 @@ class WorkoutDetailScreen extends StatefulWidget {
 }
 
 class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
-  late final ExerciseProvider _exerciseProvider;
-  late final WorkoutProvider _workoutProvider;
+  late ExerciseProvider _exerciseProvider;
+  late WorkoutProvider _workoutProvider;
 
-  // FONTI DI VERITÀ
-  // _allExercises / _circuits = DATI, sempre freschi (ricaricati per
-  //   intero dopo ogni CRUD tramite _loadData()).
-  // _items = ORDINE (lista piatta di soli riferimenti), mutata
-  //   localmente durante il drag, mai sovrascritta da rebuild esterni.
-  List<HiveWorkoutExercise> _allExercises = [];
+  // I circuiti non hanno un notifier dedicato: li teniamo qui,
+  // ricaricati esplicitamente dopo ogni CRUD sui circuiti.
   List<HiveCircuit> _circuits = [];
+
+  // ══════════════════════════════════════════
+  // STATO LOCALE — stesso principio di active_session_screen:
+  //
+  //  _items            → ordine TOP-LEVEL (esercizi liberi + cicli)
+  //  _circuitChildren  → ordine interno di ciascun circuito
+  //
+  // Entrambi vengono ricostruiti per intero SOLO da _rebuildAll()
+  // (dopo CRUD espliciti). Nei rebuild "passivi" causati dal
+  // provider, _syncWithProvider() aggiunge/rimuove SENZA toccare
+  // l'ordine — esattamente come _syncWithProvider nella sessione.
+  //
+  // Il drag & drop modifica SOLO questi campi, in modo SINCRONO
+  // (nessun await nel percorso dell'interazione utente): è esat-
+  // tamente questo che rende stabile il D&D nella sessione attiva.
+  // Il salvataggio su Hive avviene in background, in coda, su una
+  // copia immutabile (snapshot) della lista al momento del drop,
+  // così non può mai essere corrotto da un secondo drag rapido.
+  // ══════════════════════════════════════════
   List<_ListItem> _items = [];
+  Map<dynamic, List<HiveWorkoutExercise>> _circuitChildren = {};
   bool _loaded = false;
 
-  // Coda di persistenza: i salvataggi avvengono sempre in sequenza,
-  // mai sovrapposti, ognuno su uno snapshot immutabile (mai sulla
-  // lista mutabile live), eliminando ogni rischio di corruzione
-  // concorrente quando si trascina rapidamente più volte.
   Future<void> _persistQueue = Future.value();
 
   final Map<String, bool> _collapsed = {};
@@ -80,67 +92,100 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(_loadData);
+    _initialLoad();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _initialLoad() async {
     _exerciseProvider.loadExercises();
-
-    final circuits = HiveDatabase.instance.getCircuits(widget.workoutId);
-    final allEx = HiveDatabase.instance.getWorkoutExercises(widget.workoutId);
-    final items = _buildItems(allEx, circuits);
-
+    _circuits = HiveDatabase.instance.getCircuits(widget.workoutId);
     _workoutProvider.loadWorkoutExercises(widget.workoutId);
-
     if (!mounted) return;
     setState(() {
-      _allExercises = allEx;
-      _circuits = circuits;
-      _items = items;
+      _rebuildAll();
       _loaded = true;
     });
   }
 
-  List<_ListItem> _buildItems(
-    List<HiveWorkoutExercise> allEx,
-    List<HiveCircuit> circuits,
-  ) {
+  // ── ricostruzione completa di _items e _circuitChildren ──
+  void _rebuildAll() {
+    final allEx = _workoutProvider.currentExercises;
     final freeEx = allEx.where((e) => !e.isInCircuit).toList();
-    return [
-      for (final ex in freeEx)
-        _ListItem(type: _ItemType.exercise, refKey: ex.key),
-      for (final c in circuits)
-        _ListItem(type: _ItemType.circuit, refKey: c.key),
+
+    _items = [
+      for (final ex in freeEx) _ListItem(type: _ItemType.exercise, data: ex),
+      for (final c in _circuits) _ListItem(type: _ItemType.circuit, data: c),
     ];
+
+    _circuitChildren = {
+      for (final c in _circuits)
+        c.key: allEx.where((e) => e.notes == '__circuit_${c.key}').toList(),
+    };
   }
 
-  // Chiamata dopo OGNI operazione CRUD per garantire un refresh
-  // immediato (aggiunta/modifica/cancellazione di esercizi o circuiti,
-  // anche dentro un circuito).
-  void _forceRebuild() => _loadData();
+  // ── sincronizzazione non-distruttiva ──
+  // Chiamata a ogni build (mai dentro setState: siamo già in
+  // build, le mutazioni qui sotto vengono lette nella stessa
+  // passata di rendering — stesso schema della sessione).
+  void _syncWithProvider() {
+    final allEx = _workoutProvider.currentExercises;
+    final freeEx = allEx.where((e) => !e.isInCircuit).toList();
 
-  HiveWorkoutExercise? _findExercise(dynamic key) {
-    for (final e in _allExercises) {
-      if (e.key == key) return e;
+    // ── top-level ──
+    final validIds = <String>{
+      for (final ex in freeEx) 'ex_${ex.key}',
+      for (final c in _circuits) 'circuit_${c.key}',
+    };
+    final localIds = _items.map((i) => i.stableId).toSet();
+    if (!(validIds.length == localIds.length &&
+        validIds.containsAll(localIds))) {
+      _items.removeWhere((i) => !validIds.contains(i.stableId));
+      final stillLocal = _items.map((i) => i.stableId).toSet();
+      for (final ex in freeEx) {
+        final id = 'ex_${ex.key}';
+        if (!stillLocal.contains(id)) {
+          _items.add(_ListItem(type: _ItemType.exercise, data: ex));
+        }
+      }
+      for (final c in _circuits) {
+        final id = 'circuit_${c.key}';
+        if (!stillLocal.contains(id)) {
+          _items.add(_ListItem(type: _ItemType.circuit, data: c));
+        }
+      }
     }
-    return null;
-  }
 
-  HiveCircuit? _findCircuit(dynamic key) {
+    // ── figli di ciascun circuito ──
     for (final c in _circuits) {
-      if (c.key == key) return c;
+      final tag = '__circuit_${c.key}';
+      final liveChildren = allEx.where((e) => e.notes == tag).toList();
+      final liveIds = liveChildren.map((e) => e.key).toSet();
+      final existing = _circuitChildren[c.key] ?? [];
+      final existingIds = existing.map((e) => e.key).toSet();
+
+      if (liveIds.length == existingIds.length &&
+          liveIds.containsAll(existingIds)) {
+        continue; // stesso insieme di figli: ordine intatto
+      }
+
+      final newList =
+          existing.where((e) => liveIds.contains(e.key)).toList();
+      for (final ex in liveChildren) {
+        if (!existingIds.contains(ex.key)) newList.add(ex);
+      }
+      _circuitChildren[c.key] = newList;
     }
-    return null;
   }
 
-  List<HiveWorkoutExercise> _childrenOf(HiveCircuit circuit) {
-    final tag = '__circuit_${circuit.key}';
-    return _allExercises.where((e) => e.notes == tag).toList();
+  // ── ricarica completa (dopo CRUD espliciti) ──
+  Future<void> _forceRebuild() async {
+    _circuits = HiveDatabase.instance.getCircuits(widget.workoutId);
+    _workoutProvider.loadWorkoutExercises(widget.workoutId);
+    if (!mounted) return;
+    setState(() => _rebuildAll());
   }
 
   // ────────────────────────────────────────
-  // Reorder lista esterna — stesso schema di active_session_screen:
-  // ReorderableListView + setState diretto su _items.
+  // Reorder TOP-LEVEL — sincrono, esattamente come la sessione
   // ────────────────────────────────────────
   void _onReorder(int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex--;
@@ -152,16 +197,16 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     });
 
     final snapshot = List<_ListItem>.from(_items);
-    _persistQueue = _persistQueue.then((_) => _persistOrder(snapshot));
+    _persistQueue =
+        _persistQueue.then((_) => _persistTopLevelOrder(snapshot));
   }
 
-  Future<void> _persistOrder(List<_ListItem> snapshot) async {
+  Future<void> _persistTopLevelOrder(List<_ListItem> snapshot) async {
     int exOrder = 0;
     int circuitOrder = 0;
-    for (final it in snapshot) {
-      if (it.type == _ItemType.exercise) {
-        final we = _findExercise(it.refKey);
-        if (we == null) continue;
+    for (final item in snapshot) {
+      if (item.type == _ItemType.exercise) {
+        final we = item.data as HiveWorkoutExercise;
         await HiveDatabase.instance.updateWorkoutExercise(
           we.key,
           HiveWorkoutExercise(
@@ -178,8 +223,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
           ),
         );
       } else {
-        final c = _findCircuit(it.refKey);
-        if (c == null) continue;
+        final c = item.data as HiveCircuit;
         await HiveDatabase.instance
             .updateCircuitSortOrder(c.key, circuitOrder++);
       }
@@ -188,32 +232,29 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
   }
 
   // ────────────────────────────────────────
-  // Reorder interno al circuito — stesso schema di
-  // _CircuitSessionBlock in active_session_screen.dart.
+  // Reorder INTERNO al circuito — sincrono
   // ────────────────────────────────────────
-  void _onReorderCircuitExercises(
-    HiveCircuit circuit,
-    List<HiveWorkoutExercise> currentChildren,
-    int oldIndex,
-    int newIndex,
-  ) {
+  void _onReorderCircuitChildren(
+      dynamic circuitKey, int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex--;
-    final reordered = List<HiveWorkoutExercise>.from(currentChildren);
-    final item = reordered.removeAt(oldIndex);
-    reordered.insert(newIndex, item);
+    if (oldIndex == newIndex) return;
+
+    final current =
+        List<HiveWorkoutExercise>.from(_circuitChildren[circuitKey] ?? []);
+    if (oldIndex >= current.length || newIndex > current.length) return;
 
     setState(() {
-      final tag = '__circuit_${circuit.key}';
-      final others = _allExercises.where((e) => e.notes != tag).toList();
-      _allExercises = [...others, ...reordered];
+      final item = current.removeAt(oldIndex);
+      current.insert(newIndex, item);
+      _circuitChildren[circuitKey] = current;
     });
 
-    final snapshot = List<HiveWorkoutExercise>.from(reordered);
+    final snapshot = List<HiveWorkoutExercise>.from(current);
     _persistQueue =
-        _persistQueue.then((_) => _persistCircuitOrder(snapshot));
+        _persistQueue.then((_) => _persistCircuitChildrenOrder(snapshot));
   }
 
-  Future<void> _persistCircuitOrder(
+  Future<void> _persistCircuitChildrenOrder(
       List<HiveWorkoutExercise> snapshot) async {
     int order = 0;
     for (final we in snapshot) {
@@ -261,7 +302,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
           ],
           child: _SelectExercisesScreen(
             workoutId: widget.workoutId,
-            currentExercises: _allExercises,
+            currentExercises: _workoutProvider.currentExercises,
           ),
         ),
       ),
@@ -322,100 +363,90 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     showGlassBottomSheet(
       context: context,
       child: StatefulBuilder(
-        builder: (ctx, setModal) {
-          final maxHeight = MediaQuery.of(ctx).size.height * 0.8;
-          return Padding(
-            padding: EdgeInsets.only(
-                bottom: MediaQuery.of(ctx).viewInsets.bottom),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxHeight),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const GlassSheetHandle(),
-                    const SizedBox(height: 16),
-                    Row(children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .tertiaryContainer,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(Icons.loop_rounded,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onTertiaryContainer,
-                            size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      Text('Nuovo circuito',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700)),
-                    ]),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: nameCtrl,
-                      autofocus: true,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        labelText: 'Nome circuito',
-                        hintText: 'Es. Circuito A, Superset...',
-                        prefixIcon: Icon(Icons.edit_outlined),
-                      ),
+        builder: (ctx, setModal) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const GlassSheetHandle(),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color:
+                          Theme.of(context).colorScheme.tertiaryContainer,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    const SizedBox(height: 16),
-                    Text('Numero di cicli',
-                        style: Theme.of(context).textTheme.labelMedium),
-                    const SizedBox(height: 8),
-                    Row(children: [
-                      _RoundsButton(
-                          icon: Icons.remove,
-                          onTap: rounds > 1
-                              ? () => setModal(() => rounds--)
-                              : null),
-                      Expanded(
-                          child: Center(
-                              child: Text('$rounds cicli',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(
-                                          fontWeight: FontWeight.w700)))),
-                      _RoundsButton(
-                          icon: Icons.add,
-                          onTap: () => setModal(() => rounds++)),
-                    ]),
-                    const SizedBox(height: 20),
-                    GlassDialogActions(
-                      cancelLabel: 'Annulla',
-                      confirmLabel: 'Crea circuito',
-                      onCancel: () => Navigator.pop(ctx),
-                      onConfirm: () async {
-                        if (nameCtrl.text.trim().isEmpty) return;
-                        await HiveDatabase.instance.addCircuit(HiveCircuit(
-                          workoutKey: widget.workoutId,
-                          name: nameCtrl.text.trim(),
-                          rounds: rounds,
-                          sortOrder: _circuits.length,
-                        ));
-                        _forceRebuild();
-                        if (ctx.mounted) Navigator.pop(ctx);
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+                    child: Icon(Icons.loop_rounded,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onTertiaryContainer,
+                        size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Text('Nuovo circuito',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                ]),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: nameCtrl,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'Nome circuito',
+                    hintText: 'Es. Circuito A, Superset...',
+                    prefixIcon: Icon(Icons.edit_outlined),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                Text('Numero di cicli',
+                    style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 8),
+                Row(children: [
+                  _RoundsButton(
+                      icon: Icons.remove,
+                      onTap: rounds > 1
+                          ? () => setModal(() => rounds--)
+                          : null),
+                  Expanded(
+                      child: Center(
+                          child: Text('$rounds cicli',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                      fontWeight: FontWeight.w700)))),
+                  _RoundsButton(
+                      icon: Icons.add,
+                      onTap: () => setModal(() => rounds++)),
+                ]),
+                const SizedBox(height: 20),
+                GlassDialogActions(
+                  cancelLabel: 'Annulla',
+                  confirmLabel: 'Crea circuito',
+                  onCancel: () => Navigator.pop(ctx),
+                  onConfirm: () async {
+                    if (nameCtrl.text.trim().isEmpty) return;
+                    await HiveDatabase.instance.addCircuit(HiveCircuit(
+                      workoutKey: widget.workoutId,
+                      name: nameCtrl.text.trim(),
+                      rounds: rounds,
+                      sortOrder: _circuits.length,
+                    ));
+                    await _forceRebuild();
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                ),
+              ],
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -426,75 +457,66 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     showGlassBottomSheet(
       context: context,
       child: StatefulBuilder(
-        builder: (ctx, setModal) {
-          final maxHeight = MediaQuery.of(ctx).size.height * 0.8;
-          return Padding(
-            padding: EdgeInsets.only(
-                bottom: MediaQuery.of(ctx).viewInsets.bottom),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxHeight),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const GlassSheetHandle(),
-                    const SizedBox(height: 16),
-                    Text('Modifica circuito',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: nameCtrl,
-                      autofocus: true,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration:
-                          const InputDecoration(labelText: 'Nome circuito'),
-                    ),
-                    const SizedBox(height: 16),
-                    Text('Numero di cicli',
-                        style: Theme.of(context).textTheme.labelMedium),
-                    const SizedBox(height: 8),
-                    Row(children: [
-                      _RoundsButton(
-                          icon: Icons.remove,
-                          onTap: rounds > 1
-                              ? () => setModal(() => rounds--)
-                              : null),
-                      Expanded(
-                          child: Center(
-                              child: Text('$rounds cicli',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(
-                                          fontWeight: FontWeight.w700)))),
-                      _RoundsButton(
-                          icon: Icons.add,
-                          onTap: () => setModal(() => rounds++)),
-                    ]),
-                    const SizedBox(height: 20),
-                    GlassDialogActions(
-                      cancelLabel: 'Annulla',
-                      confirmLabel: 'Salva',
-                      onCancel: () => Navigator.pop(ctx),
-                      onConfirm: () async {
-                        await HiveDatabase.instance.updateCircuit(
-                            circuit.key, nameCtrl.text.trim(), rounds);
-                        _forceRebuild();
-                        if (ctx.mounted) Navigator.pop(ctx);
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+        builder: (ctx, setModal) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const GlassSheetHandle(),
+                const SizedBox(height: 16),
+                Text('Modifica circuito',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: nameCtrl,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration:
+                      const InputDecoration(labelText: 'Nome circuito'),
                 ),
-              ),
+                const SizedBox(height: 16),
+                Text('Numero di cicli',
+                    style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 8),
+                Row(children: [
+                  _RoundsButton(
+                      icon: Icons.remove,
+                      onTap: rounds > 1
+                          ? () => setModal(() => rounds--)
+                          : null),
+                  Expanded(
+                      child: Center(
+                          child: Text('$rounds cicli',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                      fontWeight: FontWeight.w700)))),
+                  _RoundsButton(
+                      icon: Icons.add,
+                      onTap: () => setModal(() => rounds++)),
+                ]),
+                const SizedBox(height: 20),
+                GlassDialogActions(
+                  cancelLabel: 'Annulla',
+                  confirmLabel: 'Salva',
+                  onCancel: () => Navigator.pop(ctx),
+                  onConfirm: () async {
+                    await HiveDatabase.instance.updateCircuit(
+                        circuit.key, nameCtrl.text.trim(), rounds);
+                    await _forceRebuild();
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                ),
+              ],
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -526,7 +548,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
               onCancel: () => Navigator.pop(context),
               onConfirm: () async {
                 await HiveDatabase.instance.deleteCircuit(circuit.key);
-                _forceRebuild();
+                await _forceRebuild();
                 if (mounted) Navigator.pop(context);
               },
             ),
@@ -536,11 +558,13 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     );
   }
 
+  // ────────────────────────────────────────
+  // Build
+  // ────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     if (!_loaded) {
+      final cs = Theme.of(context).colorScheme;
       return Scaffold(
         backgroundColor: cs.surface,
         appBar: AppBar(
@@ -549,6 +573,12 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
       );
     }
 
+    // Osserviamo il provider: a ogni notifica, sincronizziamo
+    // senza distruggere l'ordine — esattamente come la sessione.
+    context.watch<WorkoutProvider>();
+    _syncWithProvider();
+
+    final cs = Theme.of(context).colorScheme;
     final isEmpty = _items.isEmpty;
 
     return Scaffold(
@@ -602,17 +632,15 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                 ),
               ),
               onReorder: _onReorder,
-              children: List.generate(_items.length, (index) {
-                final item = _items[index];
+              children: _items.asMap().entries.map((e) {
+                final index = e.key;
+                final item = e.value;
                 final collapsed = _isCollapsed(item.stableId);
 
                 if (item.type == _ItemType.exercise) {
-                  final we = _findExercise(item.refKey);
-                  if (we == null) {
-                    return SizedBox.shrink(key: item.widgetKey);
-                  }
+                  final we = item.data as HiveWorkoutExercise;
                   return ReorderableDelayedDragStartListener(
-                    key: item.widgetKey,
+                    key: ValueKey(item.stableId),
                     index: index,
                     child: _ExerciseRow(
                       workoutExercise: we,
@@ -624,13 +652,10 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                     ),
                   );
                 } else {
-                  final circuit = _findCircuit(item.refKey);
-                  if (circuit == null) {
-                    return SizedBox.shrink(key: item.widgetKey);
-                  }
-                  final children = _childrenOf(circuit);
+                  final circuit = item.data as HiveCircuit;
+                  final children = _circuitChildren[circuit.key] ?? [];
                   return ReorderableDelayedDragStartListener(
-                    key: item.widgetKey,
+                    key: ValueKey(item.stableId),
                     index: index,
                     child: _CircuitCard(
                       circuit: circuit,
@@ -652,7 +677,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                               child: _SelectExercisesScreen(
                                 workoutId: widget.workoutId,
                                 circuitKey: circuit.key,
-                                currentExercises: _allExercises,
+                                currentExercises:
+                                    _workoutProvider.currentExercises,
                               ),
                             ),
                           ),
@@ -664,13 +690,13 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                           _confirmDeleteCircuit(circuit),
                       onEditCircuit: () =>
                           _showEditCircuitSheet(circuit),
-                      onReorderExercises: (oldIndex, newIndex) =>
-                          _onReorderCircuitExercises(
-                              circuit, children, oldIndex, newIndex),
+                      onReorderExercises: (oldIdx, newIdx) =>
+                          _onReorderCircuitChildren(
+                              circuit.key, oldIdx, newIdx),
                     ),
                   );
                 }
-              }),
+              }).toList(),
             ),
       bottomNavigationBar: !isEmpty
           ? Padding(
@@ -722,8 +748,10 @@ class _RoundsButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-// _CircuitCard — lista interna con ReorderableListView,
-// stesso schema di _CircuitSessionBlock in active_session_screen.
+// _CircuitCard — riordino interno tramite ReorderableListView
+// nidificata, ESATTO calco di _CircuitSessionBlock nella sessione
+// attiva: shrinkWrap + NeverScrollableScrollPhysics + indici grezzi
+// passati al chiamante (oldIndex/newIndex), non liste già riordinate.
 // ─────────────────────────────────────────────
 class _CircuitCard extends StatelessWidget {
   final HiveCircuit circuit;
@@ -1551,8 +1579,7 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-    final firstWeight =
-        _series.isNotEmpty ? _series.first.weight : 0.0;
+    final firstWeight = _series.isNotEmpty ? _series.first.weight : 0.0;
     final firstReps = _series.isNotEmpty
         ? _series.first.reps
         : widget.workoutExercise.targetReps;
@@ -1561,9 +1588,7 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
     final isCirc = orig != null && orig.startsWith('__circuit_');
     final newNotes = isCirc
         ? orig
-        : (_notesCtrl.text.trim().isEmpty
-            ? null
-            : _notesCtrl.text.trim());
+        : (_notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim());
 
     context.read<WorkoutProvider>().updateExerciseInWorkout(
         we.key,
@@ -1588,11 +1613,7 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
     final isCircuit = widget.workoutExercise.isInCircuit;
 
     return Padding(
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 20,
-          right: 20,
-          top: 20),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -1665,14 +1686,13 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
                   serie: entry.value,
                   canDelete: _series.length > 1,
                   onDelete: () => _removeSerie(i),
-                  onChanged: (w, r) => setState(() =>
-                      _series[i] = _SerieRow(weight: w, reps: r)),
+                  onChanged: (w, r) => setState(
+                      () => _series[i] = _SerieRow(weight: w, reps: r)),
                 );
               }),
               const SizedBox(height: 20),
               GlassFilledButton(
                   onPressed: _save, child: const Text('Salva')),
-              const SizedBox(height: 20),
             ],
           ),
         ),

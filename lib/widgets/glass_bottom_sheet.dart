@@ -81,6 +81,20 @@ class GlassDialog extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────
+// showGlassBottomSheet
+//
+// FIX TASTIERA — VERSIONE DEFINITIVA
+//
+// Il padding bottom deriva direttamente da
+// MediaQuery.of(context).viewInsets.bottom all'interno di un
+// Padding NON animato: questo permette al pannello di seguire
+// esattamente, frame per frame, l'animazione NATIVA della
+// tastiera, senza introdurre una seconda animazione indipendente
+// (come faceva la precedente AnimatedPadding) che entrava in
+// conflitto con il layer BackdropFilter e causava lo sparire del
+// contenuto durante l'apertura/chiusura della tastiera.
+// ─────────────────────────────────────────────
 Future<T?> showGlassBottomSheet<T>({
   required BuildContext context,
   required Widget child,
@@ -92,7 +106,14 @@ Future<T?> showGlassBottomSheet<T>({
     isScrollControlled: isScrollControlled,
     useSafeArea: useSafeArea,
     backgroundColor: Colors.transparent,
-    builder: (_) => GlassBottomSheetWrapper(child: child),
+    builder: (sheetContext) {
+      return Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+        ),
+        child: GlassBottomSheetWrapper(child: child),
+      );
+    },
   );
 }
 
