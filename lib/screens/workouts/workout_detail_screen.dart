@@ -9,9 +9,56 @@ import '../../widgets/glass_bottom_sheet.dart';
 import '../../db/hive_database.dart';
 
 // ─────────────────────────────────────────────
-// Tipi lista piatta — stesso identico schema usato in
-// active_session_screen.dart: _data contiene l'OGGETTO reale,
-// non un riferimento da risolvere.
+// _DelayedFocusTextField — vedi spiegazione completa in
+// workouts_screen.dart. Stesso fix applicato qui ai campi
+// "Nuovo circuito" e "Modifica circuito".
+// ─────────────────────────────────────────────
+class _DelayedFocusTextField extends StatefulWidget {
+  final TextEditingController controller;
+  final InputDecoration decoration;
+  final TextCapitalization textCapitalization;
+
+  const _DelayedFocusTextField({
+    required this.controller,
+    required this.decoration,
+    this.textCapitalization = TextCapitalization.none,
+  });
+
+  @override
+  State<_DelayedFocusTextField> createState() =>
+      _DelayedFocusTextFieldState();
+}
+
+class _DelayedFocusTextFieldState extends State<_DelayedFocusTextField> {
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 260), () {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      focusNode: _focusNode,
+      textCapitalization: widget.textCapitalization,
+      decoration: widget.decoration,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Tipi lista piatta drag & drop
 // ─────────────────────────────────────────────
 enum _ItemType { exercise, circuit }
 
@@ -51,28 +98,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
   late ExerciseProvider _exerciseProvider;
   late WorkoutProvider _workoutProvider;
 
-  // I circuiti non hanno un notifier dedicato: li teniamo qui,
-  // ricaricati esplicitamente dopo ogni CRUD sui circuiti.
   List<HiveCircuit> _circuits = [];
 
-  // ══════════════════════════════════════════
-  // STATO LOCALE — stesso principio di active_session_screen:
-  //
-  //  _items            → ordine TOP-LEVEL (esercizi liberi + cicli)
-  //  _circuitChildren  → ordine interno di ciascun circuito
-  //
-  // Entrambi vengono ricostruiti per intero SOLO da _rebuildAll()
-  // (dopo CRUD espliciti). Nei rebuild "passivi" causati dal
-  // provider, _syncWithProvider() aggiunge/rimuove SENZA toccare
-  // l'ordine — esattamente come _syncWithProvider nella sessione.
-  //
-  // Il drag & drop modifica SOLO questi campi, in modo SINCRONO
-  // (nessun await nel percorso dell'interazione utente): è esat-
-  // tamente questo che rende stabile il D&D nella sessione attiva.
-  // Il salvataggio su Hive avviene in background, in coda, su una
-  // copia immutabile (snapshot) della lista al momento del drop,
-  // così non può mai essere corrotto da un secondo drag rapido.
-  // ══════════════════════════════════════════
   List<_ListItem> _items = [];
   Map<dynamic, List<HiveWorkoutExercise>> _circuitChildren = {};
   bool _loaded = false;
@@ -106,7 +133,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     });
   }
 
-  // ── ricostruzione completa di _items e _circuitChildren ──
   void _rebuildAll() {
     final allEx = _workoutProvider.currentExercises;
     final freeEx = allEx.where((e) => !e.isInCircuit).toList();
@@ -122,15 +148,10 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     };
   }
 
-  // ── sincronizzazione non-distruttiva ──
-  // Chiamata a ogni build (mai dentro setState: siamo già in
-  // build, le mutazioni qui sotto vengono lette nella stessa
-  // passata di rendering — stesso schema della sessione).
   void _syncWithProvider() {
     final allEx = _workoutProvider.currentExercises;
     final freeEx = allEx.where((e) => !e.isInCircuit).toList();
 
-    // ── top-level ──
     final validIds = <String>{
       for (final ex in freeEx) 'ex_${ex.key}',
       for (final c in _circuits) 'circuit_${c.key}',
@@ -154,7 +175,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
       }
     }
 
-    // ── figli di ciascun circuito ──
     for (final c in _circuits) {
       final tag = '__circuit_${c.key}';
       final liveChildren = allEx.where((e) => e.notes == tag).toList();
@@ -164,7 +184,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
 
       if (liveIds.length == existingIds.length &&
           liveIds.containsAll(existingIds)) {
-        continue; // stesso insieme di figli: ordine intatto
+        continue;
       }
 
       final newList =
@@ -176,7 +196,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     }
   }
 
-  // ── ricarica completa (dopo CRUD espliciti) ──
   Future<void> _forceRebuild() async {
     _circuits = HiveDatabase.instance.getCircuits(widget.workoutId);
     _workoutProvider.loadWorkoutExercises(widget.workoutId);
@@ -184,9 +203,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     setState(() => _rebuildAll());
   }
 
-  // ────────────────────────────────────────
-  // Reorder TOP-LEVEL — sincrono, esattamente come la sessione
-  // ────────────────────────────────────────
   void _onReorder(int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex--;
     if (oldIndex == newIndex) return;
@@ -231,9 +247,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     _workoutProvider.loadWorkoutExercises(widget.workoutId);
   }
 
-  // ────────────────────────────────────────
-  // Reorder INTERNO al circuito — sincrono
-  // ────────────────────────────────────────
   void _onReorderCircuitChildren(
       dynamic circuitKey, int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex--;
@@ -394,9 +407,9 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                           ?.copyWith(fontWeight: FontWeight.w700)),
                 ]),
                 const SizedBox(height: 20),
-                TextField(
+                // FIX TASTIERA: niente autofocus diretto.
+                _DelayedFocusTextField(
                   controller: nameCtrl,
-                  autofocus: true,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
                     labelText: 'Nome circuito',
@@ -472,9 +485,9 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                         .titleMedium
                         ?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 20),
-                TextField(
+                // FIX TASTIERA: niente autofocus diretto.
+                _DelayedFocusTextField(
                   controller: nameCtrl,
-                  autofocus: true,
                   textCapitalization: TextCapitalization.sentences,
                   decoration:
                       const InputDecoration(labelText: 'Nome circuito'),
@@ -558,9 +571,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     );
   }
 
-  // ────────────────────────────────────────
-  // Build
-  // ────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
@@ -573,8 +583,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
       );
     }
 
-    // Osserviamo il provider: a ogni notifica, sincronizziamo
-    // senza distruggere l'ordine — esattamente come la sessione.
     context.watch<WorkoutProvider>();
     _syncWithProvider();
 
@@ -748,10 +756,7 @@ class _RoundsButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-// _CircuitCard — riordino interno tramite ReorderableListView
-// nidificata, ESATTO calco di _CircuitSessionBlock nella sessione
-// attiva: shrinkWrap + NeverScrollableScrollPhysics + indici grezzi
-// passati al chiamante (oldIndex/newIndex), non liste già riordinate.
+// _CircuitCard
 // ─────────────────────────────────────────────
 class _CircuitCard extends StatelessWidget {
   final HiveCircuit circuit;
@@ -1324,6 +1329,15 @@ class _InfoChip extends StatelessWidget {
 
 // ─────────────────────────────────────────────
 // _SelectExercisesScreen
+//
+// FIX CARICAMENTO INFINITO
+//
+// Questa schermata mostrava lo spinner per sempre se il catalogo
+// esercizi (ExerciseProvider) non era già stato caricato altrove
+// e non lo richiedeva mai essa stessa. Ora lo richiede esplici-
+// tamente all'apertura (stesso pattern già usato in altre
+// schermate dell'app, es. ExercisesScreen), eliminando qualunque
+// possibilità di restare bloccata sullo spinner.
 // ─────────────────────────────────────────────
 class _SelectExercisesScreen extends StatefulWidget {
   final dynamic workoutId;
@@ -1346,6 +1360,14 @@ class _SelectExercisesScreenState extends State<_SelectExercisesScreen> {
   String _search = '';
   String _muscleFilter = 'Tutti';
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      if (mounted) context.read<ExerciseProvider>().loadExercises();
+    });
+  }
 
   void _toggle(dynamic key) => setState(() => _selected.contains(key)
       ? _selected.remove(key)
@@ -1457,7 +1479,35 @@ class _SelectExercisesScreenState extends State<_SelectExercisesScreen> {
         const SizedBox(height: 8),
         Expanded(
           child: allEx.isEmpty
-              ? const Center(child: CircularProgressIndicator())
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Caricamento esercizi...',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outline),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: () => context
+                              .read<ExerciseProvider>()
+                              .loadExercises(),
+                          child: const Text('Riprova'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               : ListView.builder(
                   itemCount: filtered.length,
                   itemBuilder: (_, i) {

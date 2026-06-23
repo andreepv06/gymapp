@@ -10,6 +10,72 @@ import '../../widgets/workout_icon.dart';
 import '../../db/hive_database.dart';
 import 'workout_detail_screen.dart';
 
+// ─────────────────────────────────────────────
+// _DelayedFocusTextField
+//
+// FIX BUG TASTIERA
+//
+// Un TextField con autofocus: true richiede il focus (e quindi
+// apre la tastiera) IMMEDIATAMENTE quando la bottom sheet inizia
+// a costruirsi, cioè MENTRE la sheet stessa sta ancora eseguendo
+// la propria animazione di apertura (slide-up). Le due animazioni
+// indipendenti — apertura della sheet e apertura della tastiera —
+// avvenendo in parallelo e con curve diverse, producono nel primo
+// frame un offset di layout errato che fa "sparire" il contenuto
+// verso l'alto. Da qui il sintomo esatto descritto: il bug si
+// presenta SOLO la prima volta (quando la sheet si sta ancora
+// aprendo); chiudendo e riaprendo manualmente la tastiera il bug
+// non si ripete più, perché a quel punto la sheet è già ferma.
+//
+// La correzione è rimandare la richiesta di focus finché la sheet
+// non ha terminato la propria animazione di apertura (la durata di
+// default delle bottom sheet di Flutter è ~250ms), così le due
+// animazioni non si sovrappongono mai.
+// ─────────────────────────────────────────────
+class _DelayedFocusTextField extends StatefulWidget {
+  final TextEditingController controller;
+  final InputDecoration decoration;
+  final TextCapitalization textCapitalization;
+
+  const _DelayedFocusTextField({
+    required this.controller,
+    required this.decoration,
+    this.textCapitalization = TextCapitalization.none,
+  });
+
+  @override
+  State<_DelayedFocusTextField> createState() =>
+      _DelayedFocusTextFieldState();
+}
+
+class _DelayedFocusTextFieldState extends State<_DelayedFocusTextField> {
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 260), () {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      focusNode: _focusNode,
+      textCapitalization: widget.textCapitalization,
+      decoration: widget.decoration,
+    );
+  }
+}
+
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
 
@@ -45,8 +111,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
   }
 
-  // Nota: nessun padding manuale per la tastiera qui — è gestito
-  // centralmente da showGlassBottomSheet (vedi glass_bottom_sheet.dart).
   void _showAddWorkoutSheet(BuildContext context) {
     final nameCtrl = TextEditingController();
     String? selectedIconId;
@@ -124,9 +188,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     ),
                     const SizedBox(width: 14),
                     Expanded(
-                      child: TextField(
+                      // FIX TASTIERA: niente autofocus diretto.
+                      // Vedi _DelayedFocusTextField.
+                      child: _DelayedFocusTextField(
                         controller: nameCtrl,
-                        autofocus: true,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: const InputDecoration(
                           labelText: 'Nome scheda',
@@ -414,9 +479,9 @@ class _WorkoutCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge),
               ),
               const SizedBox(height: 16),
-              TextField(
+              // FIX TASTIERA: niente autofocus diretto.
+              _DelayedFocusTextField(
                 controller: controller,
-                autofocus: true,
                 textCapitalization: TextCapitalization.sentences,
                 decoration:
                     const InputDecoration(labelText: 'Nome scheda'),
