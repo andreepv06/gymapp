@@ -13,24 +13,11 @@ import 'workout_detail_screen.dart';
 // ─────────────────────────────────────────────
 // _DelayedFocusTextField
 //
-// FIX BUG TASTIERA
-//
-// Un TextField con autofocus: true richiede il focus (e quindi
-// apre la tastiera) IMMEDIATAMENTE quando la bottom sheet inizia
-// a costruirsi, cioè MENTRE la sheet stessa sta ancora eseguendo
-// la propria animazione di apertura (slide-up). Le due animazioni
-// indipendenti — apertura della sheet e apertura della tastiera —
-// avvenendo in parallelo e con curve diverse, producono nel primo
-// frame un offset di layout errato che fa "sparire" il contenuto
-// verso l'alto. Da qui il sintomo esatto descritto: il bug si
-// presenta SOLO la prima volta (quando la sheet si sta ancora
-// aprendo); chiudendo e riaprendo manualmente la tastiera il bug
-// non si ripete più, perché a quel punto la sheet è già ferma.
-//
-// La correzione è rimandare la richiesta di focus finché la sheet
-// non ha terminato la propria animazione di apertura (la durata di
-// default delle bottom sheet di Flutter è ~250ms), così le due
-// animazioni non si sovrappongono mai.
+// Ulteriore sicurezza in aggiunta al fix di showGlassBottomSheet:
+// rimanda la richiesta di focus (e quindi l'apertura della
+// tastiera) finché l'animazione di apertura della bottom sheet
+// non è terminata, evitando che le due animazioni (apertura
+// sheet + apertura tastiera) si sovrappongano nello stesso frame.
 // ─────────────────────────────────────────────
 class _DelayedFocusTextField extends StatefulWidget {
   final TextEditingController controller;
@@ -188,8 +175,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     ),
                     const SizedBox(width: 14),
                     Expanded(
-                      // FIX TASTIERA: niente autofocus diretto.
-                      // Vedi _DelayedFocusTextField.
                       child: _DelayedFocusTextField(
                         controller: nameCtrl,
                         textCapitalization: TextCapitalization.sentences,
@@ -479,7 +464,6 @@ class _WorkoutCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge),
               ),
               const SizedBox(height: 16),
-              // FIX TASTIERA: niente autofocus diretto.
               _DelayedFocusTextField(
                 controller: controller,
                 textCapitalization: TextCapitalization.sentences,

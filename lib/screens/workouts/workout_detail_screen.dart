@@ -8,11 +8,6 @@ import '../../widgets/glass_action_buttons.dart';
 import '../../widgets/glass_bottom_sheet.dart';
 import '../../db/hive_database.dart';
 
-// ─────────────────────────────────────────────
-// _DelayedFocusTextField — vedi spiegazione completa in
-// workouts_screen.dart. Stesso fix applicato qui ai campi
-// "Nuovo circuito" e "Modifica circuito".
-// ─────────────────────────────────────────────
 class _DelayedFocusTextField extends StatefulWidget {
   final TextEditingController controller;
   final InputDecoration decoration;
@@ -95,6 +90,26 @@ class WorkoutDetailScreen extends StatefulWidget {
 }
 
 class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
+  // ══════════════════════════════════════════
+  // FIX CARICAMENTO INFINITO
+  //
+  // CAUSA REALE: nelle versioni precedenti questi due campi
+  // venivano assegnati in didChangeDependencies(), ma _initialLoad()
+  // veniva chiamato direttamente da initState(). Nel ciclo di vita
+  // di Flutter, initState() viene eseguito SEMPRE prima di
+  // didChangeDependencies(): quindi _initialLoad() tentava di
+  // usare campi `late` non ancora assegnati, lanciando un errore
+  // (LateInitializationError) dentro una funzione async mai
+  // attesa/gestita altrove. L'eccezione veniva silenziosamente
+  // persa, _loaded restava false per sempre, e la schermata
+  // mostrava lo spinner all'infinito — esattamente il bug
+  // riportato.
+  //
+  // CORREZIONE: i provider vengono ora richiesti direttamente in
+  // initState() (prima di chiamare _initialLoad()), eliminando
+  // qualsiasi dipendenza dall'ordine tra initState e
+  // didChangeDependencies.
+  // ══════════════════════════════════════════
   late ExerciseProvider _exerciseProvider;
   late WorkoutProvider _workoutProvider;
 
@@ -110,15 +125,10 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
   bool _globalCollapsed = false;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _exerciseProvider = context.read<ExerciseProvider>();
-    _workoutProvider = context.read<WorkoutProvider>();
-  }
-
-  @override
   void initState() {
     super.initState();
+    _exerciseProvider = context.read<ExerciseProvider>();
+    _workoutProvider = context.read<WorkoutProvider>();
     _initialLoad();
   }
 
@@ -407,7 +417,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                           ?.copyWith(fontWeight: FontWeight.w700)),
                 ]),
                 const SizedBox(height: 20),
-                // FIX TASTIERA: niente autofocus diretto.
                 _DelayedFocusTextField(
                   controller: nameCtrl,
                   textCapitalization: TextCapitalization.sentences,
@@ -485,7 +494,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                         .titleMedium
                         ?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 20),
-                // FIX TASTIERA: niente autofocus diretto.
                 _DelayedFocusTextField(
                   controller: nameCtrl,
                   textCapitalization: TextCapitalization.sentences,
@@ -1329,15 +1337,6 @@ class _InfoChip extends StatelessWidget {
 
 // ─────────────────────────────────────────────
 // _SelectExercisesScreen
-//
-// FIX CARICAMENTO INFINITO
-//
-// Questa schermata mostrava lo spinner per sempre se il catalogo
-// esercizi (ExerciseProvider) non era già stato caricato altrove
-// e non lo richiedeva mai essa stessa. Ora lo richiede esplici-
-// tamente all'apertura (stesso pattern già usato in altre
-// schermate dell'app, es. ExercisesScreen), eliminando qualunque
-// possibilità di restare bloccata sullo spinner.
 // ─────────────────────────────────────────────
 class _SelectExercisesScreen extends StatefulWidget {
   final dynamic workoutId;
@@ -1364,9 +1363,7 @@ class _SelectExercisesScreenState extends State<_SelectExercisesScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      if (mounted) context.read<ExerciseProvider>().loadExercises();
-    });
+    context.read<ExerciseProvider>().loadExercises();
   }
 
   void _toggle(dynamic key) => setState(() => _selected.contains(key)

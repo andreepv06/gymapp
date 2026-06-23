@@ -86,14 +86,28 @@ class GlassDialog extends StatelessWidget {
 //
 // FIX TASTIERA — VERSIONE DEFINITIVA
 //
-// Il padding bottom deriva direttamente da
-// MediaQuery.of(context).viewInsets.bottom all'interno di un
-// Padding NON animato: questo permette al pannello di seguire
-// esattamente, frame per frame, l'animazione NATIVA della
-// tastiera, senza introdurre una seconda animazione indipendente
-// (come faceva la precedente AnimatedPadding) che entrava in
-// conflitto con il layer BackdropFilter e causava lo sparire del
-// contenuto durante l'apertura/chiusura della tastiera.
+// CAUSA REALE DEL BUG:
+// showModalBottomSheet con isScrollControlled: true gestisce GIÀ
+// internamente l'adattamento alla tastiera. Le versioni precedenti
+// aggiungevano un Padding(bottom: viewInsets.bottom) manuale, che
+// si SOMMAVA a quello già applicato dal framework. Il risultato è
+// un doppio spostamento verso l'alto al primo frame in cui la
+// tastiera si apre — esattamente il sintomo riportato: il campo
+// "sparisce" verso l'alto la prima volta, perché viene spinto del
+// doppio rispetto al necessario. Chiudendo e riaprendo la
+// tastiera il bug non si ripresenta perché a quel punto i
+// meccanismi interni del framework hanno già raggiunto uno stato
+// stabile.
+//
+// CORREZIONE:
+// Si rimuove il Padding manuale e si delega l'adattamento alla
+// tastiera a un Scaffold con resizeToAvoidBottomInset: true.
+// Questo è esattamente lo stesso identico meccanismo che fa
+// funzionare correttamente la tastiera in TUTTE le altre
+// schermate dell'app (es. login, dove non è mai stato segnalato
+// alcun problema): è il meccanismo robusto e testato del
+// framework, non una nostra logica ad-hoc che può confliggere con
+// quella di sistema.
 // ─────────────────────────────────────────────
 Future<T?> showGlassBottomSheet<T>({
   required BuildContext context,
@@ -107,11 +121,10 @@ Future<T?> showGlassBottomSheet<T>({
     useSafeArea: useSafeArea,
     backgroundColor: Colors.transparent,
     builder: (sheetContext) {
-      return Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
-        ),
-        child: GlassBottomSheetWrapper(child: child),
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        resizeToAvoidBottomInset: true,
+        body: GlassBottomSheetWrapper(child: child),
       );
     },
   );
