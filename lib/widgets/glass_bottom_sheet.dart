@@ -84,30 +84,16 @@ class GlassDialog extends StatelessWidget {
 // ─────────────────────────────────────────────
 // showGlassBottomSheet
 //
-// FIX TASTIERA — VERSIONE DEFINITIVA
+// VERSIONE DEFINITIVA — torna al pattern minimo e proven.
 //
-// CAUSA REALE DEL BUG:
-// showModalBottomSheet con isScrollControlled: true gestisce GIÀ
-// internamente l'adattamento alla tastiera. Le versioni precedenti
-// aggiungevano un Padding(bottom: viewInsets.bottom) manuale, che
-// si SOMMAVA a quello già applicato dal framework. Il risultato è
-// un doppio spostamento verso l'alto al primo frame in cui la
-// tastiera si apre — esattamente il sintomo riportato: il campo
-// "sparisce" verso l'alto la prima volta, perché viene spinto del
-// doppio rispetto al necessario. Chiudendo e riaprendo la
-// tastiera il bug non si ripresenta perché a quel punto i
-// meccanismi interni del framework hanno già raggiunto uno stato
-// stabile.
-//
-// CORREZIONE:
-// Si rimuove il Padding manuale e si delega l'adattamento alla
-// tastiera a un Scaffold con resizeToAvoidBottomInset: true.
-// Questo è esattamente lo stesso identico meccanismo che fa
-// funzionare correttamente la tastiera in TUTTE le altre
-// schermate dell'app (es. login, dove non è mai stato segnalato
-// alcun problema): è il meccanismo robusto e testato del
-// framework, non una nostra logica ad-hoc che può confliggere con
-// quella di sistema.
+// Nessuno Scaffold, nessun Padding aggiunto a questo livello
+// centrale. Ogni sheet gestisce da sé l'eventuale padding per la
+// tastiera (esattamente come il pattern "Nuovo esercizio" che non
+// ha mai dato problemi). Questo elimina sia il bug "il pannello
+// appare dall'alto" (causato dallo Scaffold che si espandeva a
+// piena altezza e allineava il contenuto in cima) sia qualsiasi
+// doppia gestione della tastiera in conflitto con quella di ogni
+// singolo sheet.
 // ─────────────────────────────────────────────
 Future<T?> showGlassBottomSheet<T>({
   required BuildContext context,
@@ -120,13 +106,7 @@ Future<T?> showGlassBottomSheet<T>({
     isScrollControlled: isScrollControlled,
     useSafeArea: useSafeArea,
     backgroundColor: Colors.transparent,
-    builder: (sheetContext) {
-      return Scaffold(
-        backgroundColor: Colors.transparent,
-        resizeToAvoidBottomInset: true,
-        body: GlassBottomSheetWrapper(child: child),
-      );
-    },
+    builder: (_) => GlassBottomSheetWrapper(child: child),
   );
 }
 

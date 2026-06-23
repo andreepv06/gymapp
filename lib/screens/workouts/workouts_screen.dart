@@ -10,59 +10,6 @@ import '../../widgets/workout_icon.dart';
 import '../../db/hive_database.dart';
 import 'workout_detail_screen.dart';
 
-// ─────────────────────────────────────────────
-// _DelayedFocusTextField
-//
-// Ulteriore sicurezza in aggiunta al fix di showGlassBottomSheet:
-// rimanda la richiesta di focus (e quindi l'apertura della
-// tastiera) finché l'animazione di apertura della bottom sheet
-// non è terminata, evitando che le due animazioni (apertura
-// sheet + apertura tastiera) si sovrappongano nello stesso frame.
-// ─────────────────────────────────────────────
-class _DelayedFocusTextField extends StatefulWidget {
-  final TextEditingController controller;
-  final InputDecoration decoration;
-  final TextCapitalization textCapitalization;
-
-  const _DelayedFocusTextField({
-    required this.controller,
-    required this.decoration,
-    this.textCapitalization = TextCapitalization.none,
-  });
-
-  @override
-  State<_DelayedFocusTextField> createState() =>
-      _DelayedFocusTextFieldState();
-}
-
-class _DelayedFocusTextFieldState extends State<_DelayedFocusTextField> {
-  final FocusNode _focusNode = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(const Duration(milliseconds: 260), () {
-      if (mounted) _focusNode.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: widget.controller,
-      focusNode: _focusNode,
-      textCapitalization: widget.textCapitalization,
-      decoration: widget.decoration,
-    );
-  }
-}
-
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
 
@@ -98,6 +45,16 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
   }
 
+  // ─────────────────────────────────────────
+  // Nuova scheda
+  //
+  // FIX TASTIERA: il padding bottom è applicato qui, direttamente
+  // dal contenuto del sheet (pattern identico a "Nuovo esercizio",
+  // che non ha mai dato problemi). NESSUN autofocus: l'utente
+  // tocca il campo quando vuole scrivere, eliminando del tutto la
+  // corsa tra l'animazione di apertura del sheet e l'apertura
+  // della tastiera che causava il salto verso l'alto.
+  // ─────────────────────────────────────────
   void _showAddWorkoutSheet(BuildContext context) {
     final nameCtrl = TextEditingController();
     String? selectedIconId;
@@ -108,7 +65,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       context: context,
       child: StatefulBuilder(
         builder: (ctx, setModal) => Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 24,
+            right: 24,
+            top: 20,
+          ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -175,7 +137,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     ),
                     const SizedBox(width: 14),
                     Expanded(
-                      child: _DelayedFocusTextField(
+                      child: TextField(
                         controller: nameCtrl,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: const InputDecoration(
@@ -232,6 +194,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     }
                   },
                 ),
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -446,12 +409,19 @@ class _WorkoutCard extends StatelessWidget {
     }
   }
 
+  // FIX TASTIERA: padding bottom direttamente qui, nessun
+  // autofocus — stesso pattern di "Nuova scheda" qui sopra.
   void _showRenameSheet(BuildContext context) {
     final controller = TextEditingController(text: workout.name);
     showGlassBottomSheet(
       context: context,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 24,
+          right: 24,
+          top: 20,
+        ),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -464,7 +434,7 @@ class _WorkoutCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge),
               ),
               const SizedBox(height: 16),
-              _DelayedFocusTextField(
+              TextField(
                 controller: controller,
                 textCapitalization: TextCapitalization.sentences,
                 decoration:
@@ -484,6 +454,7 @@ class _WorkoutCard extends StatelessWidget {
                   Navigator.pop(context);
                 },
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),

@@ -8,50 +8,6 @@ import '../../widgets/glass_action_buttons.dart';
 import '../../widgets/glass_bottom_sheet.dart';
 import '../../db/hive_database.dart';
 
-class _DelayedFocusTextField extends StatefulWidget {
-  final TextEditingController controller;
-  final InputDecoration decoration;
-  final TextCapitalization textCapitalization;
-
-  const _DelayedFocusTextField({
-    required this.controller,
-    required this.decoration,
-    this.textCapitalization = TextCapitalization.none,
-  });
-
-  @override
-  State<_DelayedFocusTextField> createState() =>
-      _DelayedFocusTextFieldState();
-}
-
-class _DelayedFocusTextFieldState extends State<_DelayedFocusTextField> {
-  final FocusNode _focusNode = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(const Duration(milliseconds: 260), () {
-      if (mounted) _focusNode.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: widget.controller,
-      focusNode: _focusNode,
-      textCapitalization: widget.textCapitalization,
-      decoration: widget.decoration,
-    );
-  }
-}
-
 // ─────────────────────────────────────────────
 // Tipi lista piatta drag & drop
 // ─────────────────────────────────────────────
@@ -74,6 +30,24 @@ class _ListItem {
 
 // ─────────────────────────────────────────────
 // WorkoutDetailScreen
+//
+// FIX DRAG & DROP DEFINITIVO
+//
+// La lista PRINCIPALE (esercizi liberi + cicli) è ora la SOLA
+// ReorderableListView della schermata. Il riordino interno agli
+// esercizi di un circuito NON avviene più tramite una seconda
+// ReorderableListView annidata: due ReorderableListView annidate
+// usano entrambe un riconoscitore di pressione prolungata, ed
+// entrambe competono nella stessa "arena gestuale" quando si
+// trascina un elemento della lista esterna sopra/oltre un blocco
+// circuito. Questo è esattamente ciò che causava i sintomi
+// riportati: spostamento di più elementi insieme, impossibilità
+// di riportare un elemento sopra al blocco circuito.
+//
+// Il riordino interno al circuito avviene ora in una SCHERMATA
+// SEPARATA, raggiungibile con un pulsante dedicato: lì è presente
+// UNA SOLA ReorderableListView, senza alcuna nidificazione,
+// quindi senza alcun conflitto possibile.
 // ─────────────────────────────────────────────
 class WorkoutDetailScreen extends StatefulWidget {
   final dynamic workoutId;
@@ -90,26 +64,6 @@ class WorkoutDetailScreen extends StatefulWidget {
 }
 
 class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
-  // ══════════════════════════════════════════
-  // FIX CARICAMENTO INFINITO
-  //
-  // CAUSA REALE: nelle versioni precedenti questi due campi
-  // venivano assegnati in didChangeDependencies(), ma _initialLoad()
-  // veniva chiamato direttamente da initState(). Nel ciclo di vita
-  // di Flutter, initState() viene eseguito SEMPRE prima di
-  // didChangeDependencies(): quindi _initialLoad() tentava di
-  // usare campi `late` non ancora assegnati, lanciando un errore
-  // (LateInitializationError) dentro una funzione async mai
-  // attesa/gestita altrove. L'eccezione veniva silenziosamente
-  // persa, _loaded restava false per sempre, e la schermata
-  // mostrava lo spinner all'infinito — esattamente il bug
-  // riportato.
-  //
-  // CORREZIONE: i provider vengono ora richiesti direttamente in
-  // initState() (prima di chiamare _initialLoad()), eliminando
-  // qualsiasi dipendenza dall'ordine tra initState e
-  // didChangeDependencies.
-  // ══════════════════════════════════════════
   late ExerciseProvider _exerciseProvider;
   late WorkoutProvider _workoutProvider;
 
@@ -213,6 +167,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     setState(() => _rebuildAll());
   }
 
+  // ── Reorder lista principale (unica ReorderableListView) ──
   void _onReorder(int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex--;
     if (oldIndex == newIndex) return;
@@ -253,49 +208,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
         await HiveDatabase.instance
             .updateCircuitSortOrder(c.key, circuitOrder++);
       }
-    }
-    _workoutProvider.loadWorkoutExercises(widget.workoutId);
-  }
-
-  void _onReorderCircuitChildren(
-      dynamic circuitKey, int oldIndex, int newIndex) {
-    if (newIndex > oldIndex) newIndex--;
-    if (oldIndex == newIndex) return;
-
-    final current =
-        List<HiveWorkoutExercise>.from(_circuitChildren[circuitKey] ?? []);
-    if (oldIndex >= current.length || newIndex > current.length) return;
-
-    setState(() {
-      final item = current.removeAt(oldIndex);
-      current.insert(newIndex, item);
-      _circuitChildren[circuitKey] = current;
-    });
-
-    final snapshot = List<HiveWorkoutExercise>.from(current);
-    _persistQueue =
-        _persistQueue.then((_) => _persistCircuitChildrenOrder(snapshot));
-  }
-
-  Future<void> _persistCircuitChildrenOrder(
-      List<HiveWorkoutExercise> snapshot) async {
-    int order = 0;
-    for (final we in snapshot) {
-      await HiveDatabase.instance.updateWorkoutExercise(
-        we.key,
-        HiveWorkoutExercise(
-          workoutKey: we.workoutKey,
-          exerciseKey: we.exerciseKey,
-          exerciseName: we.exerciseName,
-          muscleGroup: we.muscleGroup,
-          sets: we.sets,
-          targetReps: we.targetReps,
-          targetWeight: we.targetWeight,
-          restSeconds: we.restSeconds,
-          notes: we.notes,
-          sortOrder: order++,
-        ),
-      );
     }
     _workoutProvider.loadWorkoutExercises(widget.workoutId);
   }
@@ -380,6 +292,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     );
   }
 
+  // FIX TASTIERA: padding bottom diretto, nessun autofocus.
   void _showAddCircuitSheet() {
     final nameCtrl = TextEditingController();
     int rounds = 3;
@@ -387,7 +300,12 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
       context: context,
       child: StatefulBuilder(
         builder: (ctx, setModal) => Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 24,
+            right: 24,
+            top: 20,
+          ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -417,7 +335,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                           ?.copyWith(fontWeight: FontWeight.w700)),
                 ]),
                 const SizedBox(height: 20),
-                _DelayedFocusTextField(
+                TextField(
                   controller: nameCtrl,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
@@ -465,6 +383,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                     if (ctx.mounted) Navigator.pop(ctx);
                   },
                 ),
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -480,7 +399,12 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
       context: context,
       child: StatefulBuilder(
         builder: (ctx, setModal) => Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 24,
+            right: 24,
+            top: 20,
+          ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -494,7 +418,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                         .titleMedium
                         ?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 20),
-                _DelayedFocusTextField(
+                TextField(
                   controller: nameCtrl,
                   textCapitalization: TextCapitalization.sentences,
                   decoration:
@@ -534,6 +458,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                     if (ctx.mounted) Navigator.pop(ctx);
                   },
                 ),
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -577,6 +502,20 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
         ),
       ),
     );
+  }
+
+  // ── Apre la schermata dedicata di riordino esercizi circuito ──
+  void _openReorderCircuitScreen(HiveCircuit circuit) {
+    final children = _circuitChildren[circuit.key] ?? [];
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _ReorderCircuitExercisesScreen(
+          circuit: circuit,
+          exercises: List<HiveWorkoutExercise>.from(children),
+        ),
+      ),
+    ).then((_) => _forceRebuild());
   }
 
   @override
@@ -706,9 +645,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                           _confirmDeleteCircuit(circuit),
                       onEditCircuit: () =>
                           _showEditCircuitSheet(circuit),
-                      onReorderExercises: (oldIdx, newIdx) =>
-                          _onReorderCircuitChildren(
-                              circuit.key, oldIdx, newIdx),
+                      onReorder: () => _openReorderCircuitScreen(circuit),
                     ),
                   );
                 }
@@ -725,6 +662,140 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
               ),
             )
           : null,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// _ReorderCircuitExercisesScreen
+//
+// Schermata dedicata, separata, con UNA SOLA ReorderableListView,
+// senza alcuna nidificazione: garantisce un riordino stabile e
+// affidabile, senza alcun conflitto gestuale possibile.
+// ─────────────────────────────────────────────
+class _ReorderCircuitExercisesScreen extends StatefulWidget {
+  final HiveCircuit circuit;
+  final List<HiveWorkoutExercise> exercises;
+
+  const _ReorderCircuitExercisesScreen({
+    required this.circuit,
+    required this.exercises,
+  });
+
+  @override
+  State<_ReorderCircuitExercisesScreen> createState() =>
+      _ReorderCircuitExercisesScreenState();
+}
+
+class _ReorderCircuitExercisesScreenState
+    extends State<_ReorderCircuitExercisesScreen> {
+  late List<HiveWorkoutExercise> _list;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _list = List.from(widget.exercises);
+  }
+
+  void _onReorder(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex--;
+    if (oldIndex == newIndex) return;
+    setState(() {
+      final item = _list.removeAt(oldIndex);
+      _list.insert(newIndex, item);
+    });
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    int order = 0;
+    for (final we in _list) {
+      await HiveDatabase.instance.updateWorkoutExercise(
+        we.key,
+        HiveWorkoutExercise(
+          workoutKey: we.workoutKey,
+          exerciseKey: we.exerciseKey,
+          exerciseName: we.exerciseName,
+          muscleGroup: we.muscleGroup,
+          sets: we.sets,
+          targetReps: we.targetReps,
+          targetWeight: we.targetWeight,
+          restSeconds: we.restSeconds,
+          notes: we.notes,
+          sortOrder: order++,
+        ),
+      );
+    }
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: cs.surface,
+      appBar: AppBar(
+        backgroundColor: cs.surface,
+        title: Text('Riordina — ${widget.circuit.name}'),
+        actions: [
+          _saving
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2)))
+              : GlassTextButton(
+                  onPressed: _save,
+                  child: const Text('Salva'),
+                ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: _list.isEmpty
+          ? Center(
+              child: Text('Nessun esercizio nel circuito',
+                  style: TextStyle(color: cs.outline)),
+            )
+          : ReorderableListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              buildDefaultDragHandles: false,
+              proxyDecorator: (child, index, animation) =>
+                  AnimatedBuilder(
+                animation: animation,
+                builder: (_, __) => Material(
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(14),
+                  shadowColor: Colors.black38,
+                  child: child,
+                ),
+              ),
+              onReorder: _onReorder,
+              children: _list.asMap().entries.map((e) {
+                final we = e.value;
+                return ReorderableDelayedDragStartListener(
+                  key: ValueKey('reorder_${we.key}'),
+                  index: e.key,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: cs.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: cs.outlineVariant),
+                    ),
+                    child: ListTile(
+                      leading: Icon(Icons.drag_handle_rounded,
+                          color: cs.outline.withOpacity(0.5)),
+                      title: Text(we.exerciseName,
+                          style:
+                              const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(we.muscleGroup),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
     );
   }
 }
@@ -765,6 +836,11 @@ class _RoundsButton extends StatelessWidget {
 
 // ─────────────────────────────────────────────
 // _CircuitCard
+//
+// Nessuna ReorderableListView annidata. Gli esercizi vengono
+// mostrati come riga statica (modifica/elimina restano possibili);
+// il riordino avviene tramite il pulsante "Riordina", che apre la
+// schermata dedicata.
 // ─────────────────────────────────────────────
 class _CircuitCard extends StatelessWidget {
   final HiveCircuit circuit;
@@ -776,7 +852,7 @@ class _CircuitCard extends StatelessWidget {
   final void Function(HiveWorkoutExercise) onDelete;
   final VoidCallback onDeleteCircuit;
   final VoidCallback onEditCircuit;
-  final void Function(int oldIndex, int newIndex) onReorderExercises;
+  final VoidCallback onReorder;
 
   const _CircuitCard({
     required this.circuit,
@@ -788,7 +864,7 @@ class _CircuitCard extends StatelessWidget {
     required this.onDelete,
     required this.onDeleteCircuit,
     required this.onEditCircuit,
-    required this.onReorderExercises,
+    required this.onReorder,
   });
 
   @override
@@ -876,54 +952,64 @@ class _CircuitCard extends StatelessWidget {
                         fontStyle: FontStyle.italic)),
               )
             else
-              ReorderableListView(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                buildDefaultDragHandles: false,
+              Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                proxyDecorator: (child, index, animation) =>
-                    AnimatedBuilder(
-                  animation: animation,
-                  builder: (_, __) => Material(
-                    elevation: 6,
-                    borderRadius: BorderRadius.circular(14),
-                    child: child,
-                  ),
-                ),
-                onReorder: onReorderExercises,
-                children: exercises
-                    .asMap()
-                    .entries
-                    .map((e) => ReorderableDelayedDragStartListener(
-                          key: ValueKey('circuit_child_${e.value.key}'),
-                          index: e.key,
-                          child: _ExerciseRow(
-                            workoutExercise: e.value,
+                child: Column(
+                  children: exercises
+                      .map((ex) => _ExerciseRow(
+                            key: ValueKey('circuit_child_${ex.key}'),
+                            workoutExercise: ex,
                             collapsed: false,
                             onToggleCollapse: () {},
-                            onEdit: () => onEdit(e.value),
-                            onDelete: () => onDelete(e.value),
+                            onEdit: () => onEdit(ex),
+                            onDelete: () => onDelete(ex),
                             compact: true,
-                          ),
-                        ))
-                    .toList(),
+                          ))
+                      .toList(),
+                ),
               ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-              child: GlassOutlinedButton(
-                onPressed: onAddExercise,
-                foregroundColor: cs.tertiary,
-                borderColor: cs.tertiary.withOpacity(0.4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add, size: 16, color: cs.tertiary),
-                    const SizedBox(width: 6),
-                    Text('Aggiungi esercizio',
-                        style:
-                            TextStyle(fontSize: 13, color: cs.tertiary)),
-                  ],
-                ),
+              child: Row(
+                children: [
+                  if (exercises.length > 1)
+                    Expanded(
+                      child: GlassOutlinedButton(
+                        onPressed: onReorder,
+                        foregroundColor: cs.tertiary,
+                        borderColor: cs.tertiary.withOpacity(0.4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.swap_vert_rounded,
+                                size: 16, color: cs.tertiary),
+                            const SizedBox(width: 6),
+                            Text('Riordina',
+                                style: TextStyle(
+                                    fontSize: 13, color: cs.tertiary)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (exercises.length > 1) const SizedBox(width: 8),
+                  Expanded(
+                    child: GlassOutlinedButton(
+                      onPressed: onAddExercise,
+                      foregroundColor: cs.tertiary,
+                      borderColor: cs.tertiary.withOpacity(0.4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add, size: 16, color: cs.tertiary),
+                          const SizedBox(width: 6),
+                          Text('Aggiungi',
+                              style: TextStyle(
+                                  fontSize: 13, color: cs.tertiary)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ] else
@@ -1660,7 +1746,12 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
     final isCircuit = widget.workoutExercise.isInCircuit;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 20,
+        right: 20,
+        top: 20,
+      ),
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -1740,6 +1831,7 @@ class _EditExerciseSheetState extends State<_EditExerciseSheet> {
               const SizedBox(height: 20),
               GlassFilledButton(
                   onPressed: _save, child: const Text('Salva')),
+              const SizedBox(height: 20),
             ],
           ),
         ),
