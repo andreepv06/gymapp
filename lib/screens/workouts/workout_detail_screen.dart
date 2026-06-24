@@ -10,44 +10,49 @@ import '../../db/hive_database.dart';
 
 // ─────────────────────────────────────────────
 // Tipi lista piatta drag & drop
+//
+// FIX DEFINITIVO: _ListItem contiene SOLO la chiave (refKey),
+// MAI l'oggetto HiveWorkoutExercise/HiveCircuit stesso.
+//
+// CAUSA REALE DEL BUG PRECEDENTE:
+// Ogni volta che un esercizio veniva aggiornato su Hive tramite
+// updateWorkoutExercise, NON si modificava l'oggetto esistente:
+// se ne creava uno NUOVO e lo si scriveva nel box con la stessa
+// chiave. L'oggetto vecchio, ancora referenziato dentro _items,
+// restava "vivo" in memoria ma scollegato dai dati reali. Quando
+// il provider notificava e _syncWithProvider confrontava i set di
+// chiavi, il confronto risultava "nessuna modifica" (le chiavi
+// coincidevano) e quindi _items non veniva mai aggiornata con i
+// riferimenti freschi — ma soprattutto, in combinazione con i
+// rebuild di Flutter durante un drag in corso, questa disconnes-
+// sione fra "ciò che la lista referenzia" e "ciò che esiste
+// davvero nel provider" produceva esattamente i sintomi visti:
+// duplicazioni ed elementi che sparivano.
+//
+// Nella sessione attiva questo problema non esiste perché
+// SessionExercise non viene mai ricreato: i suoi campi vengono
+// mutati sul posto, quindi l'oggetto referenziato resta sempre
+// valido. Per ottenere la stessa garanzia qui, _ListItem ora
+// contiene solo la CHIAVE: l'oggetto vero viene sempre risolto
+// "dal vivo" al momento del render, leggendo direttamente dalle
+// liste correnti del provider/dei circuiti.
 // ─────────────────────────────────────────────
 enum _ItemType { exercise, circuit }
 
 class _ListItem {
   final _ItemType type;
-  final dynamic data; // HiveWorkoutExercise | HiveCircuit
+  final dynamic refKey; // chiave Hive dell'esercizio o del circuito
 
-  _ListItem({required this.type, required this.data});
+  _ListItem({required this.type, required this.refKey});
 
-  String get stableId {
-    if (type == _ItemType.exercise) {
-      return 'ex_${(data as HiveWorkoutExercise).key}';
-    } else {
-      return 'circuit_${(data as HiveCircuit).key}';
-    }
-  }
+  String get stableId =>
+      type == _ItemType.exercise ? 'ex_$refKey' : 'circuit_$refKey';
+
+  Key get widgetKey => ValueKey(stableId);
 }
 
 // ─────────────────────────────────────────────
 // WorkoutDetailScreen
-//
-// FIX DRAG & DROP DEFINITIVO
-//
-// La lista PRINCIPALE (esercizi liberi + cicli) è ora la SOLA
-// ReorderableListView della schermata. Il riordino interno agli
-// esercizi di un circuito NON avviene più tramite una seconda
-// ReorderableListView annidata: due ReorderableListView annidate
-// usano entrambe un riconoscitore di pressione prolungata, ed
-// entrambe competono nella stessa "arena gestuale" quando si
-// trascina un elemento della lista esterna sopra/oltre un blocco
-// circuito. Questo è esattamente ciò che causava i sintomi
-// riportati: spostamento di più elementi insieme, impossibilità
-// di riportare un elemento sopra al blocco circuito.
-//
-// Il riordino interno al circuito avviene ora in una SCHERMATA
-// SEPARATA, raggiungibile con un pulsante dedicato: lì è presente
-// UNA SOLA ReorderableListView, senza alcuna nidificazione,
-// quindi senza alcun conflitto possibile.
 // ─────────────────────────────────────────────
 class WorkoutDetailScreen extends StatefulWidget {
   final dynamic workoutId;
@@ -69,8 +74,16 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
 
   List<HiveCircuit> _circuits = [];
 
+  // _items: SOLO ordine (lista piatta di riferimenti leggeri).
+  // I dati reali (HiveWorkoutExercise/HiveCircuit) vengono SEMPRE
+  // risolti dal vivo tramite _findExercise/_findCircuit.
   List<_ListItem> _items = [];
+
+  // Figli di ciascun circuito (per la visualizzazione statica
+  // dentro la card, non riordinabili qui: il riordino interno
+  // avviene nella schermata dedicata _ReorderCircuitExercisesScreen).
   Map<dynamic, List<HiveWorkoutExercise>> _circuitChildren = {};
+
   bool _loaded = false;
 
   Future<void> _persistQueue = Future.value();
@@ -97,13 +110,31 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     });
   }
 
+  // ── lookup live: SEMPRE i dati più recenti, mai una copia ──
+  HiveWorkoutExercise? _findExercise(dynamic key) {
+    for (final e in _workoutProvider.currentExercises) {
+      if (e.key == key) return e;
+    }
+    return null;
+  }
+
+  HiveCircuit? _findCircuit(dynamic key) {
+    for (final c in _circuits) {
+      if (c.key == key) return c;
+    }
+    return null;
+  }
+
+  // ── ricostruzione completa di _items e _circuitChildren ──
   void _rebuildAll() {
     final allEx = _workoutProvider.currentExercises;
     final freeEx = allEx.where((e) => !e.isInCircuit).toList();
 
     _items = [
-      for (final ex in freeEx) _ListItem(type: _ItemType.exercise, data: ex),
-      for (final c in _circuits) _ListItem(type: _ItemType.circuit, data: c),
+      for (final ex in freeEx)
+        _ListItem(type: _ItemType.exercise, refKey: ex.key),
+      for (final c in _circuits)
+        _ListItem(type: _ItemType.circuit, refKey: c.key),
     ];
 
     _circuitChildren = {
@@ -112,6 +143,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     };
   }
 
+  // ── sincronizzazione non-distruttiva ──
+  // Aggiunge/rimuove riferimenti senza alterare l'ordine corrente.
   void _syncWithProvider() {
     final allEx = _workoutProvider.currentExercises;
     final freeEx = allEx.where((e) => !e.isInCircuit).toList();
@@ -121,6 +154,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
       for (final c in _circuits) 'circuit_${c.key}',
     };
     final localIds = _items.map((i) => i.stableId).toSet();
+
     if (!(validIds.length == localIds.length &&
         validIds.containsAll(localIds))) {
       _items.removeWhere((i) => !validIds.contains(i.stableId));
@@ -128,17 +162,18 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
       for (final ex in freeEx) {
         final id = 'ex_${ex.key}';
         if (!stillLocal.contains(id)) {
-          _items.add(_ListItem(type: _ItemType.exercise, data: ex));
+          _items.add(_ListItem(type: _ItemType.exercise, refKey: ex.key));
         }
       }
       for (final c in _circuits) {
         final id = 'circuit_${c.key}';
         if (!stillLocal.contains(id)) {
-          _items.add(_ListItem(type: _ItemType.circuit, data: c));
+          _items.add(_ListItem(type: _ItemType.circuit, refKey: c.key));
         }
       }
     }
 
+    // figli di ciascun circuito (per la visualizzazione statica)
     for (final c in _circuits) {
       final tag = '__circuit_${c.key}';
       final liveChildren = allEx.where((e) => e.notes == tag).toList();
@@ -148,6 +183,12 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
 
       if (liveIds.length == existingIds.length &&
           liveIds.containsAll(existingIds)) {
+        // Stesso insieme di chiavi: aggiorniamo comunque i dati
+        // (sostituendo le istanze, sempre fresche) mantenendo
+        // l'ordine locale esistente.
+        final byKey = {for (final ex in liveChildren) ex.key: ex};
+        _circuitChildren[c.key] =
+            existing.map((old) => byKey[old.key] ?? old).toList();
         continue;
       }
 
@@ -167,7 +208,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     setState(() => _rebuildAll());
   }
 
-  // ── Reorder lista principale (unica ReorderableListView) ──
+  // ── Reorder lista principale — modifica SOLO l'ordine ──
   void _onReorder(int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex--;
     if (oldIndex == newIndex) return;
@@ -187,7 +228,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     int circuitOrder = 0;
     for (final item in snapshot) {
       if (item.type == _ItemType.exercise) {
-        final we = item.data as HiveWorkoutExercise;
+        final we = _findExercise(item.refKey);
+        if (we == null) continue;
         await HiveDatabase.instance.updateWorkoutExercise(
           we.key,
           HiveWorkoutExercise(
@@ -204,7 +246,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
           ),
         );
       } else {
-        final c = item.data as HiveCircuit;
+        final c = _findCircuit(item.refKey);
+        if (c == null) continue;
         await HiveDatabase.instance
             .updateCircuitSortOrder(c.key, circuitOrder++);
       }
@@ -292,7 +335,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     );
   }
 
-  // FIX TASTIERA: padding bottom diretto, nessun autofocus.
   void _showAddCircuitSheet() {
     final nameCtrl = TextEditingController();
     int rounds = 3;
@@ -504,7 +546,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     );
   }
 
-  // ── Apre la schermata dedicata di riordino esercizi circuito ──
   void _openReorderCircuitScreen(HiveCircuit circuit) {
     final children = _circuitChildren[circuit.key] ?? [];
     Navigator.push(
@@ -593,9 +634,12 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                 final collapsed = _isCollapsed(item.stableId);
 
                 if (item.type == _ItemType.exercise) {
-                  final we = item.data as HiveWorkoutExercise;
+                  final we = _findExercise(item.refKey);
+                  if (we == null) {
+                    return SizedBox.shrink(key: item.widgetKey);
+                  }
                   return ReorderableDelayedDragStartListener(
-                    key: ValueKey(item.stableId),
+                    key: item.widgetKey,
                     index: index,
                     child: _ExerciseRow(
                       workoutExercise: we,
@@ -607,10 +651,13 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                     ),
                   );
                 } else {
-                  final circuit = item.data as HiveCircuit;
+                  final circuit = _findCircuit(item.refKey);
+                  if (circuit == null) {
+                    return SizedBox.shrink(key: item.widgetKey);
+                  }
                   final children = _circuitChildren[circuit.key] ?? [];
                   return ReorderableDelayedDragStartListener(
-                    key: ValueKey(item.stableId),
+                    key: item.widgetKey,
                     index: index,
                     child: _CircuitCard(
                       circuit: circuit,
@@ -668,10 +715,6 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
 
 // ─────────────────────────────────────────────
 // _ReorderCircuitExercisesScreen
-//
-// Schermata dedicata, separata, con UNA SOLA ReorderableListView,
-// senza alcuna nidificazione: garantisce un riordino stabile e
-// affidabile, senza alcun conflitto gestuale possibile.
 // ─────────────────────────────────────────────
 class _ReorderCircuitExercisesScreen extends StatefulWidget {
   final HiveCircuit circuit;
@@ -836,11 +879,6 @@ class _RoundsButton extends StatelessWidget {
 
 // ─────────────────────────────────────────────
 // _CircuitCard
-//
-// Nessuna ReorderableListView annidata. Gli esercizi vengono
-// mostrati come riga statica (modifica/elimina restano possibili);
-// il riordino avviene tramite il pulsante "Riordina", che apre la
-// schermata dedicata.
 // ─────────────────────────────────────────────
 class _CircuitCard extends StatelessWidget {
   final HiveCircuit circuit;
