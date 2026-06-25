@@ -4,15 +4,18 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'db/hive_database.dart';
+import 'db/goal_database.dart';
+import 'db/sport_database.dart';
 import 'providers/exercise_provider.dart';
 import 'providers/workout_provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/goal_provider.dart';
+import 'providers/sport_provider.dart';
 
-import 'screens/home/home_screen.dart';
-import 'screens/workouts/workouts_screen.dart';
-import 'screens/session/session_selector_screen.dart';
+import 'screens/dashboard/dashboard_screen.dart';
+import 'screens/workouts/allenamenti_screen.dart';
 import 'screens/history/history_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/auth/login_screen.dart';
@@ -29,14 +32,12 @@ void main() async {
     ),
   );
   await HiveDatabase.instance.init();
+  await GoalDatabase.instance.init();
+  await SportDatabase.instance.init();
   await NotificationService.instance.init();
   runApp(const MyApp());
 }
 
-// ─────────────────────────────────────────────
-// NavigationNotifier ora espone anche il PageController
-// così chiunque può navigare davvero verso una pagina
-// ─────────────────────────────────────────────
 class NavigationNotifier extends ChangeNotifier {
   int _currentIndex = 0;
   PageController? _pageController;
@@ -51,8 +52,6 @@ class NavigationNotifier extends ChangeNotifier {
     _pageController = null;
   }
 
-  /// Naviga effettivamente alla pagina indicata:
-  /// aggiorna l'indice E sposta il PageView.
   void navigateTo(int index) {
     if (_currentIndex == index) return;
     _currentIndex = index;
@@ -64,8 +63,6 @@ class NavigationNotifier extends ChangeNotifier {
     );
   }
 
-  /// Aggiorna solo l'indice senza muovere il controller
-  /// (usato internamente dallo swipe del PageView).
   void setIndexSilent(int index) {
     if (_currentIndex == index) return;
     _currentIndex = index;
@@ -86,6 +83,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SessionProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => GoalProvider()),
+        ChangeNotifierProvider(create: (_) => SportProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (_, themeProvider, __) {
@@ -97,20 +96,14 @@ class MyApp extends StatelessWidget {
             themeMode: themeProvider.themeMode,
             builder: (context, child) {
               final cs = Theme.of(context).colorScheme;
-              final isDark =
-                  Theme.of(context).brightness == Brightness.dark;
+              final isDark = Theme.of(context).brightness == Brightness.dark;
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: SystemUiOverlayStyle(
                   statusBarColor: Colors.transparent,
-                  statusBarIconBrightness:
-                      isDark ? Brightness.light : Brightness.dark,
-                  statusBarBrightness:
-                      isDark ? Brightness.dark : Brightness.light,
+                  statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                  statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
                 ),
-                child: ColoredBox(
-                  color: cs.surface,
-                  child: child!,
-                ),
+                child: ColoredBox(color: cs.surface, child: child!),
               );
             },
             home: const AppEntry(),
@@ -142,12 +135,9 @@ class MyApp extends StatelessWidget {
         },
       ),
       textTheme: const TextTheme(
-        headlineLarge:
-            TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineMedium:
-            TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineSmall:
-            TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
+        headlineLarge: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineMedium: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineSmall: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
         titleLarge: TextStyle(fontWeight: FontWeight.w600),
         titleMedium: TextStyle(fontWeight: FontWeight.w600),
         bodyLarge: TextStyle(letterSpacing: 0.1),
@@ -155,8 +145,7 @@ class MyApp extends StatelessWidget {
       cardTheme: CardThemeData(
         elevation: 0,
         color: colorScheme.surface,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         surfaceTintColor: colorScheme.surfaceTint,
       ),
       appBarTheme: AppBarTheme(
@@ -166,10 +155,8 @@ class MyApp extends StatelessWidget {
         backgroundColor: colorScheme.surface,
         surfaceTintColor: colorScheme.surfaceTint,
         systemOverlayStyle: brightness == Brightness.dark
-            ? SystemUiOverlayStyle.light
-                .copyWith(statusBarColor: Colors.transparent)
-            : SystemUiOverlayStyle.dark
-                .copyWith(statusBarColor: Colors.transparent),
+            ? SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent)
+            : SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
         titleTextStyle: TextStyle(
           color: colorScheme.onSurface,
           fontSize: 18,
@@ -179,16 +166,14 @@ class MyApp extends StatelessWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor:
-            colorScheme.surfaceContainerHighest.withOpacity(0.4),
+        fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.4),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: colorScheme.outlineVariant, width: 1),
+          borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -198,52 +183,41 @@ class MyApp extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: colorScheme.error, width: 1),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(double.infinity, 50),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(
-              fontWeight: FontWeight.w600, fontSize: 15),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          textStyle:
-              const TextStyle(fontWeight: FontWeight.w600),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: colorScheme.surface,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         elevation: 0,
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colorScheme.surface,
         shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         elevation: 0,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────
-// AppEntry
-// ─────────────────────────────────────────────
 class AppEntry extends StatefulWidget {
   const AppEntry({super.key});
 
@@ -304,12 +278,6 @@ class _AppEntryState extends State<AppEntry> {
   }
 }
 
-// ─────────────────────────────────────────────
-// MainShell
-// Il PageController viene registrato nel NavigationNotifier
-// così qualsiasi chiamata a navigateTo() da qualunque
-// parte dell'app esegue la navigazione reale.
-// ─────────────────────────────────────────────
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -324,12 +292,9 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _pageController = PageController();
-    // Registra il controller subito dopo il primo frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context
-            .read<NavigationNotifier>()
-            .attachController(_pageController);
+        context.read<NavigationNotifier>().attachController(_pageController);
       }
     });
   }
@@ -342,25 +307,20 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _onNavTap(int index) {
-    // navigateTo aggiorna sia lo stato sia il PageController
     context.read<NavigationNotifier>().navigateTo(index);
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex =
-        context.watch<NavigationNotifier>().currentIndex;
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
+    final currentIndex = context.watch<NavigationNotifier>().currentIndex;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness:
-            isDark ? Brightness.light : Brightness.dark,
-        statusBarBrightness:
-            isDark ? Brightness.dark : Brightness.light,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       ));
     });
 
@@ -371,14 +331,12 @@ class _MainShellState extends State<MainShell> {
         controller: _pageController,
         physics: const ClampingScrollPhysics(),
         onPageChanged: (index) {
-          // Solo aggiornamento silenzioso: il controller
-          // si è già spostato tramite swipe manuale
           context.read<NavigationNotifier>().setIndexSilent(index);
         },
+        // ── ESATTAMENTE 4 tab, in quest'ordine: Oggi / Allenamenti / Storico / Impostazioni ──
         children: const [
-          HomeScreen(),
-          WorkoutsScreen(),
-          SessionSelectorScreen(),
+          DashboardScreen(),
+          AllenamentiScreen(),
           HistoryScreen(),
           SettingsScreen(),
         ],
@@ -392,9 +350,6 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-// ─────────────────────────────────────────────
-// Navbar Glass
-// ─────────────────────────────────────────────
 class _LiquidGlassNavBar extends StatelessWidget {
   final int currentIndex;
   final void Function(int) onTap;
@@ -406,10 +361,10 @@ class _LiquidGlassNavBar extends StatelessWidget {
     required this.isDark,
   });
 
+  // ── 4 tab fisse: Oggi / Allenamenti / Storico / Impostazioni ──
   static const _items = [
-    _NavItem(icon: Icons.home_rounded, label: 'Home'),
-    _NavItem(icon: Icons.list_alt_rounded, label: 'Schede'),
-    _NavItem(icon: Icons.play_circle_fill_rounded, label: 'Sessione'),
+    _NavItem(icon: Icons.today_rounded, label: 'Oggi'),
+    _NavItem(icon: Icons.fitness_center_rounded, label: 'Allenamenti'),
     _NavItem(icon: Icons.bar_chart_rounded, label: 'Storico'),
     _NavItem(icon: Icons.settings_rounded, label: 'Impostazioni'),
   ];
@@ -440,15 +395,13 @@ class _LiquidGlassNavBar extends StatelessWidget {
               border: Border.all(color: glassBorder, width: 1.2),
               boxShadow: [
                 BoxShadow(
-                  color:
-                      Colors.black.withOpacity(isDark ? 0.35 : 0.1),
+                  color: Colors.black.withOpacity(isDark ? 0.35 : 0.1),
                   blurRadius: 32,
                   spreadRadius: -4,
                   offset: const Offset(0, 8),
                 ),
                 BoxShadow(
-                  color:
-                      Colors.white.withOpacity(isDark ? 0.04 : 0.6),
+                  color: Colors.white.withOpacity(isDark ? 0.04 : 0.6),
                   blurRadius: 0,
                   spreadRadius: 0,
                   offset: const Offset(0, 1),
@@ -500,14 +453,11 @@ class _LiquidNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unselected = isDark
-        ? Colors.white.withOpacity(0.45)
-        : Colors.grey.shade600;
+    final unselected = isDark ? Colors.white.withOpacity(0.45) : Colors.grey.shade600;
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
-      transitionBuilder: (child, anim) =>
-          FadeTransition(opacity: anim, child: child),
+      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
       child: selected
           ? _SelectedItem(
               key: ValueKey('sel_${item.label}'),
@@ -527,11 +477,7 @@ class _SelectedItem extends StatelessWidget {
   final _NavItem item;
   final Color primaryColor;
 
-  const _SelectedItem({
-    super.key,
-    required this.item,
-    required this.primaryColor,
-  });
+  const _SelectedItem({super.key, required this.item, required this.primaryColor});
 
   @override
   Widget build(BuildContext context) {
@@ -554,10 +500,7 @@ class _SelectedItem extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                Colors.white.withOpacity(0.25),
-                Colors.transparent,
-              ],
+              colors: [Colors.white.withOpacity(0.25), Colors.transparent],
             ),
           ),
           child: Stack(
@@ -587,11 +530,7 @@ class _UnselectedItem extends StatelessWidget {
   final _NavItem item;
   final Color color;
 
-  const _UnselectedItem({
-    super.key,
-    required this.item,
-    required this.color,
-  });
+  const _UnselectedItem({super.key, required this.item, required this.color});
 
   @override
   Widget build(BuildContext context) {

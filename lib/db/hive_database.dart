@@ -8,6 +8,10 @@ class HiveDatabase {
 
   String _userId = '';
 
+  // ── NUOVO: getter pubblico, usato da AuthProvider per
+  // sincronizzare GoalDatabase/SportDatabase con lo stesso utente. ──
+  String get currentUserId => _userId;
+
   String get _exercises => '${_userId}_exercises';
   String get _workouts => '${_userId}_workouts';
   String get _workoutExercises =>
@@ -177,7 +181,6 @@ class HiveDatabase {
         .where((k) => _weBox.get(k)?.workoutKey == key)
         .toList();
     await _weBox.deleteAll(toDelete);
-    // Elimina anche i circuiti associati
     final circuitsToDelete = _ciBox.keys
         .where((k) => _ciBox.get(k)?.workoutKey == key)
         .toList();
@@ -260,7 +263,6 @@ class HiveDatabase {
 
   Future<void> deleteCircuit(dynamic key) async {
     await _ciBox.delete(key);
-    // Elimina anche gli esercizi del circuito
     final tag = '__circuit_$key';
     final toDelete = _weBox.keys
         .where((k) => _weBox.get(k)?.notes == tag)
@@ -397,8 +399,6 @@ class HiveDatabase {
       await c.save();
     }
   }
-
-
 
   HiveWorkoutExercise? getWorkoutExerciseByKey(
       dynamic key) {

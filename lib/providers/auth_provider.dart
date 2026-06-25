@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../db/hive_database.dart';
+import '../db/goal_database.dart';
+import '../db/sport_database.dart';
 
 class UserAccount {
   final String identifier;
@@ -124,6 +126,10 @@ class AuthProvider extends ChangeNotifier {
       if (_isLoggedIn && _currentIdentifier != null) {
         await HiveDatabase.instance
             .switchUser(_currentIdentifier!);
+        // NUOVO: sincronizza i DB indipendenti dei nuovi sistemi
+        // con lo stesso utente già autenticato dal sistema Fitness.
+        await GoalDatabase.instance.switchUser(_currentIdentifier!);
+        await SportDatabase.instance.switchUser(_currentIdentifier!);
       }
     } catch (e) {
       debugPrint('[AUTH] checkLogin error: $e');
@@ -152,7 +158,6 @@ class AuthProvider extends ChangeNotifier {
         return [];
       }
     }
-    // Migrazione vecchio formato
     final oldEmail = prefs.getString('user_email');
     final oldPassword = prefs.getString('user_password');
     if (oldEmail != null && oldPassword != null) {
@@ -181,7 +186,6 @@ class AuthProvider extends ChangeNotifier {
     debugPrint(
         '[AUTH] _saveAccounts: salvati ${_accounts.length} account: '
         '${_accounts.map((a) => a.identifier).toList()}');
-    // Verifica immediata che il salvataggio sia andato a buon fine
     final verify = prefs.getString('accounts');
     debugPrint('[AUTH] verifica disco dopo save: $verify');
   }
@@ -207,7 +211,6 @@ class AuthProvider extends ChangeNotifier {
         return 'Password troppo corta (min 6 caratteri)';
       }
 
-      // Legge SEMPRE da disco — stato in memoria ignorato
       final diskAccounts = await _readAccountsFromDisk();
       debugPrint(
           '[AUTH] account su disco prima del check: '
@@ -225,7 +228,6 @@ class AuthProvider extends ChangeNotifier {
         return 'Account già esistente con questo $label';
       }
 
-      // Aggiunge il nuovo account alla lista letta da disco
       _accounts = diskAccounts;
       _accounts.add(UserAccount(
         identifier: id,
@@ -288,13 +290,15 @@ class AuthProvider extends ChangeNotifier {
     debugPrint(
         '[AUTH] _loginInternal: loggato come $identifier');
     await HiveDatabase.instance.switchUser(identifier);
+    // NUOVO: stessa sincronizzazione anche al login/registrazione.
+    await GoalDatabase.instance.switchUser(identifier);
+    await SportDatabase.instance.switchUser(identifier);
     notifyListeners();
   }
 
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_logged_in', false);
-    // NON cancella gli account — solo la sessione corrente
     _isLoggedIn = false;
     _currentIdentifier = null;
     _currentType = null;
