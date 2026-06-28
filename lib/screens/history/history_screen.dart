@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
+import '../../models/sport_models.dart';
 import '../../providers/exercise_provider.dart';
 import '../../providers/goal_provider.dart';
+import '../../providers/sport_provider.dart';
 import 'session_detail_screen.dart';
 import 'exercise_progress_screen.dart';
 import '../../main.dart';
@@ -12,6 +14,83 @@ import '../../widgets/glass_bottom_sheet.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/workout_icon.dart';
 import '../dashboard/widgets/streak_badge.dart';
+
+/// Tipo di provenienza di una entry nello storico unificato.
+enum _EntryKind { gym, sport }
+
+/// Vista-modello unica per la tab "Allenamenti" dello storico:
+/// rappresenta sia una HiveSession (palestra) sia una
+/// HiveSportSession (running/cycling/swimming) con i campi minimi
+/// necessari alla UI, SENZA fondere i due storage. Il merge
+/// avviene solo qui, a livello di presentazione.
+class _HistoryEntry {
+  final _EntryKind kind;
+  final dynamic key;
+  final String title;
+  final DateTime date;
+  final int? durationSeconds;
+  final double? distanceKm;
+  final HiveSession? gymSession;
+  final HiveSportSession? sportSession;
+  final SportType? sportType;
+
+  _HistoryEntry.fromGym(HiveSession s)
+      : kind = _EntryKind.gym,
+        key = s.key,
+        title = s.workoutName,
+        date = DateTime.tryParse(s.date) ?? DateTime.now(),
+        durationSeconds = s.durationSeconds,
+        distanceKm = null,
+        gymSession = s,
+        sportSession = null,
+        sportType = null;
+
+  _HistoryEntry.fromSport(HiveSportSession s)
+      : kind = _EntryKind.sport,
+        key = s.key,
+        title = SportTypeX.fromId(s.sportType).label,
+        date = DateTime.tryParse(s.date) ?? DateTime.now(),
+        durationSeconds = s.durationSeconds,
+        distanceKm = s.distanceKm,
+        gymSession = null,
+        sportSession = s,
+        sportType = SportTypeX.fromId(s.sportType);
+}
+
+/// Filtro disponibile nella tab "Allenamenti" dello storico.
+enum _SportFilter { all, gym, running, cycling, swimming }
+
+extension on _SportFilter {
+  String get label {
+    switch (this) {
+      case _SportFilter.all:
+        return 'Tutti';
+      case _SportFilter.gym:
+        return 'Palestra';
+      case _SportFilter.running:
+        return 'Corsa';
+      case _SportFilter.cycling:
+        return 'Ciclismo';
+      case _SportFilter.swimming:
+        return 'Nuoto';
+    }
+  }
+
+  bool matches(_HistoryEntry entry) {
+    switch (this) {
+      case _SportFilter.all:
+        return true;
+      case _SportFilter.gym:
+        return entry.kind == _EntryKind.gym;
+      case _SportFilter.running:
+        return entry.sportType == SportType.running;
+      case _SportFilter.cycling:
+        return entry.sportType == SportType.cycling;
+      case _SportFilter.swimming:
+        return entry.sportType == SportType.swimming;
+    }
+  }
+}
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -31,13 +110,17 @@ class _HistoryScreenState extends State<HistoryScreen>
   Map<int, HiveWorkout> _workoutsCache = {};
   int _lastIndex = -1;
   String _calendarMode = 'day';
+  _SportFilter _sportFilter = _SportFilter.all;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadData();
-    Future.microtask(() => context.read<GoalProvider>().loadGoals());
+    Future.microtask(() {
+      context.read<GoalProvider>().loadGoals();
+      context.read<SportProvider>().loadSessions();
+    });
   }
 
   @override
@@ -50,7 +133,7 @@ class _HistoryScreenState extends State<HistoryScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final currentIndex = context.watch<NavigationNotifier>().currentIndex;
-    // NOTA: con la nuova navbar a 4 tab, "Storico" è l'indice 2.
+    // Con la navbar a 4 tab, "Storico" è l'indice 2.
     if (currentIndex == 2 && _lastIndex != 2) _loadData();
     _lastIndex = currentIndex;
   }
@@ -70,6 +153,8 @@ class _HistoryScreenState extends State<HistoryScreen>
       wCache[w.key as int] = w;
     }
 
+    if (mounted) context.read<SportProvider>().loadSessions();
+
     setState(() {
       _sessions = sessions;
       _sessionsByDate = byDate;
@@ -79,6 +164,21 @@ class _HistoryScreenState extends State<HistoryScreen>
   }
 
   HiveWorkout? _getWorkout(int workoutKey) => _workoutsCache[workoutKey];
+
+  /// Unisce HiveSession (palestra) e HiveSportSession (altri sport)
+  /// in un'unica lista ordinata per data — SOLO a livello di vista,
+  /// nessuna fusione di storage.
+  List<_HistoryEntry> _buildUnifiedEntries(BuildContext context) {
+    final sportSessions = context.watch<SportProvider>().sessions;
+
+    final entries = <_HistoryEntry>[
+      ..._sessions.map((s) => _HistoryEntry.fromGym(s)),
+      ...sportSessions.map((s) => _HistoryEntry.fromSport(s)),
+    ];
+
+    entries.sort((a, b) => b.date.compareTo(a.date));
+    return entries.where((e) => _sportFilter.matches(e)).toList();
+  }
 
   Future<void> _confirmDeleteSession(BuildContext ctx, HiveSession session) async {
     final dt = DateTime.tryParse(session.date);
@@ -118,6 +218,45 @@ class _HistoryScreenState extends State<HistoryScreen>
     if (confirm == true) {
       await HiveDatabase.instance.deleteSession(session.key);
       await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Sessione eliminata')));
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteSportSession(HiveSportSession session) async {
+    final confirm = await showGlassDialog<bool>(
+      context: context,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(children: [
+              Icon(Icons.delete_outline, color: Colors.red, size: 22),
+              SizedBox(width: 10),
+              Text('Elimina sessione',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            ]),
+            const SizedBox(height: 12),
+            Text('Eliminare questa sessione di ${SportTypeX.fromId(session.sportType).label}?'),
+            const SizedBox(height: 24),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Elimina',
+              confirmColor: Colors.red,
+              onCancel: () => Navigator.pop(context, false),
+              onConfirm: () => Navigator.pop(context, true),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirm == true) {
+      await context.read<SportProvider>().deleteSession(session.key);
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Sessione eliminata')));
@@ -185,7 +324,7 @@ class _HistoryScreenState extends State<HistoryScreen>
   }
 
   // ───────────────────────────────────────────
-  // TAB 1: Allenamenti (logica originale invariata)
+  // TAB 1: Allenamenti — ora unificata gym + multi-sport
   // ───────────────────────────────────────────
   Widget _buildWorkoutsTab(BuildContext context) {
     if (_loading) {
@@ -194,6 +333,7 @@ class _HistoryScreenState extends State<HistoryScreen>
 
     final streak = _computeStreak();
     final weekDays = _currentWeekDays();
+    final unifiedEntries = _buildUnifiedEntries(context);
 
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -228,26 +368,55 @@ class _HistoryScreenState extends State<HistoryScreen>
             onDayTapped: (dateStr, sessions) => _showDayDetail(context, dateStr, sessions),
           ),
           const SizedBox(height: 16),
-          if (_sessions.isNotEmpty) ...[
+
+          // ── Filtro per sport: mostra/nasconde voci nella lista unificata ──
+          SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _SportFilter.values.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (_, i) {
+                final f = _SportFilter.values[i];
+                return ChoiceChip(
+                  label: Text(f.label),
+                  selected: _sportFilter == f,
+                  onSelected: (_) => setState(() => _sportFilter = f),
+                  visualDensity: VisualDensity.compact,
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          if (unifiedEntries.isNotEmpty) ...[
             Text('Sessioni recenti', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            ..._sessions.take(20).map((s) {
-              final workout = _getWorkout(s.workoutKey);
-              return _SessionTile(
-                session: s,
-                workout: workout,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => SessionDetailScreen(
-                      sessionKey: s.key,
-                      workoutName: s.workoutName,
-                      date: s.date,
+            ...unifiedEntries.take(30).map((entry) {
+              if (entry.kind == _EntryKind.gym) {
+                final s = entry.gymSession!;
+                final workout = _getWorkout(s.workoutKey);
+                return _SessionTile(
+                  session: s,
+                  workout: workout,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SessionDetailScreen(
+                        sessionKey: s.key,
+                        workoutName: s.workoutName,
+                        date: s.date,
+                      ),
                     ),
                   ),
-                ),
-                onDelete: () => _confirmDeleteSession(context, s),
-              );
+                  onDelete: () => _confirmDeleteSession(context, s),
+                );
+              } else {
+                return _SportSessionTile(
+                  entry: entry,
+                  onDelete: () => _confirmDeleteSportSession(entry.sportSession!),
+                );
+              }
             }),
           ] else
             Center(
@@ -304,7 +473,7 @@ class _HistoryScreenState extends State<HistoryScreen>
   }
 
   // ───────────────────────────────────────────
-  // TAB 2: Obiettivi (nuova) — streak + storico completamenti
+  // TAB 2: Obiettivi (invariata dallo sprint precedente)
   // ───────────────────────────────────────────
   Widget _buildGoalsTab(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -349,6 +518,106 @@ class _HistoryScreenState extends State<HistoryScreen>
           ),
         );
       },
+    );
+  }
+}
+
+// ───────────────────────────────────────────
+// _SportSessionTile — riga per sessioni running/cycling/swimming
+// ───────────────────────────────────────────
+class _SportSessionTile extends StatelessWidget {
+  final _HistoryEntry entry;
+  final VoidCallback onDelete;
+
+  const _SportSessionTile({required this.entry, required this.onDelete});
+
+  IconData get _icon {
+    switch (entry.sportType) {
+      case SportType.running:
+        return Icons.directions_run;
+      case SportType.cycling:
+        return Icons.directions_bike;
+      case SportType.swimming:
+        return Icons.pool;
+      default:
+        return Icons.fitness_center;
+    }
+  }
+
+  String _formatDate(DateTime dt) {
+    const months = [
+      '', 'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
+    ];
+    return '${dt.day} ${months[dt.month]} ${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDuration(int? seconds) {
+    if (seconds == null) return '';
+    final m = seconds ~/ 60;
+    if (m == 0) return '${seconds}s';
+    return '${m}min';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: cs.primaryContainer,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(_icon, color: cs.onPrimaryContainer, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(entry.title,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(_formatDate(entry.date), style: TextStyle(fontSize: 11, color: cs.outline)),
+                  if (entry.distanceKm != null && entry.distanceKm! > 0) ...[
+                    const SizedBox(height: 4),
+                    Text('${entry.distanceKm!.toStringAsFixed(1)} km',
+                        style: TextStyle(fontSize: 11, color: cs.outline)),
+                  ],
+                ],
+              ),
+            ),
+            Column(
+              children: [
+                if (entry.durationSeconds != null)
+                  Text(_formatDuration(entry.durationSeconds),
+                      style: TextStyle(fontSize: 11, color: cs.outline)),
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: onDelete,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.withOpacity(0.3), width: 1),
+                    ),
+                    child: const Icon(Icons.delete_outline, color: Colors.red, size: 16),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

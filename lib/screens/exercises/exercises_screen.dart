@@ -1,261 +1,170 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/exercise_provider.dart';
 import '../../models/hive_models.dart';
+import '../../providers/exercise_provider.dart';
+import '../../db/hive_database.dart';
 import '../../widgets/glass_button.dart';
 import '../../widgets/glass_action_buttons.dart';
 import '../../widgets/glass_bottom_sheet.dart';
 
+/// Gruppi muscolari predefiniti — costante di modulo (top-level),
+/// così è accessibile sia dentro _ExercisesScreenState (per i
+/// ChoiceChip di filtro/selezione) senza alcuna ambiguità tra
+/// ExercisesScreen (StatefulWidget) e _ExercisesScreenState (State):
+/// in Dart i membri statici NON sono condivisi tra le due classi,
+/// anche se collegate, motivo dell'errore di compilazione.
+const List<String> kExerciseMuscleGroups = [
+  'Petto',
+  'Schiena',
+  'Spalle',
+  'Bicipiti',
+  'Tricipiti',
+  'Lombari',
+  'Gambe',
+  'Addominali',
+];
+
+/// Libreria esercizi: lista raggruppata per gruppo muscolare,
+/// ricerca, creazione/modifica/eliminazione. Pagina indipendente,
+/// raggiunta dalla tab Allenamenti tramite icona in AppBar.
 class ExercisesScreen extends StatefulWidget {
-  final bool isDialog;
-  const ExercisesScreen({super.key, this.isDialog = false});
+  const ExercisesScreen({super.key});
 
   @override
-  State<ExercisesScreen> createState() =>
-      _ExercisesScreenState();
+  State<ExercisesScreen> createState() => _ExercisesScreenState();
 }
 
 class _ExercisesScreenState extends State<ExercisesScreen> {
+  String _search = '';
+  String _groupFilter = 'Tutti';
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-        () => context.read<ExerciseProvider>().loadExercises());
+    Future.microtask(() {
+      if (mounted) context.read<ExerciseProvider>().loadExercises();
+    });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final provider = context.watch<ExerciseProvider>();
-    final cs = Theme.of(context).colorScheme;
-
-    return Scaffold(
-      backgroundColor: cs.surface,
-      appBar: AppBar(
-        backgroundColor: cs.surface,
-        title: const Text('Esercizi'),
-        leading: widget.isDialog
-            ? IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
-              )
-            : null,
-      ),
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: Padding(
-        padding: EdgeInsets.fromLTRB(
-          24,
-          0,
-          24,
-          MediaQuery.of(context).padding.bottom > 0
-              ? 90
-              : 16,
-        ),
-        child: GlassButton(
-          onTap: () => _showAddExerciseModal(context),
-          icon: Icons.add_rounded,
-          label: 'Nuovo esercizio',
-        ),
-      ),
-      body: Column(
-        children: [
-          _MuscleGroupChips(
-            groups: provider.muscleGroups,
-            selected: provider.selectedMuscleGroup,
-            onSelect: provider.selectMuscleGroup,
-          ),
-          Expanded(
-            child: provider.exercises.isEmpty
-                ? const Center(
-                    child: CircularProgressIndicator())
-                : _ExerciseList(
-                    defaultExercises:
-                        provider.defaultExercises,
-                    customExercises:
-                        provider.customExercises,
-                    selectedGroup:
-                        provider.selectedMuscleGroup,
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddExerciseModal(BuildContext context) {
-    showGlassBottomSheet(
-      context: context,
-      child: const AddExerciseModal(),
-    );
-  }
-}
-
-class _MuscleGroupChips extends StatelessWidget {
-  final List<String> groups;
-  final String selected;
-  final ValueChanged<String> onSelect;
-
-  const _MuscleGroupChips({
-    required this.groups,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 48,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 8),
-        itemCount: groups.length,
-        separatorBuilder: (_, __) =>
-            const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final group = groups[i];
-          final isSelected = group == selected;
-          return ChoiceChip(
-            label: Text(group),
-            selected: isSelected,
-            onSelected: (_) => onSelect(group),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _ExerciseList extends StatelessWidget {
-  final List<HiveExercise> defaultExercises;
-  final List<HiveExercise> customExercises;
-  final String selectedGroup;
-
-  const _ExerciseList({
-    required this.defaultExercises,
-    required this.customExercises,
-    required this.selectedGroup,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (selectedGroup != 'Tutti') {
-      return ListView(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 8),
-        children: [
-          ...defaultExercises
-              .map((e) => _ExerciseCard(exercise: e)),
-          if (customExercises.isNotEmpty) ...[
-            _GroupHeader(
-                title: 'Personalizzati',
-                color:
-                    Theme.of(context).colorScheme.tertiary),
-            ...customExercises
-                .map((e) => _ExerciseCard(exercise: e)),
-          ],
-          const SizedBox(height: 100),
-        ],
-      );
-    }
+  Map<String, List<HiveExercise>> _groupedExercises(List<HiveExercise> all) {
+    final filtered = all.where((e) {
+      final matchGroup = _groupFilter == 'Tutti' || e.muscleGroup == _groupFilter;
+      final matchSearch =
+          _search.isEmpty || e.name.toLowerCase().contains(_search.toLowerCase());
+      return matchGroup && matchSearch;
+    }).toList();
 
     final Map<String, List<HiveExercise>> grouped = {};
-    for (final e in defaultExercises) {
-      grouped.putIfAbsent(e.muscleGroup, () => []).add(e);
+    for (final ex in filtered) {
+      grouped.putIfAbsent(ex.muscleGroup, () => []).add(ex);
     }
-    final sortedGroups = grouped.keys.toList()..sort();
-
-    return ListView(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 16, vertical: 8),
-      children: [
-        for (final group in sortedGroups) ...[
-          _GroupHeader(
-              title: group,
-              color:
-                  Theme.of(context).colorScheme.primary),
-          ...grouped[group]!
-              .map((e) => _ExerciseCard(exercise: e)),
-        ],
-        if (customExercises.isNotEmpty) ...[
-          _GroupHeader(
-              title: 'Personalizzati',
-              color:
-                  Theme.of(context).colorScheme.tertiary),
-          ...customExercises
-              .map((e) => _ExerciseCard(exercise: e)),
-        ],
-        const SizedBox(height: 100),
-      ],
-    );
+    for (final list in grouped.values) {
+      list.sort((a, b) => a.name.compareTo(b.name));
+    }
+    return grouped;
   }
-}
 
-class _GroupHeader extends StatelessWidget {
-  final String title;
-  final Color color;
-  const _GroupHeader(
-      {required this.title, required this.color});
+  void _showAddOrEditSheet({HiveExercise? existing}) {
+    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+    String selectedGroup = existing?.muscleGroup ?? kExerciseMuscleGroups.first;
+    String? errorText;
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16, bottom: 6),
-      child: Row(
-        children: [
-          Container(
-            width: 3,
-            height: 16,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(2),
+    showGlassBottomSheet(
+      context: context,
+      child: StatefulBuilder(
+        builder: (ctx, setModal) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 24,
+            right: 24,
+            top: 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const GlassSheetHandle(),
+                const SizedBox(height: 16),
+                Text(
+                  existing == null ? 'Nuovo esercizio' : 'Modifica esercizio',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: nameCtrl,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    labelText: 'Nome esercizio',
+                    hintText: 'Es. Panca piana',
+                    prefixIcon: const Icon(Icons.fitness_center),
+                    errorText: errorText,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('Gruppo muscolare',
+                    style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: kExerciseMuscleGroups.map((g) {
+                    final selected = selectedGroup == g;
+                    return ChoiceChip(
+                      label: Text(g),
+                      selected: selected,
+                      onSelected: (_) => setModal(() => selectedGroup = g),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 24),
+                GlassDialogActions(
+                  cancelLabel: 'Annulla',
+                  confirmLabel: existing == null ? 'Crea' : 'Salva',
+                  onCancel: () => Navigator.pop(ctx),
+                  onConfirm: () async {
+                    final name = nameCtrl.text.trim();
+                    if (name.isEmpty) {
+                      setModal(() => errorText = 'Il nome non può essere vuoto');
+                      return;
+                    }
+
+                    final db = HiveDatabase.instance;
+                    final isDuplicate = existing == null
+                        ? db.exerciseNameExists(name)
+                        : (name.toLowerCase() != existing.name.toLowerCase() &&
+                            db.exerciseNameExists(name));
+                    if (isDuplicate) {
+                      setModal(() => errorText = 'Esiste già un esercizio con questo nome');
+                      return;
+                    }
+
+                    if (existing == null) {
+                      await db.addExercise(
+                        HiveExercise(name: name, muscleGroup: selectedGroup),
+                      );
+                    } else {
+                      existing.name = name;
+                      existing.muscleGroup = selectedGroup;
+                      await existing.save();
+                    }
+
+                    if (ctx.mounted) {
+                      context.read<ExerciseProvider>().loadExercises();
+                      Navigator.pop(ctx);
+                    }
+                  },
+                ),
+                const SizedBox(height: 20),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            title.toUpperCase(),
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(
-                  letterSpacing: 1.1,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ExerciseCard extends StatelessWidget {
-  final HiveExercise exercise;
-  const _ExerciseCard({required this.exercise});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        title: Text(exercise.name),
-        subtitle: Text(exercise.muscleGroup),
-        trailing: exercise.isCustom
-            ? const Chip(
-                label: Text('Custom'),
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-              )
-            : null,
-        onTap: () {},
-        onLongPress: exercise.isCustom
-            ? () => _confirmDelete(context)
-            : null,
+        ),
       ),
     );
   }
 
-  void _confirmDelete(BuildContext context) {
+  void _confirmDelete(HiveExercise exercise) {
     showGlassDialog(
       context: context,
       child: Padding(
@@ -264,30 +173,31 @@ class _ExerciseCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
-              children: [
-                Icon(Icons.delete_outline,
-                    color: Colors.red, size: 22),
-                SizedBox(width: 10),
-                Text('Elimina esercizio',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16)),
-              ],
-            ),
+            const Row(children: [
+              Icon(Icons.delete_outline, color: Colors.red, size: 22),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text('Elimina esercizio',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              ),
+            ]),
             const SizedBox(height: 12),
-            Text('Vuoi eliminare "${exercise.name}"?'),
+            Text(
+              'Eliminare "${exercise.name}"? Le schede che lo contengono già '
+              'potrebbero mostrare un esercizio non più disponibile.',
+            ),
             const SizedBox(height: 24),
             GlassDialogActions(
               cancelLabel: 'Annulla',
               confirmLabel: 'Elimina',
               confirmColor: Colors.red,
               onCancel: () => Navigator.pop(context),
-              onConfirm: () {
-                context
-                    .read<ExerciseProvider>()
-                    .deleteExercise(exercise.key);
-                Navigator.pop(context);
+              onConfirm: () async {
+                await HiveDatabase.instance.deleteExercise(exercise.key);
+                if (context.mounted) {
+                  context.read<ExerciseProvider>().loadExercises();
+                  Navigator.pop(context);
+                }
               },
             ),
           ],
@@ -295,184 +205,149 @@ class _ExerciseCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class AddExerciseModal extends StatefulWidget {
-  const AddExerciseModal({super.key});
-
-  @override
-  State<AddExerciseModal> createState() =>
-      _AddExerciseModalState();
-}
-
-class _AddExerciseModalState
-    extends State<AddExerciseModal> {
-  final _nameController = TextEditingController();
-  final _notesController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
-  String? _selectedMuscle;
-  bool _isCustom = true;
-
-  static const _muscleGroups = [
-    'Petto',
-    'Spalle',
-    'Schiena',
-    'Bicipiti',
-    'Tricipiti',
-    'Lombari',
-    'Gambe',
-    'Addominali',
-  ];
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _notesController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ExerciseProvider>();
-    final nameExists =
-        provider.exerciseNameExists(_nameController.text);
     final cs = Theme.of(context).colorScheme;
+    final allExercises = context.watch<ExerciseProvider>().exercises;
+    final grouped = _groupedExercises(allExercises);
+    final groups = grouped.keys.toList()..sort();
+    final filterOptions = ['Tutti', ...kExerciseMuscleGroups];
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 16,
-        right: 16,
-        top: 16,
+    return Scaffold(
+      backgroundColor: cs.surface,
+      appBar: AppBar(
+        backgroundColor: cs.surface,
+        title: const Text('Libreria esercizi'),
       ),
-      child: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const GlassSheetHandle(),
-              const SizedBox(height: 16),
-              Text('Nuovo esercizio',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                    labelText: 'Nome esercizio'),
-                textCapitalization:
-                    TextCapitalization.sentences,
-                onChanged: (_) => setState(() {}),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'Inserisci un nome';
-                  }
-                  return null;
-                },
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: TextField(
+              decoration: const InputDecoration(
+                hintText: 'Cerca esercizio...',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
               ),
-              if (nameExists &&
-                  _nameController.text.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline,
-                          size: 14,
-                          color: cs.tertiary),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Esiste già un esercizio con questo nome.',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: cs.tertiary),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 16),
-              Text('Gruppo muscolare',
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _muscleGroups.map((muscle) {
-                  return ChoiceChip(
-                    label: Text(muscle),
-                    selected: _selectedMuscle == muscle,
-                    onSelected: (_) => setState(
-                        () => _selectedMuscle = muscle),
-                  );
-                }).toList(),
-              ),
-              if (_selectedMuscle == null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    'Seleziona un gruppo muscolare',
-                    style: TextStyle(
-                        fontSize: 12, color: cs.error),
-                  ),
-                ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _notesController,
-                decoration: InputDecoration(
-                  labelText: nameExists
-                      ? 'Note (obbligatorie)'
-                      : 'Note (opzionale)',
-                  hintText:
-                      'Es. grip neutro, cavi alti...',
-                ),
-                validator: (v) {
-                  if (nameExists &&
-                      (v == null || v.trim().isEmpty)) {
-                    return 'Aggiungi una nota per distinguerlo';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              SwitchListTile(
-                title: const Text(
-                    'Segna come personalizzato'),
-                value: _isCustom,
-                onChanged: (v) =>
-                    setState(() => _isCustom = v),
-                contentPadding: EdgeInsets.zero,
-              ),
-              const SizedBox(height: 16),
-              GlassFilledButton(
-                onPressed: _save,
-                child: const Text('Salva esercizio'),
-              ),
-              const SizedBox(height: 16),
-            ],
+              onChanged: (v) => setState(() => _search = v),
+            ),
           ),
+          SizedBox(
+            height: 40,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: filterOptions.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (_, i) {
+                final g = filterOptions[i];
+                return ChoiceChip(
+                  label: Text(g),
+                  selected: _groupFilter == g,
+                  onSelected: (_) => setState(() => _groupFilter = g),
+                  visualDensity: VisualDensity.compact,
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: allExercises.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : groups.isEmpty
+                    ? Center(
+                        child: Text('Nessun esercizio trovato',
+                            style: TextStyle(color: cs.outline)),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                        itemCount: groups.length,
+                        itemBuilder: (_, gi) {
+                          final group = groups[gi];
+                          final items = grouped[group]!;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 16, bottom: 8),
+                                child: Text(
+                                  group.toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1.0,
+                                    color: cs.primary,
+                                  ),
+                                ),
+                              ),
+                              ...items.map((ex) => _ExerciseTile(
+                                    exercise: ex,
+                                    onEdit: () => _showAddOrEditSheet(existing: ex),
+                                    onDelete: () => _confirmDelete(ex),
+                                  )),
+                            ],
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: Padding(
+        padding: EdgeInsets.fromLTRB(
+            24, 8, 24, MediaQuery.of(context).padding.bottom + 16),
+        child: GlassButton(
+          onTap: () => _showAddOrEditSheet(),
+          icon: Icons.add_rounded,
+          label: 'Nuovo esercizio',
         ),
       ),
     );
   }
+}
 
-  void _save() {
-    if (!_formKey.currentState!.validate()) return;
-    if (_selectedMuscle == null) return;
-    final exercise = HiveExercise(
-      name: _nameController.text.trim(),
-      muscleGroup: _selectedMuscle!,
-      notes: _notesController.text.trim().isEmpty
-          ? null
-          : _notesController.text.trim(),
-      isCustom: _isCustom,
+class _ExerciseTile extends StatelessWidget {
+  final HiveExercise exercise;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _ExerciseTile({
+    required this.exercise,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isDark ? cs.surface.withOpacity(0.8) : cs.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.1) : cs.outlineVariant,
+        ),
+      ),
+      child: ListTile(
+        title: Text(exercise.name,
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: Icon(Icons.edit_outlined, size: 18, color: cs.primary),
+              onPressed: onEdit,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+              onPressed: onDelete,
+            ),
+          ],
+        ),
+      ),
     );
-    context.read<ExerciseProvider>().addExercise(exercise);
-    Navigator.pop(context);
   }
 }
