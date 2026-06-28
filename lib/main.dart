@@ -13,6 +13,7 @@ import 'providers/theme_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/goal_provider.dart';
 import 'providers/sport_provider.dart';
+import 'navigation/navigation_depth_notifier.dart';
 
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/workouts/allenamenti_screen.dart';
@@ -80,6 +81,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ExerciseProvider()),
         ChangeNotifierProvider(create: (_) => WorkoutProvider()),
         ChangeNotifierProvider(create: (_) => NavigationNotifier()),
+        ChangeNotifierProvider(create: (_) => NavigationDepthNotifier()),
         ChangeNotifierProvider(create: (_) => SessionProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
@@ -87,13 +89,22 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SportProvider()),
       ],
       child: Consumer<ThemeProvider>(
-        builder: (_, themeProvider, __) {
+        builder: (context, themeProvider, __) {
+          // L'observer viene creato qui, ma referenzia sempre la
+          // STESSA istanza di NavigationDepthNotifier (fornita dal
+          // MultiProvider sopra): nessuna duplicazione di stato
+          // anche se questo builder viene rieseguito.
+          final depthNotifier = context.read<NavigationDepthNotifier>();
+
           return MaterialApp(
             title: 'MarkFit',
             debugShowCheckedModeBanner: false,
             theme: _buildTheme(Brightness.light),
             darkTheme: _buildTheme(Brightness.dark),
             themeMode: themeProvider.themeMode,
+            navigatorObservers: [
+              DepthTrackingNavigatorObserver(depthNotifier),
+            ],
             builder: (context, child) {
               final cs = Theme.of(context).colorScheme;
               final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -124,10 +135,16 @@ class MyApp extends StatelessWidget {
       scaffoldBackgroundColor: colorScheme.surface,
       canvasColor: colorScheme.surface,
       dialogBackgroundColor: colorScheme.surface,
+      // ── FIX GESTURE: CupertinoPageTransitionsBuilder su iOS/macOS ──
+      // Prima questo tema forzava ZoomPageTransitionsBuilder su TUTTE
+      // le piattaforme, incluso iOS: questo disabilita la transizione
+      // E il gesto nativo di swipe-back che Cupertino fornisce
+      // automaticamente per ogni MaterialPageRoute. Su Android/altre
+      // piattaforme resta lo stile Zoom (nessun cambiamento lì).
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.iOS: ZoomPageTransitionsBuilder(),
-          TargetPlatform.macOS: ZoomPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
           TargetPlatform.android: ZoomPageTransitionsBuilder(),
           TargetPlatform.windows: ZoomPageTransitionsBuilder(),
           TargetPlatform.linux: ZoomPageTransitionsBuilder(),
@@ -267,6 +284,12 @@ class _AppEntryState extends State<AppEntry> {
     if (!isLoggedIn) {
       return LoginScreen(
         onLoginSuccess: () {
+          // Reset di sicurezza: se per qualunque motivo il
+          // contatore di profondità non fosse a zero al momento
+          // del login (es. sessione precedente terminata in modo
+          // anomalo), lo riportiamo a zero così lo swipe tra tab
+          // funziona subito correttamente nella nuova sessione.
+          context.read<NavigationDepthNotifier>().reset();
           context.read<AuthProvider>().setLoggedIn(
               context.read<AuthProvider>().userEmail ?? '');
           setState(() {});
@@ -316,6 +339,11 @@ class _MainShellState extends State<MainShell> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
 
+    // ── GESTURE SYSTEM: depth 0 → swipe tab abilitato; ──
+    // ── depth > 0 → swipe tab disabilitato (lo gestisce lo ──
+    // ── swipe-back nativo iOS della schermata interna). ──
+    final isAtRoot = context.watch<NavigationDepthNotifier>().isAtRoot;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -329,7 +357,9 @@ class _MainShellState extends State<MainShell> {
       extendBody: true,
       body: PageView(
         controller: _pageController,
-        physics: const ClampingScrollPhysics(),
+        physics: isAtRoot
+            ? const ClampingScrollPhysics()
+            : const NeverScrollableScrollPhysics(),
         onPageChanged: (index) {
           context.read<NavigationNotifier>().setIndexSilent(index);
         },
