@@ -143,12 +143,17 @@ class MyApp extends StatelessWidget {
       // piattaforme resta lo stile Zoom (nessun cambiamento lì).
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
+          // Stesso transition builder su TUTTE le piattaforme: lo
+          // swipe-back "stile IG/WhatsApp" è puro Dart, non dipende
+          // dalla piattaforma di esecuzione — assegnarlo ovunque
+          // garantisce lo stesso comportamento su web, Android, iOS,
+          // desktop, qualunque sia il defaultTargetPlatform rilevato.
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
           TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.android: ZoomPageTransitionsBuilder(),
-          TargetPlatform.windows: ZoomPageTransitionsBuilder(),
-          TargetPlatform.linux: ZoomPageTransitionsBuilder(),
-          TargetPlatform.fuchsia: ZoomPageTransitionsBuilder(),
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
         },
       ),
       textTheme: const TextTheme(
