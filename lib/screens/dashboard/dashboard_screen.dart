@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/navigation/app_router.dart';
 import '../../providers/goal_provider.dart';
 import '../../providers/sport_provider.dart';
 import '../../models/sport_models.dart';
@@ -32,29 +33,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   static const _weekdayNames = [
-    '',
-    'Lunedì',
-    'Martedì',
-    'Mercoledì',
-    'Giovedì',
-    'Venerdì',
-    'Sabato',
-    'Domenica'
+    '', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'
   ];
   static const _monthNames = [
-    '',
-    'Gennaio',
-    'Febbraio',
-    'Marzo',
-    'Aprile',
-    'Maggio',
-    'Giugno',
-    'Luglio',
-    'Agosto',
-    'Settembre',
-    'Ottobre',
-    'Novembre',
-    'Dicembre'
+    '', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
   ];
 
   @override
@@ -73,7 +56,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  // ── Header ──
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -101,20 +83,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
-
-                  // ── Week strip ──
                   WeekStrip(
                     selectedDate: _selectedDate,
                     onSelect: (d) => setState(() => _selectedDate = d),
-                    onExpand: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const GoalsCalendarScreen()),
-                    ),
+                    onExpand: () => pushPage(context, const GoalsCalendarScreen()),
                   ),
                   const SizedBox(height: 24),
-
-                  // ── Obiettivi del giorno ──
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -124,10 +98,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               .titleMedium
                               ?.copyWith(fontWeight: FontWeight.w700)),
                       TextButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const GoalsScreen()),
-                        ),
+                        onPressed: () => pushPage(context, const GoalsScreen()),
                         child: const Text('Gestisci'),
                       ),
                     ],
@@ -147,32 +118,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               goalProvider.toggleCompletion(g, _selectedDate),
                         )),
                   const SizedBox(height: 24),
-
-                  // ── Quick actions ──
                   QuickWorkoutPanel(
-                    onGym: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const SessionSelectorScreen()),
-                    ),
-                    onRunning: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              const SportSessionScreen(sport: SportType.running)),
-                    ),
-                    onCycling: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              const SportSessionScreen(sport: SportType.cycling)),
-                    ),
-                    onSwimming: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              const SportSessionScreen(sport: SportType.swimming)),
-                    ),
+                    onGym: () => pushPage(context, const SessionSelectorScreen()),
+                    onRunning: () => pushPage(
+                        context, const SportSessionScreen(sport: SportType.running)),
+                    onCycling: () => pushPage(
+                        context, const SportSessionScreen(sport: SportType.cycling)),
+                    onSwimming: () => pushPage(
+                        context, const SportSessionScreen(sport: SportType.swimming)),
                   ),
                 ]),
               ),

@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../core/navigation/app_router.dart';
 import '../../widgets/glass_card.dart';
 import 'workouts_screen.dart';
 import '../session/session_selector_screen.dart';
 import '../exercises/exercises_screen.dart';
 
-/// Hub della tab "Allenamenti". La Libreria Esercizi è raggiunta
-/// tramite icona in alto (AppBar), come pagina separata a pieno
-/// schermo — non più come card nel corpo.
 class AllenamentiScreen extends StatelessWidget {
   const AllenamentiScreen({super.key});
 
@@ -22,10 +20,7 @@ class AllenamentiScreen extends StatelessWidget {
           IconButton(
             tooltip: 'Libreria esercizi',
             icon: Icon(Icons.fitness_center_outlined, color: cs.tertiary),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ExercisesScreen()),
-            ),
+            onPressed: () => pushPage(context, const ExercisesScreen()),
           ),
           const SizedBox(width: 4),
         ],
@@ -35,10 +30,7 @@ class AllenamentiScreen extends StatelessWidget {
         child: Column(
           children: [
             GlassCard(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const WorkoutsScreen()),
-              ),
+              onTap: () => pushPage(context, const WorkoutsScreen()),
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
@@ -54,10 +46,7 @@ class AllenamentiScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             GlassCard(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SessionSelectorScreen()),
-              ),
+              onTap: () => pushPage(context, const SessionSelectorScreen()),
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [

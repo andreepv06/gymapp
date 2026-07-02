@@ -1,6 +1,6 @@
 import 'dart:ui';
-import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -40,29 +40,17 @@ void main() async {
   runApp(const MyApp());
 }
 
+/// Notifier per l'indice della tab corrente. Semplificato:
+/// non gestisce più un PageController perché la navigazione
+/// tra tab avviene con IndexedStack, non PageView.
 class NavigationNotifier extends ChangeNotifier {
   int _currentIndex = 0;
-  PageController? _pageController;
-
   int get currentIndex => _currentIndex;
-
-  void attachController(PageController controller) {
-    _pageController = controller;
-  }
-
-  void detachController() {
-    _pageController = null;
-  }
 
   void navigateTo(int index) {
     if (_currentIndex == index) return;
     _currentIndex = index;
     notifyListeners();
-    _pageController?.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeInOut,
-    );
   }
 
   void setIndexSilent(int index) {
@@ -91,59 +79,42 @@ class MyApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, __) {
-          final depthNotifier = context.read<NavigationDepthNotifier>();
-
           return MaterialApp(
             title: 'MarkFit',
             debugShowCheckedModeBanner: false,
             theme: _buildTheme(Brightness.light),
             darkTheme: _buildTheme(Brightness.dark),
             themeMode: themeProvider.themeMode,
-            navigatorObservers: [
-              DepthTrackingNavigatorObserver(depthNotifier),
-            ],
             builder: (context, child) {
               final theme = Theme.of(context);
               final cs = theme.colorScheme;
               final isDark = theme.brightness == Brightness.dark;
 
-              // ── FIX WHITE-FLASH NELLO SWIPE-BACK ──
-              //
-              // CupertinoPageTransitionsBuilder usa internamente
-              // elementi in stile Cupertino (ombra/sfondo durante
-              // il drag del gesto di swipe-back) che, in assenza
-              // di un CupertinoTheme ambientale, non sanno se
-              // l'app è in dark mode: cadono su un default chiaro,
-              // producendo il flash bianco — particolarmente
-              // visibile (e brutto) in dark mode, esattamente come
-              // segnalato.
-              //
-              // La correzione è avvolgere l'intero contenuto con
-              // un CupertinoTheme sincronizzato al tema Material
-              // corrente (brightness, colori, sfondo), così
-              // qualunque componente Cupertino usato internamente
-              // dalla transizione eredita lo sfondo corretto fin
-              // dal primo frame del gesto.
-              final cupertinoOverride = CupertinoThemeData(
-                brightness: isDark ? Brightness.dark : Brightness.light,
-                primaryColor: cs.primary,
-                scaffoldBackgroundColor: cs.surface,
-                barBackgroundColor: cs.surface,
-                textTheme: CupertinoTextThemeData(
-                  primaryColor: cs.primary,
-                ),
-              );
-
+              // FIX WHITE FLASH DEFINITIVO
+              // CupertinoPageRoute legge scaffoldBackgroundColor
+              // da CupertinoTheme per il background durante lo
+              // swipe-back. Senza questa impostazione esplicita,
+              // usa il default iOS (bianco) → flash bianco.
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: SystemUiOverlayStyle(
                   statusBarColor: Colors.transparent,
-                  statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-                  statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+                  statusBarIconBrightness:
+                      isDark ? Brightness.light : Brightness.dark,
+                  statusBarBrightness:
+                      isDark ? Brightness.dark : Brightness.light,
                 ),
-                child: ColoredBox(
-                  color: cs.surface,
-                  child: CupertinoTheme(
-                    data: cupertinoOverride,
+                child: CupertinoTheme(
+                  data: CupertinoThemeData(
+                    brightness: isDark ? Brightness.dark : Brightness.light,
+                    primaryColor: cs.primary,
+                    scaffoldBackgroundColor: cs.surface,
+                    barBackgroundColor: cs.surface,
+                    textTheme: CupertinoTextThemeData(
+                      primaryColor: cs.primary,
+                    ),
+                  ),
+                  child: ColoredBox(
+                    color: cs.surface,
                     child: child!,
                   ),
                 ),
@@ -157,31 +128,19 @@ class MyApp extends StatelessWidget {
   }
 
   ThemeData _buildTheme(Brightness brightness) {
-    final colorScheme = ColorScheme.fromSeed(
+    final cs = ColorScheme.fromSeed(
       seedColor: const Color(0xFF6750A4),
       brightness: brightness,
     );
     return ThemeData(
-      colorScheme: colorScheme,
+      colorScheme: cs,
       useMaterial3: true,
-      scaffoldBackgroundColor: colorScheme.surface,
-      canvasColor: colorScheme.surface,
-      dialogBackgroundColor: colorScheme.surface,
-      // Swipe-back stile iOS (IG/WhatsApp) su TUTTE le piattaforme:
-      // il gesture detector di Cupertino è puro codice Dart, non
-      // dipende dalla piattaforma di esecuzione — assegnarlo
-      // ovunque garantisce lo stesso comportamento su web,
-      // Android, iOS, desktop.
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: {
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
-        },
-      ),
+      scaffoldBackgroundColor: cs.surface,
+      canvasColor: cs.surface,
+      dialogBackgroundColor: cs.surface,
+      // Nessun pageTransitionsTheme: tutte le navigazioni usano
+      // CupertinoPageRoute via app_router.dart. La transizione è
+      // gestita nativamente, identica a Instagram/WhatsApp su iOS.
       textTheme: const TextTheme(
         headlineLarge: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
         headlineMedium: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
@@ -192,21 +151,21 @@ class MyApp extends StatelessWidget {
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: colorScheme.surface,
+        color: cs.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        surfaceTintColor: colorScheme.surfaceTint,
+        surfaceTintColor: cs.surfaceTint,
       ),
       appBarTheme: AppBarTheme(
         elevation: 0,
         scrolledUnderElevation: 1,
         centerTitle: true,
-        backgroundColor: colorScheme.surface,
-        surfaceTintColor: colorScheme.surfaceTint,
+        backgroundColor: cs.surface,
+        surfaceTintColor: cs.surfaceTint,
         systemOverlayStyle: brightness == Brightness.dark
             ? SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent)
             : SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
         titleTextStyle: TextStyle(
-          color: colorScheme.onSurface,
+          color: cs.onSurface,
           fontSize: 18,
           fontWeight: FontWeight.w700,
           letterSpacing: -0.3,
@@ -214,22 +173,22 @@ class MyApp extends StatelessWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.4),
+        fillColor: cs.surfaceContainerHighest.withOpacity(0.4),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),
+          borderSide: BorderSide(color: cs.outlineVariant, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.primary, width: 2),
+          borderSide: BorderSide(color: cs.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.error, width: 1),
+          borderSide: BorderSide(color: cs.error, width: 1),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
@@ -247,12 +206,12 @@ class MyApp extends StatelessWidget {
         ),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: colorScheme.surface,
+        backgroundColor: cs.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         elevation: 0,
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: colorScheme.surface,
+        backgroundColor: cs.surface,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
@@ -287,7 +246,7 @@ class _AppEntryState extends State<AppEntry> {
     if (context.read<AuthProvider>().isLoggedIn) {
       await context.read<SessionProvider>().tryRestoreSession();
     }
-    setState(() => _checked = true);
+    if (mounted) setState(() => _checked = true);
   }
 
   @override
@@ -310,9 +269,7 @@ class _AppEntryState extends State<AppEntry> {
       );
     }
 
-    final isLoggedIn = context.watch<AuthProvider>().isLoggedIn;
-
-    if (!isLoggedIn) {
+    if (!context.watch<AuthProvider>().isLoggedIn) {
       return LoginScreen(
         onLoginSuccess: () {
           context.read<NavigationDepthNotifier>().reset();
@@ -327,37 +284,8 @@ class _AppEntryState extends State<AppEntry> {
   }
 }
 
-class MainShell extends StatefulWidget {
+class MainShell extends StatelessWidget {
   const MainShell({super.key});
-
-  @override
-  State<MainShell> createState() => _MainShellState();
-}
-
-class _MainShellState extends State<MainShell> {
-  late PageController _pageController;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<NavigationNotifier>().attachController(_pageController);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    context.read<NavigationNotifier>().detachController();
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  void _onNavTap(int index) {
-    context.read<NavigationNotifier>().navigateTo(index);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -365,27 +293,15 @@ class _MainShellState extends State<MainShell> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
 
-    final isAtRoot = context.watch<NavigationDepthNotifier>().isAtRoot;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-      ));
-    });
-
     return Scaffold(
       backgroundColor: cs.surface,
       extendBody: true,
-      body: PageView(
-        controller: _pageController,
-        physics: isAtRoot
-            ? const ClampingScrollPhysics()
-            : const NeverScrollableScrollPhysics(),
-        onPageChanged: (index) {
-          context.read<NavigationNotifier>().setIndexSilent(index);
-        },
+      // IndexedStack: mantiene lo stato di ogni tab in memoria
+      // (come Instagram/WhatsApp), ZERO swipe orizzontale possibile.
+      // Il gesto orizzontale è riservato esclusivamente al
+      // swipe-back di CupertinoPageRoute sulle schermate interne.
+      body: IndexedStack(
+        index: currentIndex,
         children: const [
           DashboardScreen(),
           AllenamentiScreen(),
@@ -395,7 +311,7 @@ class _MainShellState extends State<MainShell> {
       ),
       bottomNavigationBar: _LiquidGlassNavBar(
         currentIndex: currentIndex,
-        onTap: _onNavTap,
+        onTap: (i) => context.read<NavigationNotifier>().navigateTo(i),
         isDark: isDark,
       ),
     );
@@ -424,7 +340,6 @@ class _LiquidGlassNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
-
     final glassBg = isDark
         ? Colors.grey.shade900.withOpacity(0.55)
         : Colors.white.withOpacity(0.6);
@@ -454,21 +369,19 @@ class _LiquidGlassNavBar extends StatelessWidget {
                 BoxShadow(
                   color: Colors.white.withOpacity(isDark ? 0.04 : 0.6),
                   blurRadius: 0,
-                  spreadRadius: 0,
                   offset: const Offset(0, 1),
                 ),
               ],
             ),
             child: Row(
               children: List.generate(_items.length, (i) {
-                final selected = i == currentIndex;
                 return Expanded(
                   child: GestureDetector(
                     onTap: () => onTap(i),
                     behavior: HitTestBehavior.opaque,
                     child: _LiquidNavItem(
                       item: _items[i],
-                      selected: selected,
+                      selected: i == currentIndex,
                       isDark: isDark,
                       primaryColor: cs.primary,
                     ),
@@ -504,11 +417,12 @@ class _LiquidNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unselected = isDark ? Colors.white.withOpacity(0.45) : Colors.grey.shade600;
-
+    final unselected =
+        isDark ? Colors.white.withOpacity(0.45) : Colors.grey.shade600;
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
-      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+      transitionBuilder: (child, anim) =>
+          FadeTransition(opacity: anim, child: child),
       child: selected
           ? _SelectedItem(
               key: ValueKey('sel_${item.label}'),
@@ -527,7 +441,6 @@ class _LiquidNavItem extends StatelessWidget {
 class _SelectedItem extends StatelessWidget {
   final _NavItem item;
   final Color primaryColor;
-
   const _SelectedItem({super.key, required this.item, required this.primaryColor});
 
   @override
@@ -560,8 +473,7 @@ class _SelectedItem extends StatelessWidget {
               Positioned(
                 top: 3,
                 child: Container(
-                  width: 28,
-                  height: 6,
+                  width: 28, height: 6,
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(3),
@@ -580,7 +492,6 @@ class _SelectedItem extends StatelessWidget {
 class _UnselectedItem extends StatelessWidget {
   final _NavItem item;
   final Color color;
-
   const _UnselectedItem({super.key, required this.item, required this.color});
 
   @override
@@ -592,15 +503,8 @@ class _UnselectedItem extends StatelessWidget {
         children: [
           Icon(item.icon, color: color, size: 22),
           const SizedBox(height: 3),
-          Text(
-            item.label,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
-              color: color,
-              letterSpacing: 0.1,
-            ),
-          ),
+          Text(item.label,
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w500, color: color)),
         ],
       ),
     );

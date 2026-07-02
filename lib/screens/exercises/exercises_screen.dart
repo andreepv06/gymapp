@@ -7,12 +7,6 @@ import '../../widgets/glass_button.dart';
 import '../../widgets/glass_action_buttons.dart';
 import '../../widgets/glass_bottom_sheet.dart';
 
-/// Gruppi muscolari predefiniti — costante di modulo (top-level),
-/// così è accessibile sia dentro _ExercisesScreenState (per i
-/// ChoiceChip di filtro/selezione) senza alcuna ambiguità tra
-/// ExercisesScreen (StatefulWidget) e _ExercisesScreenState (State):
-/// in Dart i membri statici NON sono condivisi tra le due classi,
-/// anche se collegate, motivo dell'errore di compilazione.
 const List<String> kExerciseMuscleGroups = [
   'Petto',
   'Schiena',
@@ -25,10 +19,17 @@ const List<String> kExerciseMuscleGroups = [
 ];
 
 /// Libreria esercizi: lista raggruppata per gruppo muscolare,
-/// ricerca, creazione/modifica/eliminazione. Pagina indipendente,
-/// raggiunta dalla tab Allenamenti tramite icona in AppBar.
+/// ricerca, creazione/modifica/eliminazione.
+///
+/// [isDialog]: quando true, la schermata è incapsulata in un
+/// Dialog (vedi home_screen.dart, schermata legacy non più
+/// raggiunta dalla navigazione principale ma ancora presente).
+/// In quel contesto non esiste una route precedente nel Navigator
+/// da cui Flutter possa dedurre automaticamente un pulsante
+/// "indietro": mostriamo quindi un pulsante di chiusura esplicito.
 class ExercisesScreen extends StatefulWidget {
-  const ExercisesScreen({super.key});
+  final bool isDialog;
+  const ExercisesScreen({super.key, this.isDialog = false});
 
   @override
   State<ExercisesScreen> createState() => _ExercisesScreenState();
@@ -218,6 +219,13 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
       backgroundColor: cs.surface,
       appBar: AppBar(
         backgroundColor: cs.surface,
+        automaticallyImplyLeading: !widget.isDialog,
+        leading: widget.isDialog
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : null,
         title: const Text('Libreria esercizi'),
       ),
       body: Column(
