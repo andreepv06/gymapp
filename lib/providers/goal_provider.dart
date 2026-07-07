@@ -2,73 +2,50 @@ import 'package:flutter/material.dart';
 import '../db/goal_database.dart';
 import '../models/goal_models.dart';
 
-String _fmtDate(DateTime d) =>
-    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-/// Provider del sistema Goals & Habits. Non conosce e non
-/// referenzia nulla del sistema Fitness.
 class GoalProvider extends ChangeNotifier {
   List<HiveGoal> _goals = [];
 
   List<HiveGoal> get goals => _goals;
-  List<HiveGoal> get activeGoals =>
-      _goals.where((g) => g.status == 'active').toList();
 
   void loadGoals() {
     _goals = GoalDatabase.instance.getGoals();
     notifyListeners();
   }
 
-  // ── Scheduling ──
-
-  /// Determina se un goal è programmato per una determinata data.
-  bool isScheduledOn(HiveGoal goal, DateTime date) {
-    final d = DateTime(date.year, date.month, date.day);
-    switch (goal.scheduleType) {
-      case 'daily':
-        return true;
-      case 'specificDays':
-        return (goal.scheduleDaysOfWeek ?? []).contains(d.weekday);
-      case 'weekend':
-        return d.weekday == DateTime.saturday || d.weekday == DateTime.sunday;
-      case 'weekdays':
-        return d.weekday >= DateTime.monday && d.weekday <= DateTime.friday;
-      case 'dateRange':
-        final start = DateTime.tryParse(goal.scheduleStartDate ?? '');
-        final end = DateTime.tryParse(goal.scheduleEndDate ?? '');
-        if (start == null || end == null) return false;
-        return !d.isBefore(DateTime(start.year, start.month, start.day)) &&
-            !d.isAfter(DateTime(end.year, end.month, end.day));
-      case 'customInterval':
-        final anchor = DateTime.tryParse(goal.scheduleStartDate ?? '') ??
-            DateTime.tryParse(goal.createdAt);
-        final interval = goal.scheduleCustomInterval ?? 1;
-        if (anchor == null || interval <= 0) return false;
-        final anchorDay = DateTime(anchor.year, anchor.month, anchor.day);
-        final diff = d.difference(anchorDay).inDays;
-        return diff >= 0 && diff % interval == 0;
-      default:
-        return false;
-    }
-  }
-
-  List<HiveGoal> goalsForDate(DateTime date) => activeGoals
-      .where((g) => isScheduledOn(g, date))
-      .toList();
-
-  bool isCompletedOn(HiveGoal goal, DateTime date) {
-    final c = GoalDatabase.instance.getCompletion(goal.key, _fmtDate(date));
-    return c?.completed ?? false;
+  List<HiveGoal> goalsForDate(DateTime date) {
+    return _goals
+        .where((g) => g.status == 'active' && _isScheduledOn(g, date))
+        .toList();
   }
 
   double completionPercentageForDate(DateTime date) {
     final scheduled = goalsForDate(date);
     if (scheduled.isEmpty) return 0;
-    final done = scheduled.where((g) => isCompletedOn(g, date)).length;
-    return done / scheduled.length;
+    final dateStr = _fmt(date);
+    final completed = scheduled
+        .where((g) =>
+            GoalDatabase.instance.getCompletion(g.key, dateStr)?.completed ==
+            true)
+        .length;
+    return completed / scheduled.length;
   }
 
-  // ── CRUD ──
+  bool isCompletedOn(HiveGoal goal, DateTime date) {
+    final c = GoalDatabase.instance.getCompletion(goal.key, _fmt(date));
+    return c?.completed ?? false;
+  }
+
+  Future<void> toggleCompletion(HiveGoal goal, DateTime date) async {
+    final dateStr = _fmt(date);
+    final current = isCompletedOn(goal, date);
+    await GoalDatabase.instance.setCompletion(goal.key, dateStr, !current);
+    _updateStreak(goal);
+    notifyListeners();
+  }
+
+  List<HiveGoalCompletion> completionsForGoal(dynamic key) {
+    return GoalDatabase.instance.getCompletionsForGoal(key);
+  }
 
   Future<void> addGoal({
     required String title,
@@ -82,7 +59,7 @@ class GoalProvider extends ChangeNotifier {
     String? deadlineDate,
     int colorIndex = 0,
   }) async {
-    await GoalDatabase.instance.addGoal(HiveGoal(
+    final goal = HiveGoal(
       title: title,
       description: description,
       category: category,
@@ -94,7 +71,8 @@ class GoalProvider extends ChangeNotifier {
       scheduleCustomInterval: scheduleCustomInterval,
       deadlineDate: deadlineDate,
       colorIndex: colorIndex,
-    ));
+    );
+    await GoalDatabase.instance.addGoal(goal);
     loadGoals();
   }
 
@@ -114,38 +92,65 @@ class GoalProvider extends ChangeNotifier {
     loadGoals();
   }
 
-  // ── Completion + streak ──
-
-  Future<void> toggleCompletion(HiveGoal goal, DateTime date) async {
-    final dateStr = _fmtDate(date);
-    final current = GoalDatabase.instance.getCompletion(goal.key, dateStr);
-    final newValue = !(current?.completed ?? false);
-    await GoalDatabase.instance.setCompletion(goal.key, dateStr, newValue);
-    _recalcStreak(goal);
-    notifyListeners();
+  bool _isScheduledOn(HiveGoal goal, DateTime date) {
+    switch (goal.scheduleType) {
+      case 'daily':
+        return true;
+      case 'specificDays':
+        return (goal.scheduleDaysOfWeek ?? []).contains(date.weekday);
+      case 'weekend':
+        return date.weekday == DateTime.saturday ||
+            date.weekday == DateTime.sunday;
+      case 'weekdays':
+        return date.weekday >= DateTime.monday &&
+            date.weekday <= DateTime.friday;
+      case 'dateRange':
+        final start = goal.scheduleStartDate != null
+            ? DateTime.tryParse(goal.scheduleStartDate!)
+            : null;
+        final end = goal.scheduleEndDate != null
+            ? DateTime.tryParse(goal.scheduleEndDate!)
+            : null;
+        final d = DateTime(date.year, date.month, date.day);
+        if (start != null) {
+          final s = DateTime(start.year, start.month, start.day);
+          if (d.isBefore(s)) return false;
+        }
+        if (end != null) {
+          final e = DateTime(end.year, end.month, end.day);
+          if (d.isAfter(e)) return false;
+        }
+        return true;
+      case 'customInterval':
+        final start = goal.scheduleStartDate != null
+            ? DateTime.tryParse(goal.scheduleStartDate!)
+            : null;
+        if (start == null) return true;
+        final interval = goal.scheduleCustomInterval ?? 1;
+        final s = DateTime(start.year, start.month, start.day);
+        final d = DateTime(date.year, date.month, date.day);
+        final diff = d.difference(s).inDays;
+        return diff >= 0 && diff % interval == 0;
+      default:
+        return true;
+    }
   }
 
-  void _recalcStreak(HiveGoal goal) {
-    int streak = 0;
-    DateTime cursor = DateTime.now();
-    cursor = DateTime(cursor.year, cursor.month, cursor.day);
+  void _updateStreak(HiveGoal goal) {
+    final completions = GoalDatabase.instance.getCompletionsForGoal(goal.key);
+    final completedDates =
+        completions.where((c) => c.completed).map((c) => c.date).toSet();
 
-    // Cammina indietro nel tempo: per ogni giorno SCHEDULATO,
-    // deve esserci un completamento positivo, altrimenti la
-    // catena si interrompe.
-    while (true) {
-      if (isScheduledOn(goal, cursor)) {
-        final c = GoalDatabase.instance.getCompletion(goal.key, _fmtDate(cursor));
-        if (c != null && c.completed) {
-          streak++;
-        } else {
-          break;
-        }
+    int streak = 0;
+    DateTime date = DateTime.now();
+    for (int guard = 0; guard < 1000; guard++) {
+      if (!_isScheduledOn(goal, date)) {
+        date = date.subtract(const Duration(days: 1));
+        continue;
       }
-      cursor = cursor.subtract(const Duration(days: 1));
-      // Limite di sicurezza per non girare all'infinito su goal
-      // creati molto tempo fa senza alcun completamento.
-      if (DateTime.now().difference(cursor).inDays > 3650) break;
+      if (!completedDates.contains(_fmt(date))) break;
+      streak++;
+      date = date.subtract(const Duration(days: 1));
     }
 
     goal.currentStreak = streak;
@@ -153,8 +158,6 @@ class GoalProvider extends ChangeNotifier {
     goal.save();
   }
 
-  // ── Storico (per la sezione Obiettivi dello Storico) ──
-
-  List<HiveGoalCompletion> completionsForGoal(dynamic goalKey) =>
-      GoalDatabase.instance.getCompletionsForGoal(goalKey);
+  String _fmt(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }

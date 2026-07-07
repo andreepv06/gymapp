@@ -1,28 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/persistence/categories_repository.dart';
 import '../../models/goal_models.dart';
 import '../../providers/goal_provider.dart';
 import '../../widgets/glass_action_buttons.dart';
 import '../../widgets/glass_bottom_sheet.dart';
-
-/// Categorie predefinite (aggiornate con le 12 dalla specifica).
-const List<String> kGoalCategories = [
-  'Sport',
-  'Salute',
-  'Studio',
-  'Lavoro',
-  'Produttività',
-  'Benessere',
-  'Lettura',
-  'Hobby',
-  'Personale',
-  'Casa',
-  'Alimentazione',
-  'Recupero',
-];
-
-const String _customCategoriesKey = 'custom_goal_categories';
 
 class GoalFormScreen extends StatefulWidget {
   final HiveGoal? existing;
@@ -33,10 +15,11 @@ class GoalFormScreen extends StatefulWidget {
 }
 
 class _GoalFormScreenState extends State<GoalFormScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
 
-  String _selectedCategory = kGoalCategories.first;
+  String _selectedCategory = CategoriesRepository.predefined.first;
   List<String> _customCategories = [];
 
   String _scheduleType = 'daily';
@@ -45,14 +28,14 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   DateTime? _rangeStart;
   DateTime? _rangeEnd;
   DateTime? _deadline;
+  bool _saving = false;
 
   static const _dayLabels = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 
   @override
   void initState() {
     super.initState();
-    _loadCustomCategories();
-
+    _loadCategories();
     final g = widget.existing;
     if (g != null) {
       _titleCtrl.text = g.title;
@@ -74,45 +57,9 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     super.dispose();
   }
 
-  Future<void> _loadCustomCategories() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getStringList(_customCategoriesKey) ?? [];
-    if (mounted) setState(() => _customCategories = saved);
-  }
-
-  Future<void> _saveCustomCategory(String category) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!_customCategories.contains(category)) {
-      _customCategories.add(category);
-      await prefs.setStringList(_customCategoriesKey, _customCategories);
-    }
-  }
-
-  void _showCategoryPicker() {
-    showGlassBottomSheet(
-      context: context,
-      child: _CategoryPickerSheet(
-        selected: _selectedCategory,
-        predefined: kGoalCategories,
-        custom: _customCategories,
-        onSelected: (cat) {
-          setState(() => _selectedCategory = cat);
-          Navigator.pop(context);
-        },
-        onNewCategory: (cat, save) async {
-          if (save) await _saveCustomCategory(cat);
-          if (mounted) {
-            setState(() {
-              _selectedCategory = cat;
-              if (save && !_customCategories.contains(cat)) {
-                _customCategories.add(cat);
-              }
-            });
-            Navigator.pop(context);
-          }
-        },
-      ),
-    );
+  Future<void> _loadCategories() async {
+    final custom = await CategoriesRepository.loadCustom();
+    if (mounted) setState(() => _customCategories = custom);
   }
 
   String _fmt(DateTime d) =>
@@ -129,23 +76,28 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   }
 
   Future<void> _save() async {
-    if (_titleCtrl.text.trim().isEmpty) return;
-    final provider = context.read<GoalProvider>();
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
 
+    final provider = context.read<GoalProvider>();
     if (widget.existing == null) {
       await provider.addGoal(
         title: _titleCtrl.text.trim(),
-        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+        description:
+            _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         category: _selectedCategory,
         scheduleType: _scheduleType,
         scheduleDaysOfWeek:
             _scheduleType == 'specificDays' ? _selectedDays.toList() : null,
-        scheduleStartDate: (_scheduleType == 'dateRange' || _scheduleType == 'customInterval') && _rangeStart != null
-            ? _fmt(_rangeStart!)
-            : null,
-        scheduleEndDate: _scheduleType == 'dateRange' && _rangeEnd != null
-            ? _fmt(_rangeEnd!)
-            : null,
+        scheduleStartDate:
+            (_scheduleType == 'dateRange' || _scheduleType == 'customInterval') &&
+                    _rangeStart != null
+                ? _fmt(_rangeStart!)
+                : null,
+        scheduleEndDate:
+            _scheduleType == 'dateRange' && _rangeEnd != null
+                ? _fmt(_rangeEnd!)
+                : null,
         scheduleCustomInterval:
             _scheduleType == 'customInterval' ? _customInterval : null,
         deadlineDate: _deadline != null ? _fmt(_deadline!) : null,
@@ -153,201 +105,264 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     } else {
       final g = widget.existing!;
       g.title = _titleCtrl.text.trim();
-      g.description = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
+      g.description =
+          _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
       g.category = _selectedCategory;
       g.scheduleType = _scheduleType;
       g.scheduleDaysOfWeek =
           _scheduleType == 'specificDays' ? _selectedDays.toList() : null;
-      g.scheduleStartDate = (_scheduleType == 'dateRange' || _scheduleType == 'customInterval') && _rangeStart != null
-          ? _fmt(_rangeStart!)
-          : null;
-      g.scheduleEndDate = _scheduleType == 'dateRange' && _rangeEnd != null
-          ? _fmt(_rangeEnd!)
-          : null;
+      g.scheduleStartDate =
+          (_scheduleType == 'dateRange' || _scheduleType == 'customInterval') &&
+                  _rangeStart != null
+              ? _fmt(_rangeStart!)
+              : null;
+      g.scheduleEndDate =
+          _scheduleType == 'dateRange' && _rangeEnd != null
+              ? _fmt(_rangeEnd!)
+              : null;
       g.scheduleCustomInterval =
           _scheduleType == 'customInterval' ? _customInterval : null;
       g.deadlineDate = _deadline != null ? _fmt(_deadline!) : null;
       await provider.updateGoal(g.key, g);
     }
-    if (mounted) Navigator.pop(context);
+
+    if (mounted) {
+      setState(() => _saving = false);
+      Navigator.pop(context);
+    }
+  }
+
+  void _openCategoryPicker() {
+    showGlassBottomSheet(
+      context: context,
+      child: _CategoryPickerSheet(
+        selected: _selectedCategory,
+        customCategories: _customCategories,
+        onSelect: (cat) {
+          setState(() => _selectedCategory = cat);
+          Navigator.pop(context);
+        },
+        onCategoriesUpdated: (custom) {
+          setState(() => _customCategories = custom);
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.existing == null ? 'Nuovo obiettivo' : 'Modifica obiettivo'),
+        title: Text(widget.existing == null
+            ? 'Nuovo obiettivo'
+            : 'Modifica obiettivo'),
+        actions: [
+          _saving
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              : GlassTextButton(
+                  onPressed: _save,
+                  child: const Text('Salva'),
+                ),
+          const SizedBox(width: 8),
+        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // Titolo
-          TextField(
-            controller: _titleCtrl,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Titolo',
-              prefixIcon: Icon(Icons.flag_outlined),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _descCtrl,
-            maxLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'Descrizione (opzionale)',
-              prefixIcon: Icon(Icons.notes_rounded),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Categoria — tappable field che apre il glass picker
-          Text('Categoria', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: _showCategoryPicker,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cs.outlineVariant),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            // Titolo
+            TextFormField(
+              controller: _titleCtrl,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Titolo *',
+                prefixIcon: Icon(Icons.flag_outlined),
               ),
-              child: Row(
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'Campo obbligatorio' : null,
+            ),
+            const SizedBox(height: 14),
+
+            // Descrizione
+            TextFormField(
+              controller: _descCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Descrizione (opzionale)',
+                prefixIcon: Icon(Icons.notes_rounded),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Categoria — campo tappable che apre il picker Glass
+            Text('Categoria',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: _openCategoryPicker,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: cs.outlineVariant),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.category_outlined,
+                        color: cs.outline, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(_selectedCategory,
+                          style: const TextStyle(fontSize: 16)),
+                    ),
+                    Icon(Icons.expand_more_rounded, color: cs.outline),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Ricorrenza
+            Text('Ricorrenza',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ('daily', 'Ogni giorno'),
+                ('specificDays', 'Giorni specifici'),
+                ('weekend', 'Weekend'),
+                ('weekdays', 'Lun–Ven'),
+                ('dateRange', 'Intervallo date'),
+                ('customInterval', 'Ogni N giorni'),
+              ]
+                  .map((opt) => ChoiceChip(
+                        label: Text(opt.$2),
+                        selected: _scheduleType == opt.$1,
+                        onSelected: (_) =>
+                            setState(() => _scheduleType = opt.$1),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 12),
+
+            if (_scheduleType == 'specificDays')
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: List.generate(7, (i) {
+                  final day = i + 1;
+                  return FilterChip(
+                    label: Text(_dayLabels[i]),
+                    selected: _selectedDays.contains(day),
+                    onSelected: (v) => setState(() =>
+                        v ? _selectedDays.add(day) : _selectedDays.remove(day)),
+                  );
+                }),
+              ),
+
+            if (_scheduleType == 'customInterval')
+              Row(
                 children: [
-                  Icon(Icons.category_outlined, color: cs.outline, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _selectedCategory,
-                      style: TextStyle(fontSize: 16, color: cs.onSurface),
+                  const Text('Ogni'),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 60,
+                    child: TextFormField(
+                      initialValue: '$_customInterval',
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(isDense: true),
+                      onChanged: (v) =>
+                          _customInterval = int.tryParse(v) ?? _customInterval,
                     ),
                   ),
-                  Icon(Icons.expand_more_rounded, color: cs.outline),
+                  const SizedBox(width: 8),
+                  const Text('giorni'),
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: 20),
 
-          // Ricorrenza
-          Text('Ricorrenza', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ('daily', 'Ogni giorno'),
-              ('specificDays', 'Giorni specifici'),
-              ('weekend', 'Weekend'),
-              ('weekdays', 'Lun–Ven'),
-              ('dateRange', 'Intervallo date'),
-              ('customInterval', 'Ogni N giorni'),
-            ].map((opt) {
-              return ChoiceChip(
-                label: Text(opt.$2),
-                selected: _scheduleType == opt.$1,
-                onSelected: (_) => setState(() => _scheduleType = opt.$1),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 12),
-
-          if (_scheduleType == 'specificDays')
-            Wrap(
-              spacing: 6,
-              children: List.generate(7, (i) {
-                final day = i + 1;
-                return FilterChip(
-                  label: Text(_dayLabels[i]),
-                  selected: _selectedDays.contains(day),
-                  onSelected: (v) => setState(() {
-                    v ? _selectedDays.add(day) : _selectedDays.remove(day);
-                  }),
-                );
-              }),
-            ),
-
-          if (_scheduleType == 'customInterval')
-            Row(
-              children: [
-                const Text('Ogni'),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 60,
-                  child: TextFormField(
-                    initialValue: '$_customInterval',
-                    keyboardType: TextInputType.number,
-                    onChanged: (v) => _customInterval = int.tryParse(v) ?? _customInterval,
-                    decoration: const InputDecoration(isDense: true),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Text('giorni'),
-              ],
-            ),
-
-          if (_scheduleType == 'dateRange' || _scheduleType == 'customInterval')
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
+            if (_scheduleType == 'dateRange' ||
+                _scheduleType == 'customInterval') ...[
+              const SizedBox(height: 8),
+              Row(
                 children: [
                   Expanded(
                     child: TextButton(
-                      onPressed: () => _pickDate((d) => setState(() => _rangeStart = d)),
-                      child: Text(_rangeStart == null ? 'Data inizio' : 'Dal ${_fmt(_rangeStart!)}'),
+                      onPressed: () =>
+                          _pickDate((d) => setState(() => _rangeStart = d)),
+                      child: Text(_rangeStart == null
+                          ? 'Data inizio'
+                          : 'Dal ${_fmt(_rangeStart!)}'),
                     ),
                   ),
                   if (_scheduleType == 'dateRange')
                     Expanded(
                       child: TextButton(
-                        onPressed: () => _pickDate((d) => setState(() => _rangeEnd = d)),
-                        child: Text(_rangeEnd == null ? 'Data fine' : 'Al ${_fmt(_rangeEnd!)}'),
+                        onPressed: () =>
+                            _pickDate((d) => setState(() => _rangeEnd = d)),
+                        child: Text(_rangeEnd == null
+                            ? 'Data fine'
+                            : 'Al ${_fmt(_rangeEnd!)}'),
                       ),
                     ),
                 ],
               ),
+            ],
+
+            const SizedBox(height: 20),
+
+            // Scadenza
+            Text('Scadenza (opzionale)',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () =>
+                  _pickDate((d) => setState(() => _deadline = d)),
+              icon: const Icon(Icons.calendar_month_outlined, size: 18),
+              label: Text(_deadline == null
+                  ? 'Imposta scadenza'
+                  : _fmt(_deadline!)),
             ),
 
-          const SizedBox(height: 20),
-
-          // Scadenza
-          Text('Scadenza (opzionale)', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: () => _pickDate((d) => setState(() => _deadline = d)),
-            icon: const Icon(Icons.calendar_month_outlined, size: 18),
-            label: Text(_deadline == null ? 'Imposta scadenza' : _fmt(_deadline!)),
-          ),
-
-          const SizedBox(height: 24),
-          GlassFilledButton(
-            onPressed: _save,
-            child: const Text('Salva obiettivo'),
-          ),
-        ],
+            const SizedBox(height: 32),
+            GlassFilledButton(
+              onPressed: _saving ? null : _save,
+              child: const Text('Salva obiettivo'),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// ─────────────────────────────────────────────
-/// Glass category picker — bottom sheet iOS-style
-/// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// _CategoryPickerSheet — Glass bottom sheet
+// ─────────────────────────────────────────────
+
 class _CategoryPickerSheet extends StatefulWidget {
   final String selected;
-  final List<String> predefined;
-  final List<String> custom;
-  final ValueChanged<String> onSelected;
-  final void Function(String cat, bool save) onNewCategory;
+  final List<String> customCategories;
+  final ValueChanged<String> onSelect;
+  final ValueChanged<List<String>> onCategoriesUpdated;
 
   const _CategoryPickerSheet({
     required this.selected,
-    required this.predefined,
-    required this.custom,
-    required this.onSelected,
-    required this.onNewCategory,
+    required this.customCategories,
+    required this.onSelect,
+    required this.onCategoriesUpdated,
   });
 
   @override
@@ -355,14 +370,160 @@ class _CategoryPickerSheet extends StatefulWidget {
 }
 
 class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
-  bool _showNewField = false;
-  final _newCtrl = TextEditingController();
-  bool _saveForFuture = true;
+  late List<String> _custom;
+  bool _showAddField = false;
+  final _addCtrl = TextEditingController();
+  String? _addError;
+
+  @override
+  void initState() {
+    super.initState();
+    _custom = List.from(widget.customCategories);
+  }
 
   @override
   void dispose() {
-    _newCtrl.dispose();
+    _addCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _submitAdd() async {
+    final err = await CategoriesRepository.addCustom(_addCtrl.text);
+    if (err != null) {
+      setState(() => _addError = err);
+      return;
+    }
+    final updated = await CategoriesRepository.loadCustom();
+    setState(() {
+      _custom = updated;
+      _showAddField = false;
+      _addCtrl.clear();
+      _addError = null;
+    });
+    widget.onCategoriesUpdated(_custom);
+  }
+
+  void _showRenameDialog(String old) {
+    final ctrl = TextEditingController(text: old);
+    String? err;
+    showGlassDialog(
+      context: context,
+      child: StatefulBuilder(
+        builder: (ctx, setD) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Rinomina categoria',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: ctrl,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                    labelText: 'Nuovo nome', errorText: err),
+              ),
+              const SizedBox(height: 20),
+              GlassDialogActions(
+                cancelLabel: 'Annulla',
+                confirmLabel: 'Rinomina',
+                onCancel: () => Navigator.pop(ctx),
+                onConfirm: () async {
+                  final e =
+                      await CategoriesRepository.renameCustom(old, ctrl.text);
+                  if (e != null) {
+                    setD(() => err = e);
+                    return;
+                  }
+                  final updated = await CategoriesRepository.loadCustom();
+                  setState(() => _custom = updated);
+                  widget.onCategoriesUpdated(_custom);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirm(String name) {
+    showGlassDialog(
+      context: context,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(children: [
+              Icon(Icons.delete_outline, color: Colors.red, size: 20),
+              SizedBox(width: 8),
+              Text('Elimina categoria',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            ]),
+            const SizedBox(height: 12),
+            Text(
+                'Eliminare "$name"?\nGli obiettivi esistenti mantengono la categoria.'),
+            const SizedBox(height: 20),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Elimina',
+              confirmColor: Colors.red,
+              onCancel: () => Navigator.pop(context),
+              onConfirm: () async {
+                await CategoriesRepository.deleteCustom(name);
+                final updated = await CategoriesRepository.loadCustom();
+                setState(() => _custom = updated);
+                widget.onCategoriesUpdated(_custom);
+                if (context.mounted) Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCustomOptions(String cat) {
+    showGlassDialog(
+      context: context,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(cat,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 16)),
+            const SizedBox(height: 16),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.edit_outlined,
+                  color: Theme.of(context).colorScheme.primary),
+              title: const Text('Rinomina'),
+              onTap: () {
+                Navigator.pop(context);
+                _showRenameDialog(cat);
+              },
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Elimina',
+                  style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(context);
+                _showDeleteConfirm(cat);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -386,73 +547,48 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
             Text('Categoria', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
 
-            // Categorie predefinite
+            // Predefinite
             Text('Predefinite',
-                style: TextStyle(fontSize: 11, color: cs.outline, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                style: TextStyle(
+                    fontSize: 11,
+                    color: cs.outline,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: widget.predefined.map((cat) {
+              children: CategoriesRepository.predefined.map((cat) {
                 final sel = cat == widget.selected;
-                return GestureDetector(
-                  onTap: () => widget.onSelected(cat),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: sel
-                          ? cs.primary
-                          : cs.surfaceContainerHighest.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: sel ? cs.primary : cs.outlineVariant.withOpacity(0.5),
-                      ),
-                    ),
-                    child: Text(
-                      cat,
-                      style: TextStyle(
-                        color: sel ? cs.onPrimary : cs.onSurface,
-                        fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
+                return _CatChip(
+                  label: cat,
+                  selected: sel,
+                  onTap: () => widget.onSelect(cat),
                 );
               }).toList(),
             ),
 
-            // Categorie custom (se esistono)
-            if (widget.custom.isNotEmpty) ...[
+            // Custom
+            if (_custom.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Text('Le tue categorie',
-                  style: TextStyle(fontSize: 11, color: cs.outline, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+              Text('Le mie categorie',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: cs.outline,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: widget.custom.map((cat) {
+                children: _custom.map((cat) {
                   final sel = cat == widget.selected;
-                  return GestureDetector(
-                    onTap: () => widget.onSelected(cat),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: sel ? cs.tertiary : cs.tertiaryContainer.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: sel ? cs.tertiary : cs.tertiary.withOpacity(0.4),
-                        ),
-                      ),
-                      child: Text(
-                        cat,
-                        style: TextStyle(
-                          color: sel ? cs.onTertiary : cs.tertiary,
-                          fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
+                  return _CatChip(
+                    label: cat,
+                    selected: sel,
+                    isCustom: true,
+                    onTap: () => widget.onSelect(cat),
+                    onLongPress: () => _showCustomOptions(cat),
                   );
                 }).toList(),
               ),
@@ -460,59 +596,132 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
 
             const SizedBox(height: 16),
 
-            // Aggiungi nuova
-            if (!_showNewField)
+            // Aggiungi categoria
+            if (!_showAddField)
               GestureDetector(
-                onTap: () => setState(() => _showNewField = true),
+                onTap: () => setState(() => _showAddField = true),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    border: Border.all(
-                        color: cs.primary.withOpacity(0.4),
-                        style: BorderStyle.solid),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: cs.primary.withOpacity(0.4)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.add_rounded, size: 18, color: cs.primary),
                       const SizedBox(width: 6),
-                      Text('Nuova categoria...',
-                          style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600)),
+                      Text('Aggiungi categoria',
+                          style: TextStyle(
+                              color: cs.primary,
+                              fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
               )
             else ...[
               TextField(
-                controller: _newCtrl,
+                controller: _addCtrl,
                 autofocus: true,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: InputDecoration(
                   labelText: 'Nome categoria',
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.check_rounded),
-                    onPressed: () {
-                      final cat = _newCtrl.text.trim();
-                      if (cat.isNotEmpty) {
-                        widget.onNewCategory(cat, _saveForFuture);
-                      }
-                    },
-                  ),
+                  hintText: 'Es. Famiglia, Sport...',
+                  errorText: _addError,
                 ),
+                onSubmitted: (_) => _submitAdd(),
               ),
               const SizedBox(height: 8),
               Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Checkbox(
-                    value: _saveForFuture,
-                    onChanged: (v) => setState(() => _saveForFuture = v ?? true),
+                  GlassTextButton(
+                    onPressed: () => setState(() {
+                      _showAddField = false;
+                      _addCtrl.clear();
+                      _addError = null;
+                    }),
+                    child: const Text('Annulla'),
                   ),
-                  const Text('Salva per utilizzo futuro'),
+                  const SizedBox(width: 8),
+                  GlassTextButton(
+                    onPressed: _submitAdd,
+                    foregroundColor: cs.primary,
+                    child: const Text('Aggiungi',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
                 ],
               ),
             ],
             const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Chip categoria riutilizzabile nel picker.
+class _CatChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final bool isCustom;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  const _CatChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.isCustom = false,
+    this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final bg = selected
+        ? (isCustom ? cs.tertiary : cs.primary)
+        : (isCustom
+            ? cs.tertiaryContainer.withOpacity(0.3)
+            : cs.surfaceContainerHighest.withOpacity(0.5));
+    final fg = selected
+        ? (isCustom ? cs.onTertiary : cs.onPrimary)
+        : (isCustom ? cs.tertiary : cs.onSurface);
+    final border = selected
+        ? Colors.transparent
+        : (isCustom
+            ? cs.tertiary.withOpacity(0.4)
+            : cs.outlineVariant.withOpacity(0.5));
+
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    color: fg,
+                    fontWeight: selected
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                    fontSize: 13)),
+            if (isCustom && !selected) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.more_horiz, size: 12, color: fg.withOpacity(0.6)),
+            ],
           ],
         ),
       ),

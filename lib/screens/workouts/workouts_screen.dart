@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/navigation/app_router.dart';
 import '../../models/hive_models.dart';
 import '../../providers/workout_provider.dart';
 import '../../widgets/glass_button.dart';
@@ -45,16 +46,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
   }
 
-  // ─────────────────────────────────────────
-  // Nuova scheda
-  //
-  // FIX TASTIERA: il padding bottom è applicato qui, direttamente
-  // dal contenuto del sheet (pattern identico a "Nuovo esercizio",
-  // che non ha mai dato problemi). NESSUN autofocus: l'utente
-  // tocca il campo quando vuole scrivere, eliminando del tutto la
-  // corsa tra l'animazione di apertura del sheet e l'apertura
-  // della tastiera che causava il salto verso l'alto.
-  // ─────────────────────────────────────────
   void _showAddWorkoutSheet(BuildContext context) {
     final nameCtrl = TextEditingController();
     String? selectedIconId;
@@ -119,13 +110,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(3),
                               decoration: BoxDecoration(
-                                color:
-                                    Theme.of(context).colorScheme.primary,
+                                color: Theme.of(context).colorScheme.primary,
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .surface,
+                                    color: Theme.of(context).colorScheme.surface,
                                     width: 1.5),
                               ),
                               child: const Icon(Icons.edit,
@@ -178,13 +166,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     );
                     if (context.mounted) {
                       context.read<WorkoutProvider>().loadWorkouts();
-                      Navigator.push(
+                      // FIX: CupertinoPageRoute via pushPage
+                      pushPage(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => WorkoutDetailScreen(
-                            workoutId: id,
-                            workoutName: nameCtrl.text.trim(),
-                          ),
+                        WorkoutDetailScreen(
+                          workoutId: id,
+                          workoutName: nameCtrl.text.trim(),
                         ),
                       ).then((_) {
                         if (context.mounted) {
@@ -291,13 +278,12 @@ class _WorkoutCard extends StatelessWidget {
                 icon: Icon(Icons.more_vert, color: cs.outline),
                 onPressed: () => _showOptionsSheet(context),
               ),
-              onTap: () => Navigator.push(
+              // FIX: CupertinoPageRoute via pushPage
+              onTap: () => pushPage(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => WorkoutDetailScreen(
-                    workoutId: workout.key,
-                    workoutName: workout.name,
-                  ),
+                WorkoutDetailScreen(
+                  workoutId: workout.key,
+                  workoutName: workout.name,
                 ),
               ).then((_) {
                 if (context.mounted) {
@@ -409,8 +395,6 @@ class _WorkoutCard extends StatelessWidget {
     }
   }
 
-  // FIX TASTIERA: padding bottom direttamente qui, nessun
-  // autofocus — stesso pattern di "Nuova scheda" qui sopra.
   void _showRenameSheet(BuildContext context) {
     final controller = TextEditingController(text: workout.name);
     showGlassBottomSheet(
@@ -573,8 +557,8 @@ class _EmptyState extends StatelessWidget {
                 border: Border.all(
                     color: cs.primary.withOpacity(0.3), width: 1.5),
               ),
-              child:
-                  Icon(Icons.list_alt_outlined, size: 40, color: cs.primary),
+              child: Icon(Icons.list_alt_outlined,
+                  size: 40, color: cs.primary),
             ),
             const SizedBox(height: 20),
             Text('Nessuna scheda ancora',
