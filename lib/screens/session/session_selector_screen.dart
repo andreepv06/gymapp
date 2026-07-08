@@ -2,14 +2,9 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-// FIX DEFINITIVO:
-// active_session_screen.dart contiene WorkoutDetailScreen (il workout
-// editor), ma la stessa classe esiste anche in workout_detail_screen.dart.
-// Il compilatore non risolve WorkoutDetailScreen da active_session_screen
-// perché i due file si sovrappongono. La soluzione è importare
-// direttamente workout_detail_screen.dart — percorso relativo dalla
-// cartella session/ alla cartella workouts/.
-import '../workouts/workout_detail_screen.dart';
+// Import corretto: ActiveSessionScreen (tracker live) è in questo
+// stesso file active_session_screen.dart, nella stessa cartella.
+import 'active_session_screen.dart';
 
 import '../../core/navigation/app_router.dart';
 import '../../db/hive_database.dart';
@@ -21,10 +16,12 @@ class SessionSelectorScreen extends StatefulWidget {
   const SessionSelectorScreen({super.key});
 
   @override
-  State<SessionSelectorScreen> createState() => _SessionSelectorScreenState();
+  State<SessionSelectorScreen> createState() =>
+      _SessionSelectorScreenState();
 }
 
-class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
+class _SessionSelectorScreenState
+    extends State<SessionSelectorScreen> {
   @override
   void initState() {
     super.initState();
@@ -48,15 +45,18 @@ class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
       body: workouts.isEmpty
           ? const _EmptyState()
           : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+              padding:
+                  const EdgeInsets.fromLTRB(16, 16, 16, 100),
               itemCount: workouts.length,
               itemBuilder: (_, i) {
                 final w = workouts[i];
                 return _WorkoutTile(
                   workout: w,
+                  // Avvia ActiveSessionScreen — tracker sessione live.
+                  // NON WorkoutDetailScreen (quello è l'editor scheda).
                   onTap: () => pushPage(
                     context,
-                    WorkoutDetailScreen(
+                    ActiveSessionScreen(
                       workoutId: w.key,
                       workoutName: w.name,
                     ),
@@ -68,11 +68,16 @@ class _SessionSelectorScreenState extends State<SessionSelectorScreen> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// _WorkoutTile
+// ─────────────────────────────────────────────────────────────
+
 class _WorkoutTile extends StatelessWidget {
   final HiveWorkout workout;
   final VoidCallback onTap;
 
-  const _WorkoutTile({required this.workout, required this.onTap});
+  const _WorkoutTile(
+      {required this.workout, required this.onTap});
 
   int get _exerciseCount => HiveDatabase.instance
       .getWorkoutExercises(workout.key)
@@ -84,9 +89,9 @@ class _WorkoutTile extends StatelessWidget {
 
   int get _totalSets => HiveDatabase.instance
       .getWorkoutExercises(workout.key)
-      .fold(0, (sum, e) => sum + e.sets);
+      .fold(0, (s, e) => s + e.sets);
 
-  String _formatDate(String iso) {
+  String _fmtDate(String iso) {
     final dt = DateTime.tryParse(iso);
     if (dt == null) return '';
     return '${dt.day.toString().padLeft(2, '0')}/'
@@ -122,7 +127,8 @@ class _WorkoutTile extends StatelessWidget {
 
     final infoText = [
       if (exCount > 0) '$exCount eserc.',
-      if (ciCount > 0) '$ciCount circuit${ciCount == 1 ? 'o' : 'i'}',
+      if (ciCount > 0)
+        '$ciCount circuit${ciCount == 1 ? 'o' : 'i'}',
       if (sets > 0) '$sets serie',
     ].join(' · ');
 
@@ -171,7 +177,8 @@ class _WorkoutTile extends StatelessWidget {
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
                         children: [
                           Text(
                             workout.name,
@@ -184,54 +191,55 @@ class _WorkoutTile extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           if (infoText.isNotEmpty)
-                            Row(
-                              children: [
-                                Icon(Icons.fitness_center_outlined,
-                                    size: 12, color: cs.outline),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    infoText,
-                                    style: TextStyle(
-                                        fontSize: 12, color: cs.outline),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
+                            Row(children: [
                               Icon(
-                                lastLabel != null
-                                    ? Icons.history_rounded
-                                    : Icons.calendar_today_outlined,
-                                size: 12,
-                                color: lastLabel != null
-                                    ? cs.primary.withOpacity(0.7)
-                                    : cs.outline,
-                              ),
+                                  Icons.fitness_center_outlined,
+                                  size: 12,
+                                  color: cs.outline),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  lastLabel ??
-                                      'Creata il ${_formatDate(workout.createdAt)}',
+                                  infoText,
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: lastLabel != null
-                                        ? cs.primary.withOpacity(0.7)
-                                        : cs.outline,
-                                    fontWeight: lastLabel != null
-                                        ? FontWeight.w500
-                                        : FontWeight.normal,
+                                    color: cs.outline,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                            ],
-                          ),
+                            ]),
+                          const SizedBox(height: 2),
+                          Row(children: [
+                            Icon(
+                              lastLabel != null
+                                  ? Icons.history_rounded
+                                  : Icons.calendar_today_outlined,
+                              size: 12,
+                              color: lastLabel != null
+                                  ? cs.primary.withOpacity(0.7)
+                                  : cs.outline,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                lastLabel ??
+                                    'Creata il ${_fmtDate(workout.createdAt)}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: lastLabel != null
+                                      ? cs.primary
+                                          .withOpacity(0.7)
+                                      : cs.outline,
+                                  fontWeight: lastLabel != null
+                                      ? FontWeight.w500
+                                      : FontWeight.normal,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ]),
                         ],
                       ),
                     ),
@@ -258,6 +266,10 @@ class _WorkoutTile extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// _EmptyState
+// ─────────────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
@@ -298,7 +310,10 @@ class _EmptyState extends StatelessWidget {
               'Crea prima una scheda\nnella sezione Allenamenti',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: cs.outline, fontSize: 14, height: 1.4),
+                color: cs.outline,
+                fontSize: 14,
+                height: 1.4,
+              ),
             ),
           ],
         ),
