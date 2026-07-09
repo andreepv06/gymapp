@@ -1,65 +1,38 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
-import '../../providers/workout_provider.dart';
-import '../../services/notification_service.dart';
-import '../../widgets/glass_button.dart';
+import '../../providers/session_provider.dart';
 import '../../widgets/glass_action_buttons.dart';
+import '../../widgets/glass_button.dart';
 
 // ─────────────────────────────────────────────────────────────
-// ActiveSessionScreen — tracker sessione LIVE.
-//
-// Responsabilità ESCLUSIVA di questo file:
-//   avviare una sessione, registrare serie/peso/reps,
-//   gestire timer elapsed e timer recupero, salvare nello storico.
-//
-// NON contiene WorkoutDetailScreen (editor struttura scheda).
-// WorkoutDetailScreen vive in workout_detail_screen.dart.
-//
-// Flusso:
-//   SessionSelectorScreen
-//     → seleziona scheda
-//     → pushPage(ActiveSessionScreen)   ← questo file
-//
-//   WorkoutsScreen / AllenamentiScreen
-//     → apri/modifica scheda
-//     → pushPage(WorkoutDetailScreen)   ← workout_detail_screen.dart
+// ActiveSessionScreen — usa SessionProvider per tutto lo stato.
+// La schermata gestisce SOLO display timer locale e PageController
+// dei circuiti. Tutto il resto (serie, pesi, round, pausa,
+// ripristino) è in SessionProvider/Hive.
 // ─────────────────────────────────────────────────────────────
 
-// ── Modello dati per una singola serie durante la sessione ──
+// Elementi display top-level
+sealed class _DItem {}
 
-class _SetData {
-  double weight;
-  int reps;
-  bool completed;
-
-  _SetData({
-    required this.weight,
-    required this.reps,
-    this.completed = false,
-  });
+class _FreeExItem extends _DItem {
+  final SessionExercise ex;
+  _FreeExItem(this.ex);
+  String get key => ex.exerciseKey.toString();
 }
 
-// ── Lista piatta della sessione: esercizio libero o circuito ──
-
-sealed class _SessionItem {}
-
-class _FreeExerciseItem extends _SessionItem {
-  final HiveWorkoutExercise exercise;
-  _FreeExerciseItem(this.exercise);
+class _CircuitItem extends _DItem {
+  final String circuitId;
+  final List<SessionExercise> exercises;
+  _CircuitItem(this.circuitId, this.exercises);
 }
 
-class _CircuitItem extends _SessionItem {
-  final HiveCircuit circuit;
-  final List<HiveWorkoutExercise> children;
-  _CircuitItem(this.circuit, this.children);
-}
-
-// ─────────────────────────────────────────────────────────────
-// ActiveSessionScreen
 // ─────────────────────────────────────────────────────────────
 
 class ActiveSessionScreen extends StatefulWidget {
@@ -77,258 +50,219 @@ class ActiveSessionScreen extends StatefulWidget {
 }
 
 class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
-  // Sessione DB
-  dynamic _sessionKey;
   bool _initialized = false;
   bool _finishing = false;
 
-  // Lista esercizi organizzata
-  List<_SessionItem> _items = [];
+  // Timer locale per display elapsed
+  Timer? _displayTimer;
+  int _displayElapsed = 0;
 
-  // Dati serie: key HiveWorkoutExercise → lista _SetData
-  final Map<dynamic, List<_SetData>> _setData = {};
-
-  // Timer elapsed
-  Timer? _elapsedTimer;
-  int _elapsedSeconds = 0;
-
-  // Timer recupero
-  Timer? _restTimer;
-  int _restRemaining = 0;
-  String? _restExerciseName;
-  int? _restSetIndex;
-
-  // ── Init ────────────────────────────────────────────────────
+  // PageController per ogni circuito (circuitId → controller)
+  final Map<String, PageController> _circuitControllers = {};
 
   @override
   void initState() {
     super.initState();
-    _init();
+    _initSession();
   }
 
   @override
   void dispose() {
-    _elapsedTimer?.cancel();
-    _restTimer?.cancel();
+    _displayTimer?.cancel();
+    for (final c in _circuitControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  Future<void> _init() async {
-    final db = HiveDatabase.instance;
-    final allEx = db.getWorkoutExercises(widget.workoutId);
-    final circuits = db.getCircuits(widget.workoutId);
+  // ── Init ─────────────────────────────────────────────────────
 
-    allEx.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    circuits.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  Future<void> _initSession() async {
+    final sp = context.read<SessionProvider>();
 
-    // Pre-popola dati da ultima sessione
-    for (final ex in allEx) {
-      final lastSets = db.getLastExerciseSets(ex.exerciseKey);
-      final sets = List.generate(ex.sets, (i) {
-        double w = ex.targetWeight ?? 0;
-        int r = ex.targetReps;
-        if (i < lastSets.length && lastSets[i].completed) {
-          w = lastSets[i].weight;
-          r = lastSets[i].reps;
-        }
-        return _SetData(weight: w, reps: r);
-      });
-      _setData[ex.key] = sets;
+    // Sessione già attiva per questa scheda → ripristino
+    if (sp.hasActiveSession &&
+        sp.currentWorkout?.key == widget.workoutId) {
+      _displayElapsed = sp.elapsedSeconds;
+      _startDisplayTimer();
+      if (mounted) setState(() => _initialized = true);
+      return;
     }
 
-    // Costruisce lista piatta: esercizi liberi → circuiti
-    final freeEx = allEx.where((e) => !e.isInCircuit).toList();
-    final items = <_SessionItem>[
-      ...freeEx.map(_FreeExerciseItem.new),
-      ...circuits.map((c) {
-        final children = allEx
-            .where((e) => e.notes == '__circuit_${c.key}')
-            .toList()
-          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-        return _CircuitItem(c, children);
-      }),
-    ];
+    // Carica dati dal DB
+    final db = HiveDatabase.instance;
+    final workouts = db.getWorkouts();
+    HiveWorkout? workout;
+    try {
+      workout = workouts.firstWhere((w) => w.key == widget.workoutId);
+    } catch (_) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
 
-    // Crea la sessione nel DB
-    final sessionKey = await db.createSession(
+    final exercises = db.getWorkoutExercises(widget.workoutId)
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final circuits = db.getCircuits(widget.workoutId)
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+    await sp.startSession(
+      exercises,
       widget.workoutId,
       widget.workoutName,
+      workout,
+      circuits: circuits,
     );
 
-    // Avvia timer elapsed
-    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _elapsedSeconds++);
-    });
+    _displayElapsed = 0;
+    _startDisplayTimer();
 
-    if (mounted) {
-      setState(() {
-        _sessionKey = sessionKey;
-        _items = items;
-        _initialized = true;
-      });
-    }
+    if (mounted) setState(() => _initialized = true);
   }
 
-  // ── Timer recupero ──────────────────────────────────────────
-
-  void _startRestTimer(int seconds, String exerciseName, int setIndex) {
-    _restTimer?.cancel();
-    setState(() {
-      _restRemaining = seconds;
-      _restExerciseName = exerciseName;
-      _restSetIndex = setIndex;
+  void _startDisplayTimer() {
+    _displayTimer?.cancel();
+    _displayTimer =
+        Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _displayElapsed++);
     });
-    _restTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) {
-        t.cancel();
-        return;
-      }
-      if (_restRemaining <= 1) {
-        t.cancel();
-        setState(() {
-          _restRemaining = 0;
-          _restExerciseName = null;
-          _restSetIndex = null;
-        });
-        NotificationService.instance.playRestDone();
+  }
+
+  // ── Build display items ───────────────────────────────────────
+
+  List<_DItem> _buildDisplayItems(List<SessionExercise> exercises) {
+    final items = <_DItem>[];
+    final seen = <String>{};
+    for (final ex in exercises) {
+      if (ex.circuitId != null) {
+        final cid = ex.circuitId!;
+        if (!seen.contains(cid)) {
+          seen.add(cid);
+          final circuitExes =
+              exercises.where((e) => e.circuitId == cid).toList();
+          items.add(_CircuitItem(cid, circuitExes));
+        }
       } else {
-        setState(() => _restRemaining--);
+        items.add(_FreeExItem(ex));
       }
-    });
-  }
-
-  void _skipRest() {
-    _restTimer?.cancel();
-    setState(() {
-      _restRemaining = 0;
-      _restExerciseName = null;
-      _restSetIndex = null;
-    });
-  }
-
-  // ── Toggle completamento serie ──────────────────────────────
-
-  void _toggleSet(dynamic exKey, int setIdx, int? restSeconds,
-      String exerciseName) {
-    final sets = _setData[exKey];
-    if (sets == null || setIdx >= sets.length) return;
-    final wasCompleted = sets[setIdx].completed;
-    setState(() => sets[setIdx].completed = !wasCompleted);
-    if (!wasCompleted && (restSeconds ?? 0) > 0) {
-      _startRestTimer(restSeconds!, exerciseName, setIdx);
     }
+    return items;
   }
 
-  // ── Statistiche ─────────────────────────────────────────────
+  // ── PageController per circuito ───────────────────────────────
 
-  int get _completedSets => _setData.values
-      .fold(0, (s, l) => s + l.where((d) => d.completed).length);
+  PageController _controllerFor(String circuitId, int currentRound) {
+    _circuitControllers.putIfAbsent(
+      circuitId,
+      () => PageController(initialPage: currentRound),
+    );
+    return _circuitControllers[circuitId]!;
+  }
 
-  int get _totalSets =>
-      _setData.values.fold(0, (s, l) => s + l.length);
+  // ── Reorder top-level ─────────────────────────────────────────
 
-  double get _progress =>
-      _totalSets > 0 ? _completedSets / _totalSets : 0.0;
+  void _onTopReorder(
+      int oldIndex, int newIndex, List<_DItem> items, SessionProvider sp) {
+    if (newIndex > oldIndex) newIndex--;
+    final newItems = List<_DItem>.from(items);
+    final item = newItems.removeAt(oldIndex);
+    newItems.insert(newIndex, item);
 
-  // ── Uscita ──────────────────────────────────────────────────
+    // Ricostruisce la lista piatta di SessionExercise nel nuovo ordine
+    final newFlat = <SessionExercise>[];
+    for (final dItem in newItems) {
+      if (dItem is _FreeExItem) {
+        newFlat.add(dItem.ex);
+      } else if (dItem is _CircuitItem) {
+        final circuitExes = sp.sessionExercises
+            .where((e) => e.circuitId == dItem.circuitId)
+            .toList();
+        newFlat.addAll(circuitExes);
+      }
+    }
+
+    sp.reorderSessionExercisesFlat(newFlat);
+    HapticFeedback.selectionClick();
+  }
+
+  // ── Exit ─────────────────────────────────────────────────────
 
   Future<void> _handleExit() async {
-    final hasCompleted = _completedSets > 0;
+    final sp = context.read<SessionProvider>();
+    _displayTimer?.cancel();
+
+    final completedSets = sp.completedSetsCount;
+    final totalSets = sp.totalSetsCount;
 
     final result = await showCupertinoModalPopup<String>(
       context: context,
       builder: (ctx) => CupertinoActionSheet(
-        title: Text(hasCompleted
-            ? 'Sessione in corso'
-            : 'Uscire dalla sessione?'),
-        message: Text(hasCompleted
-            ? 'Hai completato $_completedSets/$_totalSets serie.'
-            : 'Non hai ancora completato nessuna serie.'),
+        title: const Text('Sessione di allenamento'),
+        message: Text(
+          completedSets > 0
+              ? '$completedSets/$totalSets serie completate · ${_fmtTime(_displayElapsed)}'
+              : 'Nessuna serie completata ancora.',
+        ),
         actions: [
-          if (hasCompleted)
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(ctx, 'continue'),
+            child: const Text('Continua allenamento'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(ctx, 'pause'),
+            child: const Text('Metti in pausa'),
+          ),
+          if (completedSets > 0)
             CupertinoActionSheetAction(
               onPressed: () => Navigator.pop(ctx, 'save'),
               child: const Text('Salva e termina'),
             ),
           CupertinoActionSheetAction(
             isDestructiveAction: true,
-            onPressed: () => Navigator.pop(ctx, 'discard'),
-            child: const Text('Annulla sessione'),
+            onPressed: () => Navigator.pop(ctx, 'delete'),
+            child: const Text('Elimina sessione'),
           ),
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.pop(ctx, 'cancel'),
-          child: const Text('Continua allenamento'),
+          child: const Text('Annulla'),
         ),
       ),
     );
 
     if (!mounted) return;
 
-    if (result == 'save') {
-      await _saveSession();
-    } else if (result == 'discard') {
-      _elapsedTimer?.cancel();
-      _restTimer?.cancel();
-      // Elimina sessione vuota dal DB se nessuna serie completata
-      if (_sessionKey != null && _completedSets == 0) {
-        await HiveDatabase.instance.deleteSession(_sessionKey);
-      }
-      if (mounted) Navigator.of(context).pop();
+    switch (result) {
+      case 'continue':
+      case 'cancel':
+      case null:
+        _startDisplayTimer();
+        break;
+      case 'pause':
+        sp.pauseSession();
+        if (mounted) Navigator.of(context).pop();
+        break;
+      case 'save':
+        await _saveAndEnd(sp);
+        break;
+      case 'delete':
+        await sp.abandonSession();
+        if (mounted) Navigator.of(context).pop();
+        break;
     }
-    // 'cancel' o null → rimane nella schermata
   }
 
-  // ── Salvataggio ─────────────────────────────────────────────
-
-  Future<void> _saveSession() async {
+  Future<void> _saveAndEnd(SessionProvider sp) async {
     if (_finishing) return;
+    if (sp.completedSetsCount == 0) {
+      // Nessuna serie → elimina senza salvare
+      await sp.abandonSession();
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
     setState(() => _finishing = true);
-    _elapsedTimer?.cancel();
-    _restTimer?.cancel();
-
-    if (_sessionKey != null) {
-      for (final item in _items) {
-        if (item is _FreeExerciseItem) {
-          await _saveExerciseSets(item.exercise, _sessionKey);
-        } else if (item is _CircuitItem) {
-          for (final ex in item.children) {
-            await _saveExerciseSets(ex, _sessionKey);
-          }
-        }
-      }
-      await HiveDatabase.instance
-          .updateSessionDuration(_sessionKey, _elapsedSeconds);
-    }
-
-    if (mounted) {
-      // Ricarica provider sessioni se presente nel contesto
-      try {
-        context.read<WorkoutProvider>().loadWorkouts();
-      } catch (_) {}
-      Navigator.of(context).pop();
-    }
+    await sp.finishSession();
+    if (mounted) Navigator.of(context).pop();
   }
-
-  Future<void> _saveExerciseSets(
-      HiveWorkoutExercise ex, dynamic sessionKey) async {
-    final sets = _setData[ex.key] ?? [];
-    for (int i = 0; i < sets.length; i++) {
-      await HiveDatabase.instance.addSessionSet(HiveSessionSet(
-        sessionKey: sessionKey,
-        exerciseKey: ex.exerciseKey,
-        exerciseName: ex.exerciseName,
-        muscleGroup: ex.muscleGroup,
-        setNumber: i + 1,
-        weight: sets[i].weight,
-        reps: sets[i].reps,
-        completed: sets[i].completed,
-        restSeconds: ex.restSeconds,
-      ));
-    }
-  }
-
-  // ── Formato tempo ────────────────────────────────────────────
 
   String _fmtTime(int s) {
     final h = s ~/ 3600;
@@ -343,7 +277,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
         '${sec.toString().padLeft(2, '0')}';
   }
 
-  // ── Build ────────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -359,6 +293,12 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
         body: const Center(child: CircularProgressIndicator()),
       );
     }
+
+    final sp = context.watch<SessionProvider>();
+    final displayItems = _buildDisplayItems(sp.sessionExercises);
+    final completed = sp.completedSetsCount;
+    final total = sp.totalSetsCount;
+    final progress = total > 0 ? completed / total : 0.0;
 
     return PopScope(
       canPop: false,
@@ -379,10 +319,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
               Text(
                 widget.workoutName,
                 style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w700),
+                    fontSize: 15, fontWeight: FontWeight.w700),
               ),
               Text(
-                _fmtTime(_elapsedSeconds),
+                _fmtTime(_displayElapsed),
                 style: TextStyle(fontSize: 12, color: cs.outline),
               ),
             ],
@@ -399,8 +339,11 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                     ),
                   )
                 : GlassTextButton(
-                    onPressed: _saveSession,
-                    foregroundColor: cs.primary,
+                    onPressed: completed > 0
+                        ? () => _saveAndEnd(sp)
+                        : null,
+                    foregroundColor:
+                        completed > 0 ? cs.primary : cs.outline,
                     child: const Text(
                       'Termina',
                       style: TextStyle(fontWeight: FontWeight.w700),
@@ -409,67 +352,107 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
             const SizedBox(width: 4),
           ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+        body: Stack(
           children: [
-            // Banner recupero attivo
-            if (_restRemaining > 0 && _restExerciseName != null) ...[
-              _RestBanner(
-                remaining: _restRemaining,
-                exerciseName: _restExerciseName!,
-                setIndex: _restSetIndex ?? 0,
-                onSkip: _skipRest,
-              ),
-              const SizedBox(height: 8),
-            ],
+            // Corpo principale
+            CustomScrollView(
+              slivers: [
+                // Barra progresso
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: Column(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 8,
+                            backgroundColor:
+                                cs.primary.withOpacity(0.12),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$completed / $total serie completate',
+                          style: TextStyle(
+                              fontSize: 11, color: cs.outline),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
-            // Barra avanzamento
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: _progress,
-                minHeight: 6,
-                backgroundColor: cs.primary.withOpacity(0.12),
-              ),
+                // Lista riordinabile
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                      16,
+                      8,
+                      16,
+                      // Spazio extra per rest overlay + bottom bar
+                      sp.isResting ? 200 : 120),
+                  sliver: SliverReorderableList(
+                    itemCount: displayItems.length,
+                    itemBuilder: (ctx, index) {
+                      final item = displayItems[index];
+                      final stableKey = item is _FreeExItem
+                          ? ValueKey('fex_${item.key}')
+                          : ValueKey(
+                              'circuit_${(item as _CircuitItem).circuitId}');
+                      return ReorderableDelayedDragStartListener(
+                        key: stableKey,
+                        index: index,
+                        child: item is _FreeExItem
+                            ? _FreeExCard(
+                                key: ValueKey(
+                                    'fex_card_${item.key}'),
+                                ex: item.ex,
+                                sp: sp,
+                              )
+                            : _CircuitBlock(
+                                key: ValueKey(
+                                    'circuit_block_${(item as _CircuitItem).circuitId}'),
+                                circuitId: item.circuitId,
+                                exercises: item.exercises,
+                                sp: sp,
+                                controller: _controllerFor(
+                                    item.circuitId,
+                                    sp.getCurrentRound(
+                                        item.circuitId)),
+                              ),
+                      );
+                    },
+                    onReorder: (oldIndex, newIndex) =>
+                        _onTopReorder(
+                            oldIndex, newIndex, displayItems, sp),
+                    proxyDecorator: (child, index, animation) =>
+                        AnimatedBuilder(
+                      animation: animation,
+                      builder: (_, __) => Material(
+                        elevation: 8,
+                        borderRadius: BorderRadius.circular(16),
+                        shadowColor: Colors.black38,
+                        color: Colors.transparent,
+                        child: child,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              '$_completedSets / $_totalSets serie completate',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: cs.outline),
-            ),
-            const SizedBox(height: 16),
 
-            // Lista esercizi e circuiti
-            ..._items.map((item) {
-              if (item is _FreeExerciseItem) {
-                final ex = item.exercise;
-                return _ExerciseCard(
-                  exercise: ex,
-                  sets: _setData[ex.key] ?? [],
-                  onToggleSet: (i) => _toggleSet(
-                      ex.key, i, ex.restSeconds, ex.exerciseName),
-                  onWeightChanged: (i, w) => setState(
-                      () => (_setData[ex.key] ?? [])[i].weight = w),
-                  onRepsChanged: (i, r) => setState(
-                      () => (_setData[ex.key] ?? [])[i].reps = r),
-                );
-              } else if (item is _CircuitItem) {
-                return _CircuitSessionCard(
-                  circuit: item.circuit,
-                  children: item.children,
-                  setData: _setData,
-                  onToggleSet: (ex, i) => _toggleSet(
-                      ex.key, i, ex.restSeconds, ex.exerciseName),
-                  onWeightChanged: (ex, i, w) => setState(
-                      () => (_setData[ex.key] ?? [])[i].weight = w),
-                  onRepsChanged: (ex, i, r) => setState(
-                      () => (_setData[ex.key] ?? [])[i].reps = r),
-                );
-              }
-              return const SizedBox.shrink();
-            }),
+            // Rest timer overlay
+            if (sp.isResting)
+              _RestOverlay(
+                total: sp.restTotal,
+                remaining: sp.restRemaining,
+                paused: sp.restPaused,
+                onTogglePause: sp.toggleRestPause,
+                onSkip: sp.skipRest,
+                onAddTime: sp.addRestTime,
+              ),
           ],
         ),
         bottomNavigationBar: Padding(
@@ -480,9 +463,17 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
             MediaQuery.of(context).padding.bottom + 16,
           ),
           child: GlassButton(
-            onTap: _finishing ? () {} : _saveSession,
-            icon: Icons.check_circle_outline_rounded,
-            label: _finishing ? 'Salvataggio...' : 'Termina sessione',
+            onTap: _finishing
+                ? () {}
+                : () => _saveAndEnd(sp),
+            icon: completed > 0
+                ? Icons.check_circle_outline_rounded
+                : Icons.close_rounded,
+            label: _finishing
+                ? 'Salvataggio...'
+                : completed > 0
+                    ? 'Termina sessione'
+                    : 'Chiudi senza salvare',
           ),
         ),
       ),
@@ -491,115 +482,23 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _RestBanner
+// _FreeExCard — card esercizio libero
 // ─────────────────────────────────────────────────────────────
 
-class _RestBanner extends StatelessWidget {
-  final int remaining;
-  final String exerciseName;
-  final int setIndex;
-  final VoidCallback onSkip;
+class _FreeExCard extends StatelessWidget {
+  final SessionExercise ex;
+  final SessionProvider sp;
 
-  const _RestBanner({
-    required this.remaining,
-    required this.exerciseName,
-    required this.setIndex,
-    required this.onSkip,
-  });
+  const _FreeExCard({super.key, required this.ex, required this.sp});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: cs.primaryContainer.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.primary.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.timer_outlined, color: cs.primary, size: 22),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Recupero',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: cs.primary,
-                    fontSize: 14,
-                  ),
-                ),
-                Text(
-                  '$exerciseName — serie ${setIndex + 1}',
-                  style: TextStyle(fontSize: 11, color: cs.outline),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: cs.primary,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                '$remaining',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GlassTextButton(
-            onPressed: onSkip,
-            child: const Text('Salta'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// _ExerciseCard — card esercizio durante la sessione
-// ─────────────────────────────────────────────────────────────
-
-class _ExerciseCard extends StatelessWidget {
-  final HiveWorkoutExercise exercise;
-  final List<_SetData> sets;
-  final void Function(int) onToggleSet;
-  final void Function(int, double) onWeightChanged;
-  final void Function(int, int) onRepsChanged;
-  final bool compact;
-
-  const _ExerciseCard({
-    required this.exercise,
-    required this.sets,
-    required this.onToggleSet,
-    required this.onWeightChanged,
-    required this.onRepsChanged,
-    this.compact = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+    final sets = sp.exerciseSets[ex.exerciseKey] ?? [];
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      margin: EdgeInsets.only(bottom: compact ? 6 : 12),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isDark ? cs.surface.withOpacity(0.8) : cs.surface,
         borderRadius: BorderRadius.circular(16),
@@ -608,91 +507,94 @@ class _ExerciseCard extends StatelessWidget {
               ? Colors.white.withOpacity(0.1)
               : cs.outlineVariant,
         ),
-        boxShadow: compact
-            ? null
-            : [
-                BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+        boxShadow: [
+          BoxShadow(
+            color:
+                Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header esercizio
+          // Header
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
               children: [
-                Text(
-                  exercise.exerciseName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
+                Icon(Icons.drag_handle_rounded,
+                    size: 18, color: cs.outline.withOpacity(0.4)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(ex.exerciseName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15)),
+                      Text(ex.muscleGroup,
+                          style: TextStyle(
+                              fontSize: 12, color: cs.outline)),
+                    ],
                   ),
                 ),
-                Text(
-                  exercise.muscleGroup,
-                  style: TextStyle(fontSize: 12, color: cs.outline),
-                ),
-                if (exercise.restSeconds != null &&
-                    exercise.restSeconds! > 0)
-                  Text(
-                    'Recupero: ${exercise.restSeconds}s',
-                    style: TextStyle(
-                        fontSize: 11, color: cs.primary.withOpacity(0.7)),
+                if ((ex.restSeconds ?? 0) > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.timer_outlined,
+                            size: 12, color: cs.primary),
+                        const SizedBox(width: 4),
+                        Text('${ex.restSeconds}s',
+                            style: TextStyle(
+                                fontSize: 11, color: cs.primary)),
+                      ],
+                    ),
                   ),
+                const SizedBox(width: 8),
+                // Aggiungi/rimuovi serie
+                GestureDetector(
+                  onTap: () =>
+                      sp.removeSetFromExercise(ex.exerciseKey),
+                  child: Icon(Icons.remove_circle_outline,
+                      size: 18, color: cs.outline.withOpacity(0.5)),
+                ),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () => sp.addSetToExercise(ex.exerciseKey),
+                  child: Icon(Icons.add_circle_outline,
+                      size: 18, color: cs.primary),
+                ),
               ],
             ),
           ),
 
-          // Intestazioni colonne
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
-            child: Row(
-              children: [
-                const SizedBox(width: 36),
-                Expanded(
-                  child: Text(
-                    'Peso (kg)',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: cs.outline,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    'Reps',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: cs.outline,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 52),
-              ],
-            ),
-          ),
+          // Intestazioni
+          _SetHeaders(cs: cs),
           const SizedBox(height: 4),
 
           // Righe serie
-          ...sets.asMap().entries.map(
-                (e) => _SetRow(
-                  index: e.key,
-                  data: e.value,
-                  onToggle: () => onToggleSet(e.key),
-                  onWeightChanged: (w) => onWeightChanged(e.key, w),
-                  onRepsChanged: (r) => onRepsChanged(e.key, r),
-                ),
-              ),
+          ...sets.asMap().entries.map((e) => _SetRow(
+                key: ValueKey('free_${ex.exerciseKey}_${e.key}'),
+                index: e.key,
+                set: e.value,
+                onToggle: () =>
+                    sp.toggleSet(ex.exerciseKey, e.key),
+                onWeightChanged: (w) => sp.updateSet(
+                    ex.exerciseKey, e.key, w, e.value.reps),
+                onRepsChanged: (r) => sp.updateSet(
+                    ex.exerciseKey, e.key, e.value.weight, r),
+              )),
           const SizedBox(height: 10),
         ],
       ),
@@ -701,19 +603,465 @@ class _ExerciseCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _SetRow — riga singola serie
+// _CircuitBlock — circuito con PageView per round
+// ─────────────────────────────────────────────────────────────
+
+class _CircuitBlock extends StatefulWidget {
+  final String circuitId;
+  final List<SessionExercise> exercises;
+  final SessionProvider sp;
+  final PageController controller;
+
+  const _CircuitBlock({
+    super.key,
+    required this.circuitId,
+    required this.exercises,
+    required this.sp,
+    required this.controller,
+  });
+
+  @override
+  State<_CircuitBlock> createState() => _CircuitBlockState();
+}
+
+class _CircuitBlockState extends State<_CircuitBlock> {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final sp = widget.sp;
+    final totalRounds = sp.getTotalRounds(widget.circuitId);
+    final currentRound = sp.getCurrentRound(widget.circuitId);
+
+    // Altezza stimata: header + navigazione + esercizi
+    final estimatedHeight = 80.0 + // header
+        (totalRounds > 1 ? 52.0 : 0) + // navigazione
+        widget.exercises.length * 152.0; // esercizi
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? cs.tertiaryContainer.withOpacity(0.15)
+            : cs.tertiaryContainer.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: cs.tertiary.withOpacity(0.4),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        children: [
+          // Header circuito
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Icon(Icons.drag_handle_rounded,
+                    size: 18,
+                    color: cs.outline.withOpacity(0.4)),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: cs.tertiaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.loop_rounded,
+                      color: cs.onTertiaryContainer, size: 16),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        // Nome circuito non disponibile in SessionExercise
+                        // usiamo "Circuito" come fallback
+                        widget.exercises.isNotEmpty
+                            ? 'Circuito'
+                            : 'Circuito',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      Text(
+                        '$totalRounds cicl${totalRounds == 1 ? 'o' : 'i'} · ${widget.exercises.length} esercizi',
+                        style:
+                            TextStyle(fontSize: 12, color: cs.tertiary),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  'Ciclo ${currentRound + 1}/$totalRounds',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: cs.tertiary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Navigazione round (solo se > 1)
+          if (totalRounds > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Row(
+                children: [
+                  _CircuitNavBtn(
+                    icon: Icons.chevron_left_rounded,
+                    enabled: currentRound > 0,
+                    cs: cs,
+                    onTap: () {
+                      final prev = currentRound - 1;
+                      if (prev >= 0) {
+                        widget.controller.animateToPage(
+                          prev,
+                          duration:
+                              const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                        sp.setRound(widget.circuitId, prev);
+                      }
+                    },
+                  ),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(totalRounds, (i) {
+                        final isCur = i == currentRound;
+                        // Conta completati nel round i
+                        int done = 0;
+                        int tot = 0;
+                        for (final ex in widget.exercises) {
+                          final sets = sp.getCircuitSetsForRound(
+                              widget.circuitId, i, ex.exerciseKey);
+                          done +=
+                              sets.where((s) => s.completed).length;
+                          tot += sets.length;
+                        }
+                        final allDone = tot > 0 && done == tot;
+
+                        return GestureDetector(
+                          onTap: () {
+                            widget.controller.animateToPage(
+                              i,
+                              duration:
+                                  const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                            sp.setRound(widget.circuitId, i);
+                          },
+                          child: AnimatedContainer(
+                            duration:
+                                const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.symmetric(
+                                horizontal: 4),
+                            width: isCur ? 36 : 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: allDone
+                                  ? cs.tertiary
+                                  : isCur
+                                      ? cs.tertiaryContainer
+                                      : cs.outlineVariant
+                                          .withOpacity(0.3),
+                              borderRadius:
+                                  BorderRadius.circular(14),
+                              border: isCur
+                                  ? Border.all(
+                                      color: cs.tertiary,
+                                      width: 1.5)
+                                  : null,
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${i + 1}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: allDone
+                                      ? cs.onTertiary
+                                      : isCur
+                                          ? cs.tertiary
+                                          : cs.outline,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                  _CircuitNavBtn(
+                    icon: Icons.chevron_right_rounded,
+                    enabled: currentRound < totalRounds - 1,
+                    cs: cs,
+                    onTap: () {
+                      final next = currentRound + 1;
+                      if (next < totalRounds) {
+                        widget.controller.animateToPage(
+                          next,
+                          duration:
+                              const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                        sp.setRound(widget.circuitId, next);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+          // PageView dei round
+          SizedBox(
+            height: estimatedHeight,
+            child: PageView.builder(
+              controller: widget.controller,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: totalRounds,
+              onPageChanged: (i) {
+                sp.setRound(widget.circuitId, i);
+              },
+              itemBuilder: (ctx, roundIdx) {
+                return _CircuitRoundPage(
+                  circuitId: widget.circuitId,
+                  roundIndex: roundIdx,
+                  exercises: widget.exercises,
+                  sp: sp,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CircuitNavBtn extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final ColorScheme cs;
+  final VoidCallback onTap;
+
+  const _CircuitNavBtn({
+    required this.icon,
+    required this.enabled,
+    required this.cs,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: enabled
+              ? cs.tertiaryContainer
+              : cs.outlineVariant.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          icon,
+          color:
+              enabled ? cs.tertiary : cs.outline.withOpacity(0.3),
+          size: 22,
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _CircuitRoundPage — pagina singola round di un circuito
+// ─────────────────────────────────────────────────────────────
+
+class _CircuitRoundPage extends StatelessWidget {
+  final String circuitId;
+  final int roundIndex;
+  final List<SessionExercise> exercises;
+  final SessionProvider sp;
+
+  const _CircuitRoundPage({
+    required this.circuitId,
+    required this.roundIndex,
+    required this.exercises,
+    required this.sp,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      children: exercises.map((ex) {
+        final sets = sp.getCircuitSetsForRound(
+            circuitId, roundIndex, ex.exerciseKey);
+
+        return Container(
+          margin: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+          decoration: BoxDecoration(
+            color: isDark
+                ? cs.surface.withOpacity(0.7)
+                : cs.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withOpacity(0.08)
+                  : cs.outlineVariant.withOpacity(0.6),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header esercizio nel circuito
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(ex.exerciseName,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14)),
+                          Text(ex.muscleGroup,
+                              style: TextStyle(
+                                  fontSize: 11, color: cs.outline)),
+                        ],
+                      ),
+                    ),
+                    // Aggiungi/rimuovi serie
+                    GestureDetector(
+                      onTap: () => sp.removeSetFromExercise(
+                          ex.exerciseKey,
+                          circuitId: circuitId),
+                      child: Icon(Icons.remove_circle_outline,
+                          size: 16,
+                          color: cs.outline.withOpacity(0.5)),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => sp.addSetToExercise(
+                          ex.exerciseKey,
+                          circuitId: circuitId),
+                      child: Icon(Icons.add_circle_outline,
+                          size: 16, color: cs.tertiary),
+                    ),
+                  ],
+                ),
+              ),
+              _SetHeaders(cs: cs),
+              const SizedBox(height: 2),
+              ...sets.asMap().entries.map((e) => _SetRow(
+                    key: ValueKey(
+                        'circuit_${circuitId}_r${roundIndex}_${ex.exerciseKey}_${e.key}'),
+                    index: e.key,
+                    set: e.value,
+                    onToggle: () => sp.toggleCircuitSetForRound(
+                        circuitId,
+                        roundIndex,
+                        ex.exerciseKey,
+                        e.key),
+                    onWeightChanged: (w) =>
+                        sp.updateCircuitSetForRound(
+                            circuitId,
+                            roundIndex,
+                            ex.exerciseKey,
+                            e.key,
+                            w,
+                            e.value.reps),
+                    onRepsChanged: (r) =>
+                        sp.updateCircuitSetForRound(
+                            circuitId,
+                            roundIndex,
+                            ex.exerciseKey,
+                            e.key,
+                            e.value.weight,
+                            r),
+                  )),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _SetHeaders
+// ─────────────────────────────────────────────────────────────
+
+class _SetHeaders extends StatelessWidget {
+  final ColorScheme cs;
+  const _SetHeaders({required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(48, 2, 12, 0),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              'Peso (kg)',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                color: cs.outline,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 4,
+            child: Text(
+              'Ripetizioni',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                color: cs.outline,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 50),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _SetRow — riga serie con placeholder peso e rep +/-
 // ─────────────────────────────────────────────────────────────
 
 class _SetRow extends StatefulWidget {
   final int index;
-  final _SetData data;
+  final ActiveSet set;
   final VoidCallback onToggle;
   final void Function(double) onWeightChanged;
   final void Function(int) onRepsChanged;
 
   const _SetRow({
+    super.key,
     required this.index,
-    required this.data,
+    required this.set,
     required this.onToggle,
     required this.onWeightChanged,
     required this.onRepsChanged,
@@ -730,13 +1078,14 @@ class _SetRowState extends State<_SetRow> {
   @override
   void initState() {
     super.initState();
-    final w = widget.data.weight;
+    final w = widget.set.weight;
+    // Peso: vuoto se 0 (lastWeight viene mostrato come placeholder)
     _wCtrl = TextEditingController(
       text: w > 0
           ? (w % 1 == 0 ? w.toInt().toString() : w.toString())
           : '',
     );
-    _rCtrl = TextEditingController(text: '${widget.data.reps}');
+    _rCtrl = TextEditingController(text: '${widget.set.reps}');
   }
 
   @override
@@ -746,14 +1095,52 @@ class _SetRowState extends State<_SetRow> {
     super.dispose();
   }
 
+  /// Quando completa una serie con campo peso vuoto, usa lastWeight
+  void _handleToggle() {
+    if (!widget.set.completed) {
+      final text = _wCtrl.text.trim();
+      if (text.isEmpty) {
+        final lw = widget.set.lastWeight;
+        if (lw != null && lw > 0) {
+          final str =
+              lw % 1 == 0 ? lw.toInt().toString() : lw.toString();
+          setState(() => _wCtrl.text = str);
+          widget.onWeightChanged(lw);
+        }
+      }
+    }
+    widget.onToggle();
+  }
+
+  void _decReps() {
+    final cur = widget.set.reps;
+    if (cur <= 1) return;
+    widget.onRepsChanged(cur - 1);
+    setState(() => _rCtrl.text = '${cur - 1}');
+    HapticFeedback.selectionClick();
+  }
+
+  void _incReps() {
+    final cur = widget.set.reps;
+    widget.onRepsChanged(cur + 1);
+    setState(() => _rCtrl.text = '${cur + 1}');
+    HapticFeedback.selectionClick();
+  }
+
+  String get _weightHint {
+    final lw = widget.set.lastWeight;
+    if (lw == null || lw <= 0) return '';
+    return lw % 1 == 0 ? lw.toInt().toString() : lw.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final done = widget.data.completed;
+    final done = widget.set.completed;
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       decoration: BoxDecoration(
         color: done ? cs.primary.withOpacity(0.07) : Colors.transparent,
@@ -763,7 +1150,7 @@ class _SetRowState extends State<_SetRow> {
         children: [
           // Numero serie
           SizedBox(
-            width: 36,
+            width: 32,
             child: Text(
               '${widget.index + 1}',
               textAlign: TextAlign.center,
@@ -775,28 +1162,30 @@ class _SetRowState extends State<_SetRow> {
             ),
           ),
 
-          // Campo peso
+          // Peso con placeholder lastWeight
           Expanded(
+            flex: 3,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: TextField(
                 controller: _wCtrl,
                 textAlign: TextAlign.center,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true),
                 decoration: InputDecoration(
-                  hintText: '0',
+                  hintText: _weightHint,
+                  hintStyle: TextStyle(
+                    color: cs.outline.withOpacity(0.5),
+                    fontWeight: FontWeight.normal,
+                  ),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 8,
-                  ),
+                      vertical: 8, horizontal: 6),
                   filled: done,
                   fillColor:
                       done ? cs.primary.withOpacity(0.05) : null,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                      borderRadius: BorderRadius.circular(8)),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(
@@ -811,6 +1200,7 @@ class _SetRowState extends State<_SetRow> {
                   ),
                 ),
                 style: TextStyle(
+                  fontSize: 14,
                   color: done ? cs.primary : null,
                   fontWeight:
                       done ? FontWeight.w600 : FontWeight.normal,
@@ -821,58 +1211,82 @@ class _SetRowState extends State<_SetRow> {
             ),
           ),
 
-          // Campo reps
+          // Rep: [-] campo [+]
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: TextField(
-                controller: _rCtrl,
-                textAlign: TextAlign.center,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  hintText: '0',
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 8,
-                  ),
-                  filled: done,
-                  fillColor:
-                      done ? cs.primary.withOpacity(0.05) : null,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(
-                      color: done
-                          ? cs.primary.withOpacity(0.3)
-                          : cs.outlineVariant,
+            flex: 4,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _RepBtn(
+                  icon: Icons.remove_rounded,
+                  cs: cs,
+                  done: done,
+                  onTap: _decReps,
+                ),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 50,
+                  child: TextField(
+                    controller: _rCtrl,
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 4),
+                      filled: done,
+                      fillColor: done
+                          ? cs.primary.withOpacity(0.05)
+                          : null,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: done
+                              ? cs.primary.withOpacity(0.3)
+                              : cs.outlineVariant,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: cs.primary),
+                      ),
                     ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: cs.primary),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: done ? cs.primary : null,
+                      fontWeight: done
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                    onChanged: (v) {
+                      final r = int.tryParse(v);
+                      if (r != null) widget.onRepsChanged(r);
+                    },
                   ),
                 ),
-                style: TextStyle(
-                  color: done ? cs.primary : null,
-                  fontWeight:
-                      done ? FontWeight.w600 : FontWeight.normal,
+                const SizedBox(width: 4),
+                _RepBtn(
+                  icon: Icons.add_rounded,
+                  cs: cs,
+                  done: done,
+                  onTap: _incReps,
                 ),
-                onChanged: (v) =>
-                    widget.onRepsChanged(int.tryParse(v) ?? 0),
-              ),
+              ],
             ),
           ),
 
+          const SizedBox(width: 4),
+
           // Pulsante completa
           GestureDetector(
-            onTap: widget.onToggle,
+            onTap: _handleToggle,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: 44,
-              height: 44,
+              duration: const Duration(milliseconds: 200),
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
                 color: done ? cs.primary : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
@@ -883,7 +1297,7 @@ class _SetRowState extends State<_SetRow> {
               ),
               child: Icon(
                 Icons.check_rounded,
-                size: 22,
+                size: 20,
                 color: done ? cs.onPrimary : cs.outline,
               ),
             ),
@@ -894,81 +1308,205 @@ class _SetRowState extends State<_SetRow> {
   }
 }
 
+class _RepBtn extends StatelessWidget {
+  final IconData icon;
+  final ColorScheme cs;
+  final bool done;
+  final VoidCallback onTap;
+
+  const _RepBtn({
+    required this.icon,
+    required this.cs,
+    required this.done,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: done
+              ? cs.primary.withOpacity(0.12)
+              : cs.surfaceContainerHighest.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: done
+                ? cs.primary.withOpacity(0.3)
+                : cs.outlineVariant.withOpacity(0.5),
+          ),
+        ),
+        child: Icon(icon,
+            size: 16,
+            color: done ? cs.primary : cs.outline),
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
-// _CircuitSessionCard — circuito durante la sessione
+// _RestOverlay — overlay Glass countdown recupero
 // ─────────────────────────────────────────────────────────────
 
-class _CircuitSessionCard extends StatelessWidget {
-  final HiveCircuit circuit;
-  final List<HiveWorkoutExercise> children;
-  final Map<dynamic, List<_SetData>> setData;
-  final void Function(HiveWorkoutExercise, int) onToggleSet;
-  final void Function(HiveWorkoutExercise, int, double) onWeightChanged;
-  final void Function(HiveWorkoutExercise, int, int) onRepsChanged;
+class _RestOverlay extends StatelessWidget {
+  final int total;
+  final int remaining;
+  final bool paused;
+  final VoidCallback onTogglePause;
+  final VoidCallback onSkip;
+  final void Function(int) onAddTime;
 
-  const _CircuitSessionCard({
-    required this.circuit,
-    required this.children,
-    required this.setData,
-    required this.onToggleSet,
-    required this.onWeightChanged,
-    required this.onRepsChanged,
+  const _RestOverlay({
+    required this.total,
+    required this.remaining,
+    required this.paused,
+    required this.onTogglePause,
+    required this.onSkip,
+    required this.onAddTime,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final progress = total > 0 ? remaining / total : 0.0;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isDark
-            ? cs.tertiaryContainer.withOpacity(0.15)
-            : cs.tertiaryContainer.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: cs.tertiary.withOpacity(0.4),
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header circuito
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+    return Positioned(
+      left: 16,
+      right: 16,
+      bottom: MediaQuery.of(context).padding.bottom + 96,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? cs.surface.withOpacity(0.94)
+                  : cs.surface.withOpacity(0.97),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withOpacity(0.15)
+                    : cs.primary.withOpacity(0.2),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black
+                      .withOpacity(isDark ? 0.4 : 0.12),
+                  blurRadius: 24,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: cs.tertiaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.loop_rounded,
-                    color: cs.onTertiaryContainer,
-                    size: 16,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                // Timer circolare
+                SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: Stack(
+                    alignment: Alignment.center,
                     children: [
-                      Text(
-                        circuit.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          color: cs.onSurface,
+                      SizedBox(
+                        width: 72,
+                        height: 72,
+                        child: CircularProgressIndicator(
+                          value: 1,
+                          strokeWidth: 5,
+                          color: cs.primary.withOpacity(0.12),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 72,
+                        height: 72,
+                        child: CircularProgressIndicator(
+                          value: progress.clamp(0.0, 1.0),
+                          strokeWidth: 5,
+                          color: cs.primary,
+                          strokeCap: StrokeCap.round,
                         ),
                       ),
                       Text(
-                        '${circuit.rounds} cicl${circuit.rounds == 1 ? 'o' : 'i'} · ${children.length} esercizi',
+                        '$remaining',
                         style: TextStyle(
-                            fontSize: 12, color: cs.tertiary),
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: cs.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+
+                // Controlli
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Recupero',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: cs.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment:
+                            MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _RestCtrlBtn(
+                            label: '-10s',
+                            cs: cs,
+                            onTap: () => onAddTime(-10),
+                          ),
+                          _RestCtrlBtn(
+                            label: paused ? '▶' : '⏸',
+                            cs: cs,
+                            filled: true,
+                            onTap: onTogglePause,
+                          ),
+                          _RestCtrlBtn(
+                            label: '+30s',
+                            cs: cs,
+                            onTap: () => onAddTime(30),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: onSkip,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 6),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerHighest
+                                .withOpacity(0.4),
+                            borderRadius:
+                                BorderRadius.circular(10),
+                            border: Border.all(
+                                color: cs.outlineVariant
+                                    .withOpacity(0.4)),
+                          ),
+                          child: Text(
+                            'Salta recupero',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: cs.outline,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -976,42 +1514,51 @@ class _CircuitSessionCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
 
-          // Esercizi del circuito
-          if (children.isEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Text(
-                'Nessun esercizio nel circuito',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.outline,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Column(
-                children: children
-                    .map(
-                      (ex) => _ExerciseCard(
-                        exercise: ex,
-                        sets: setData[ex.key] ?? [],
-                        compact: true,
-                        onToggleSet: (i) => onToggleSet(ex, i),
-                        onWeightChanged: (i, w) =>
-                            onWeightChanged(ex, i, w),
-                        onRepsChanged: (i, r) =>
-                            onRepsChanged(ex, i, r),
-                      ),
-                    )
-                    .toList(),
-              ),
+class _RestCtrlBtn extends StatelessWidget {
+  final String label;
+  final ColorScheme cs;
+  final VoidCallback onTap;
+  final bool filled;
+
+  const _RestCtrlBtn({
+    required this.label,
+    required this.cs,
+    required this.onTap,
+    this.filled = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 54,
+        height: 36,
+        decoration: BoxDecoration(
+          color: filled
+              ? cs.primary
+              : cs.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: cs.primary.withOpacity(filled ? 0 : 0.3),
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: filled ? Colors.white : cs.primary,
             ),
-          const SizedBox(height: 4),
-        ],
+          ),
+        ),
       ),
     );
   }
