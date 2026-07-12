@@ -36,7 +36,8 @@ class ActiveSet {
         'restSeconds': restSeconds,
       };
 
-  factory ActiveSet.fromJson(Map<String, dynamic> j) => ActiveSet(
+  factory ActiveSet.fromJson(Map<String, dynamic> j) =>
+      ActiveSet(
         setNumber: j['setNumber'] as int,
         weight: (j['weight'] as num).toDouble(),
         reps: j['reps'] as int,
@@ -79,7 +80,8 @@ class SessionExercise {
         'circuitId': circuitId,
       };
 
-  factory SessionExercise.fromJson(Map<String, dynamic> j) => SessionExercise(
+  factory SessionExercise.fromJson(Map<String, dynamic> j) =>
+      SessionExercise(
         exerciseKey: j['exerciseKey'],
         exerciseName: j['exerciseName'] as String,
         muscleGroup: j['muscleGroup'] as String,
@@ -91,6 +93,7 @@ class SessionExercise {
 }
 
 class SessionProvider extends ChangeNotifier {
+  // ── Sessione in-memory ────────────────────────────────────
   dynamic currentSessionKey;
   DateTime? _sessionStartTime;
   HiveWorkout? _currentWorkout;
@@ -101,43 +104,136 @@ class SessionProvider extends ChangeNotifier {
   final List<SessionExercise> _sessionExercises = [];
 
   // circuitId → round → exerciseKey → sets
-  final Map<String, List<Map<dynamic, List<ActiveSet>>>> _circuitRoundSets = {};
+  final Map<String, List<Map<dynamic, List<ActiveSet>>>>
+      _circuitRoundSets = {};
   final Map<String, int> _currentRound = {};
   final Map<String, int> _circuitTotalRounds = {};
 
+  // ── Hive ─────────────────────────────────────────────────
   Box? _pauseBox;
   static const _pauseBoxName = 'paused_session';
-  static const _pauseKey = 'current';
+  static const _activeSaveKey = 'active';
+  static const _legacyKey = 'current';
+  static const _pausedListKey = 'paused_list';
 
-  Map<dynamic, List<ActiveSet>> get exerciseSets => _exerciseSets;
-  List<SessionExercise> get sessionExercises => _sessionExercises;
+  // ── Lista sessioni esplicitamente messe in pausa ──────────
+  List<Map<String, dynamic>> _pausedList = [];
 
-  // ── Rest countdown timer (rimpiazza elapsed timer) ────────────
-  int _restTotal = 0;
-  int _restRemaining = 0;
-  bool _restPaused = false;
-  Timer? _restCountdownTimer;
+  List<Map<String, dynamic>> get pausedSessions =>
+      List.unmodifiable(_pausedList);
+
+  bool get hasPausedSessions => _pausedList.isNotEmpty;
+
+  bool hasPausedSessionForWorkout(dynamic workoutKey) {
+    if (workoutKey == null) return false;
+    final wk = workoutKey.toString();
+    return _pausedList
+        .any((s) => s['workoutKey']?.toString() == wk);
+  }
+
+  Map<String, dynamic>? getMostRecentPausedForWorkout(
+      dynamic workoutKey) {
+    if (workoutKey == null) return null;
+    final wk = workoutKey.toString();
+    try {
+      return _pausedList.lastWhere(
+          (s) => s['workoutKey']?.toString() == wk);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Statistiche su sessione serializzata ──────────────────
+
+  int getPausedCompletedSets(Map<String, dynamic> data) {
+    int n = 0;
+    final sets =
+        data['exerciseSets'] as Map<String, dynamic>? ?? {};
+    for (final setList in sets.values) {
+      n += (setList as List)
+          .where((s) => (s as Map)['completed'] == true)
+          .length;
+    }
+    final circuits =
+        data['circuitRoundSets'] as Map<String, dynamic>? ??
+            {};
+    for (final rounds in circuits.values) {
+      for (final roundMap in (rounds as List)) {
+        for (final setList
+            in (roundMap as Map<String, dynamic>).values) {
+          n += (setList as List)
+              .where((s) => (s as Map)['completed'] == true)
+              .length;
+        }
+      }
+    }
+    return n;
+  }
+
+  int getPausedTotalSets(Map<String, dynamic> data) {
+    int n = 0;
+    final sets =
+        data['exerciseSets'] as Map<String, dynamic>? ?? {};
+    for (final setList in sets.values) {
+      n += (setList as List).length;
+    }
+    final circuits =
+        data['circuitRoundSets'] as Map<String, dynamic>? ??
+            {};
+    for (final rounds in circuits.values) {
+      for (final roundMap in (rounds as List)) {
+        for (final setList
+            in (roundMap as Map<String, dynamic>).values) {
+          n += (setList as List).length;
+        }
+      }
+    }
+    return n;
+  }
+
+  // ── Rest timer ────────────────────────────────────────────
+  Timer? _restTimer;
+  int _restElapsed = 0;
   dynamic _restingExerciseKey;
   int? _restingSetIndex;
+  bool _restDoneNotified = false;
 
-  int get restTotal => _restTotal;
-  int get restRemaining => _restRemaining;
-  bool get restPaused => _restPaused;
-  bool get isResting => _restRemaining > 0;
-
-  // Compatibilità con codice esistente
-  int get restElapsed => _restTotal - _restRemaining;
+  int get restElapsed => _restElapsed;
+  bool get isResting =>
+      _restTimer != null && _restTimer!.isActive;
   dynamic get restingExerciseId => _restingExerciseKey;
   int? get restingSetIndex => _restingSetIndex;
 
-  // ── Nuovi getter ──────────────────────────────────────────────
+  // ── Getters ───────────────────────────────────────────────
+  Map<dynamic, List<ActiveSet>> get exerciseSets =>
+      _exerciseSets;
+  List<SessionExercise> get sessionExercises =>
+      _sessionExercises;
 
-  DateTime? get sessionStartTime => _sessionStartTime;
+  bool get hasActiveSession =>
+      currentSessionKey != null &&
+      _sessionExercises.isNotEmpty;
 
+  bool get hasAnyData {
+    final hasCompleted = _exerciseSets.values
+        .expand((s) => s)
+        .any((s) => s.completed);
+    final hasCircuitData =
+        _circuitRoundSets.values.any((rounds) => rounds.any(
+            (round) => round.values
+                .expand((s) => s)
+                .any((s) => s.completed)));
+    return hasCompleted || hasCircuitData;
+  }
+
+  /// Secondi trascorsi dall'inizio della sessione in-memory.
   int get elapsedSeconds => _sessionStartTime != null
-      ? DateTime.now().difference(_sessionStartTime!).inSeconds
+      ? DateTime.now()
+          .difference(_sessionStartTime!)
+          .inSeconds
       : 0;
 
+  /// Serie completate nella sessione in-memory.
   int get completedSetsCount {
     int n = 0;
     for (final sets in _exerciseSets.values) {
@@ -153,6 +249,7 @@ class SessionProvider extends ChangeNotifier {
     return n;
   }
 
+  /// Serie totali nella sessione in-memory.
   int get totalSetsCount {
     int n = 0;
     for (final sets in _exerciseSets.values) {
@@ -168,140 +265,17 @@ class SessionProvider extends ChangeNotifier {
     return n;
   }
 
-  bool get hasActiveSession =>
-      currentSessionKey != null && _sessionExercises.isNotEmpty;
+  int getCurrentRound(String circuitId) =>
+      _currentRound[circuitId] ?? 0;
+  int getTotalRounds(String circuitId) =>
+      _circuitTotalRounds[circuitId] ?? 1;
 
-  bool get hasAnyData {
-    final hasCompleted =
-        _exerciseSets.values.expand((s) => s).any((s) => s.completed);
-    final hasCircuitData = _circuitRoundSets.values.any((rounds) =>
-        rounds.any(
-            (round) => round.values.expand((s) => s).any((s) => s.completed)));
-    return hasCompleted || hasCircuitData;
-  }
-
-  // ── Getter circuiti ───────────────────────────────────────────
-
-  int getCurrentRound(String circuitId) => _currentRound[circuitId] ?? 0;
-  int getTotalRounds(String circuitId) => _circuitTotalRounds[circuitId] ?? 1;
-
-  List<ActiveSet> getCircuitSets(String circuitId, dynamic exerciseKey) {
+  List<ActiveSet> getCircuitSets(
+      String circuitId, dynamic exerciseKey) {
     final round = _currentRound[circuitId] ?? 0;
     final rounds = _circuitRoundSets[circuitId];
     if (rounds == null || round >= rounds.length) return [];
     return rounds[round][exerciseKey] ?? [];
-  }
-
-  List<ActiveSet> getCircuitSetsForRound(
-      String circuitId, int round, dynamic exerciseKey) {
-    final rounds = _circuitRoundSets[circuitId];
-    if (rounds == null || round >= rounds.length) return [];
-    return rounds[round][exerciseKey] ?? [];
-  }
-
-  // ── Rest countdown ────────────────────────────────────────────
-
-  void _startRestCountdown(int seconds) {
-    _restCountdownTimer?.cancel();
-    _restTotal = seconds;
-    _restRemaining = seconds;
-    _restPaused = false;
-    _scheduleCountdownTick();
-    notifyListeners();
-  }
-
-  void _scheduleCountdownTick() {
-    if (_restRemaining <= 0 || _restPaused) return;
-    _restCountdownTimer =
-        Timer(const Duration(seconds: 1), () {
-      if (_restPaused) return;
-      if (_restRemaining <= 1) {
-        _restRemaining = 0;
-        NotificationService.instance.playRestDone();
-        HapticFeedback.heavyImpact();
-        notifyListeners();
-        return;
-      }
-      _restRemaining--;
-      notifyListeners();
-      _scheduleCountdownTick();
-    });
-  }
-
-  void toggleRestPause() {
-    _restPaused = !_restPaused;
-    if (!_restPaused && _restRemaining > 0) {
-      _scheduleCountdownTick();
-    }
-    notifyListeners();
-  }
-
-  void skipRest() {
-    _restCountdownTimer?.cancel();
-    _restTotal = 0;
-    _restRemaining = 0;
-    _restPaused = false;
-    _restingExerciseKey = null;
-    _restingSetIndex = null;
-    notifyListeners();
-  }
-
-  void addRestTime(int seconds) {
-    _restRemaining = (_restRemaining + seconds).clamp(0, 600);
-    if (_restRemaining > 0) {
-      if (!_restPaused) {
-        _restCountdownTimer?.cancel();
-        _scheduleCountdownTick();
-      }
-    } else {
-      skipRest();
-      return;
-    }
-    notifyListeners();
-  }
-
-  // Compat: mantenuto per codice esistente
-  void stopRestTimer() {
-    skipRest();
-  }
-
-  void _stopRestTimer() {
-    _restCountdownTimer?.cancel();
-    _restCountdownTimer = null;
-    _restTotal = 0;
-    _restRemaining = 0;
-    _restPaused = false;
-    _restingExerciseKey = null;
-    _restingSetIndex = null;
-  }
-
-  void _startRestTimer(dynamic exerciseKey, int setIndex,
-      {String? circuitId}) {
-    _stopRestTimer();
-    _restingExerciseKey = exerciseKey;
-    _restingSetIndex = setIndex;
-
-    SessionExercise? ex;
-    try {
-      ex =
-          _sessionExercises.firstWhere((e) => e.exerciseKey == exerciseKey);
-    } catch (_) {}
-
-    final targetRest = ex?.restSeconds;
-    if (targetRest != null && targetRest > 0) {
-      _startRestCountdown(targetRest);
-    }
-  }
-
-  // ── Navigazione round ─────────────────────────────────────────
-
-  void setRound(String circuitId, int round) {
-    final total = _circuitTotalRounds[circuitId] ?? 1;
-    if (round >= 0 && round < total) {
-      _currentRound[circuitId] = round;
-      _savePausedState();
-      notifyListeners();
-    }
   }
 
   void nextRound(String circuitId) {
@@ -323,9 +297,8 @@ class SessionProvider extends ChangeNotifier {
     }
   }
 
-  // ── Reorder ───────────────────────────────────────────────────
-
-  void reorderSessionExercisesFlat(List<SessionExercise> newOrder) {
+  void reorderSessionExercisesFlat(
+      List<SessionExercise> newOrder) {
     _sessionExercises.clear();
     _sessionExercises.addAll(newOrder);
     _savePausedState();
@@ -334,26 +307,24 @@ class SessionProvider extends ChangeNotifier {
 
   void reorderCircuitExercises(
       String circuitId, List<SessionExercise> reordered) {
-    final newKeyOrder = reordered.map((e) => e.exerciseKey).toList();
-
+    final newKeyOrder =
+        reordered.map((e) => e.exerciseKey).toList();
     final circuitExes = _sessionExercises
         .where((e) => e.circuitId == circuitId)
         .toList();
-
-    _sessionExercises.removeWhere((e) => e.circuitId == circuitId);
-
+    _sessionExercises
+        .removeWhere((e) => e.circuitId == circuitId);
     for (final key in newKeyOrder) {
       try {
-        final ex = circuitExes.firstWhere((e) => e.exerciseKey == key);
-        _sessionExercises.add(ex);
+        _sessionExercises.add(
+            circuitExes.firstWhere((e) => e.exerciseKey == key));
       } catch (_) {}
     }
-
-    // Propaga ordine a TUTTI i round
     final rounds = _circuitRoundSets[circuitId];
     if (rounds != null) {
       for (int r = 0; r < rounds.length; r++) {
-        final oldRound = Map<dynamic, List<ActiveSet>>.from(rounds[r]);
+        final oldRound =
+            Map<dynamic, List<ActiveSet>>.from(rounds[r]);
         final newRound = <dynamic, List<ActiveSet>>{};
         for (final key in newKeyOrder) {
           newRound[key] = oldRound[key] ?? [];
@@ -361,7 +332,6 @@ class SessionProvider extends ChangeNotifier {
         rounds[r] = newRound;
       }
     }
-
     _savePausedState();
     notifyListeners();
   }
@@ -373,7 +343,7 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Hive pause box ────────────────────────────────────────────
+  // ── Hive init ─────────────────────────────────────────────
 
   Future<void> initPauseBox() async {
     if (_pauseBox == null || !_pauseBox!.isOpen) {
@@ -381,12 +351,124 @@ class SessionProvider extends ChangeNotifier {
     }
   }
 
+  // ── Serializzazione ───────────────────────────────────────
+
+  Map<String, dynamic> _buildStateMap(
+      {int? elapsedAtPause}) {
+    final setsData = <String, dynamic>{};
+    for (final entry in _exerciseSets.entries) {
+      setsData[entry.key.toString()] =
+          entry.value.map((s) => s.toJson()).toList();
+    }
+    final circuitData = <String, dynamic>{};
+    for (final cEntry in _circuitRoundSets.entries) {
+      circuitData[cEntry.key] = cEntry.value.map((round) {
+        final roundData = <String, dynamic>{};
+        for (final exEntry in round.entries) {
+          roundData[exEntry.key.toString()] =
+              exEntry.value.map((s) => s.toJson()).toList();
+        }
+        return roundData;
+      }).toList();
+    }
+    final roundData = <String, dynamic>{};
+    for (final e in _currentRound.entries) {
+      roundData[e.key] = e.value;
+    }
+    return {
+      'sessionKey': currentSessionKey,
+      'workoutKey': _currentWorkout?.key,
+      // FIX: salva anche il nome per mostrarlo nelle card
+      'workoutName': _currentWorkout?.name,
+      'startTime': _sessionStartTime?.toIso8601String(),
+      // FIX: secondi trascorsi al momento della pausa
+      'elapsedAtPause': elapsedAtPause ??
+          (_sessionStartTime != null
+              ? DateTime.now()
+                  .difference(_sessionStartTime!)
+                  .inSeconds
+              : 0),
+      'exercises':
+          _sessionExercises.map((e) => e.toJson()).toList(),
+      'exerciseSets': setsData,
+      'circuitRoundSets': circuitData,
+      'currentRound': roundData,
+    };
+  }
+
+  // ── Auto-save (crash recovery) ────────────────────────────
+
+  Future<void> _savePausedState() async {
+    if (currentSessionKey == null) return;
+    await initPauseBox();
+    await _pauseBox?.put(
+        _activeSaveKey, jsonEncode(_buildStateMap()));
+  }
+
+  Future<void> _clearActiveSave() async {
+    await initPauseBox();
+    await _pauseBox?.delete(_activeSaveKey);
+    await _pauseBox?.delete(_legacyKey);
+  }
+
+  Future<void> _clearPausedState() async {
+    await _clearActiveSave();
+  }
+
+  Future<void> _savePausedList() async {
+    await initPauseBox();
+    await _pauseBox?.put(
+        _pausedListKey, jsonEncode(_pausedList));
+  }
+
+  // ── tryRestoreSession ─────────────────────────────────────
+
   Future<bool> tryRestoreSession() async {
     await initPauseBox();
-    final raw = _pauseBox?.get(_pauseKey);
-    if (raw == null) return false;
+
+    // Carica la lista delle sessioni esplicitamente messe in pausa
+    final rawList = _pauseBox?.get(_pausedListKey);
+    if (rawList != null) {
+      try {
+        _pausedList =
+            (jsonDecode(rawList as String) as List)
+                .map((e) =>
+                    Map<String, dynamic>.from(e as Map))
+                .toList();
+      } catch (_) {
+        _pausedList = [];
+      }
+    }
+
+    // Ripristino crash recovery
+    final raw = _pauseBox?.get(_activeSaveKey) ??
+        _pauseBox?.get(_legacyKey);
+    if (raw == null) {
+      if (_pausedList.isNotEmpty) notifyListeners();
+      return false;
+    }
     try {
-      final data = jsonDecode(raw as String) as Map<String, dynamic>;
+      final data =
+          jsonDecode(raw as String) as Map<String, dynamic>;
+      final success = await _restoreFromData(data);
+      if (success) {
+        if (_pauseBox?.get(_activeSaveKey) == null) {
+          await _pauseBox?.put(_activeSaveKey, raw);
+          await _pauseBox?.delete(_legacyKey);
+        }
+        notifyListeners();
+      }
+      return success;
+    } catch (e) {
+      debugPrint('Errore ripristino sessione: $e');
+      await _clearActiveSave();
+      return false;
+    }
+  }
+
+  Future<bool> _restoreFromData(
+      Map<String, dynamic> data) async {
+    try {
       currentSessionKey = data['sessionKey'];
       _sessionStartTime = data['startTime'] != null
           ? DateTime.parse(data['startTime'] as String)
@@ -399,11 +481,13 @@ class SessionProvider extends ChangeNotifier {
       }
 
       _exerciseSets.clear();
-      final setsData = data['exerciseSets'] as Map<String, dynamic>;
+      final setsData =
+          data['exerciseSets'] as Map<String, dynamic>;
       for (final entry in setsData.entries) {
         final key = int.tryParse(entry.key) ?? entry.key;
         final setsList = (entry.value as List)
-            .map((s) => ActiveSet.fromJson(s as Map<String, dynamic>))
+            .map((s) => ActiveSet.fromJson(
+                s as Map<String, dynamic>))
             .toList();
         _exerciseSets[key] = setsList;
       }
@@ -418,15 +502,18 @@ class SessionProvider extends ChangeNotifier {
         for (final cEntry in circuitData.entries) {
           final circuitId = cEntry.key;
           final roundsList = cEntry.value as List;
-          final rounds = <Map<dynamic, List<ActiveSet>>>[];
+          final rounds =
+              <Map<dynamic, List<ActiveSet>>>[];
           for (final roundData in roundsList) {
             final round = <dynamic, List<ActiveSet>>{};
             for (final exEntry
-                in (roundData as Map<String, dynamic>).entries) {
-              final exKey = int.tryParse(exEntry.key) ?? exEntry.key;
+                in (roundData as Map<String, dynamic>)
+                    .entries) {
+              final exKey =
+                  int.tryParse(exEntry.key) ?? exEntry.key;
               final sets = (exEntry.value as List)
-                  .map((s) =>
-                      ActiveSet.fromJson(s as Map<String, dynamic>))
+                  .map((s) => ActiveSet.fromJson(
+                      s as Map<String, dynamic>))
                   .toList();
               round[exKey] = sets;
             }
@@ -437,7 +524,8 @@ class SessionProvider extends ChangeNotifier {
         }
       }
 
-      final roundsData = data['currentRound'] as Map<String, dynamic>?;
+      final roundsData =
+          data['currentRound'] as Map<String, dynamic>?;
       if (roundsData != null) {
         for (final e in roundsData.entries) {
           _currentRound[e.key] = e.value as int;
@@ -453,62 +541,87 @@ class SessionProvider extends ChangeNotifier {
         } catch (_) {}
       }
 
-      notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('Errore ripristino sessione: $e');
-      await _pauseBox?.delete(_pauseKey);
+      debugPrint('Errore ripristino da dati: $e');
       return false;
     }
   }
 
-  Future<void> _savePausedState() async {
+  // ── pauseSession — FIX 1 ─────────────────────────────────
+  // Salva nella lista persistente + pulisce in-memory.
+  // Dopo questa call: hasActiveSession = false,
+  // hasPausedSessions = true.
+
+  Future<void> pauseSession() async {
+    _stopRestTimer();
     if (currentSessionKey == null) return;
-    await initPauseBox();
 
-    final setsData = <String, dynamic>{};
-    for (final entry in _exerciseSets.entries) {
-      setsData[entry.key.toString()] =
-          entry.value.map((s) => s.toJson()).toList();
-    }
+    final elapsed = _sessionStartTime != null
+        ? DateTime.now()
+            .difference(_sessionStartTime!)
+            .inSeconds
+        : 0;
 
-    final circuitData = <String, dynamic>{};
-    for (final cEntry in _circuitRoundSets.entries) {
-      final rounds = cEntry.value.map((round) {
-        final roundData = <String, dynamic>{};
-        for (final exEntry in round.entries) {
-          roundData[exEntry.key.toString()] =
-              exEntry.value.map((s) => s.toJson()).toList();
-        }
-        return roundData;
-      }).toList();
-      circuitData[cEntry.key] = rounds;
-    }
+    final state = _buildStateMap(elapsedAtPause: elapsed);
+    final id =
+        '${currentSessionKey}_${DateTime.now().millisecondsSinceEpoch}';
+    state['id'] = id;
 
-    final roundData = <String, dynamic>{};
-    for (final e in _currentRound.entries) {
-      roundData[e.key] = e.value;
-    }
-
-    final data = {
-      'sessionKey': currentSessionKey,
-      'workoutKey': _currentWorkout?.key,
-      'startTime': _sessionStartTime?.toIso8601String(),
-      'exercises': _sessionExercises.map((e) => e.toJson()).toList(),
-      'exerciseSets': setsData,
-      'circuitRoundSets': circuitData,
-      'currentRound': roundData,
-    };
-
-    await _pauseBox?.put(_pauseKey, jsonEncode(data));
+    _pausedList.add(state);
+    await _savePausedList();
+    await _clearActiveSave();
+    _resetSession();
+    // notifyListeners già chiamato da _resetSession
   }
 
-  Future<void> _clearPausedState() async {
-    await initPauseBox();
-    await _pauseBox?.delete(_pauseKey);
+  // ── resumePausedSession — FIX 1 ──────────────────────────
+
+  Future<bool> resumePausedSession(String id) async {
+    final index =
+        _pausedList.indexWhere((s) => s['id'] == id);
+    if (index < 0) return false;
+
+    if (currentSessionKey != null) {
+      await abandonSession();
+    }
+
+    final data = _pausedList[index];
+    final success = await _restoreFromData(data);
+
+    if (success) {
+      _pausedList.removeAt(index);
+      await _savePausedList();
+      await _savePausedState();
+      notifyListeners();
+    }
+
+    return success;
   }
 
-  // ── startSession ──────────────────────────────────────────────
+  // ── deletePausedSession — FIX 1 ──────────────────────────
+
+  Future<void> deletePausedSession(String id) async {
+    final index =
+        _pausedList.indexWhere((s) => s['id'] == id);
+    if (index < 0) return;
+    final data = _pausedList[index];
+    final sessionKey = data['sessionKey'];
+    if (sessionKey != null) {
+      try {
+        await HiveDatabase.instance
+            .deleteSession(sessionKey);
+      } catch (_) {}
+    }
+    _pausedList.removeAt(index);
+    await _savePausedList();
+    notifyListeners();
+  }
+
+  // ── startSession — FIX 2 ─────────────────────────────────
+  // Costruisce la lista sessione rispettando l'ordine
+  // interleaved (esercizi liberi e circuiti mescolati per
+  // sortOrder unificato, come salvato da workout_detail).
 
   Future<void> startSession(
     List<HiveWorkoutExercise> exercises,
@@ -519,7 +632,7 @@ class SessionProvider extends ChangeNotifier {
   }) async {
     if (currentSessionKey != null &&
         _currentWorkout?.key == workoutKey) {
-      return; // Sessione già attiva per questa scheda
+      return;
     }
 
     currentSessionKey = await HiveDatabase.instance
@@ -542,69 +655,121 @@ class SessionProvider extends ChangeNotifier {
           List.generate(circuit.rounds, (_) => {});
     }
 
-    final exerciseKeys = exercises.map((e) => e.exerciseKey).toList();
+    final exerciseKeys =
+        exercises.map((e) => e.exerciseKey).toList();
     final savedNotes =
         HiveDatabase.instance.getExerciseNotes(exerciseKeys);
 
+    final Map<dynamic, Map<int, HiveSessionSet>>
+        allLastSets = {};
     for (final ex in exercises) {
-      final lastSets =
-          HiveDatabase.instance.getLastExerciseSets(ex.exerciseKey);
-      final Map<int, HiveSessionSet> lastBySetNumber = {};
-      for (final s in lastSets) {
-        lastBySetNumber[s.setNumber] = s;
-      }
+      if (allLastSets.containsKey(ex.exerciseKey)) continue;
+      final lastSets = HiveDatabase.instance
+          .getLastExerciseSets(ex.exerciseKey);
+      allLastSets[ex.exerciseKey] = {
+        for (final s in lastSets) s.setNumber: s
+      };
+    }
 
-      final circuitId = ex.isInCircuit ? ex.circuitId : null;
+    final freeExercises =
+        exercises.where((e) => !e.isInCircuit).toList();
 
-      _sessionExercises.add(SessionExercise(
-        exerciseKey: ex.exerciseKey,
-        exerciseName: ex.exerciseName,
-        muscleGroup: ex.muscleGroup,
-        restSeconds: ex.restSeconds,
-        notes: ex.isInCircuit ? null : ex.notes,
-        sessionNote: savedNotes[ex.exerciseKey],
-        circuitId: circuitId,
-      ));
+    // FIX 2: ordina per sortOrder unificato (stesso valore
+    // assegnato da _persistTopLevelOrder in workout_detail).
+    final topItems = <({
+      int order,
+      bool isCircuit,
+      dynamic data
+    })>[
+      ...freeExercises.map((e) => (
+            order: e.sortOrder,
+            isCircuit: false,
+            data: e as dynamic
+          )),
+      ...circuits.map((c) => (
+            order: c.sortOrder,
+            isCircuit: true,
+            data: c as dynamic
+          )),
+    ]..sort((a, b) => a.order.compareTo(b.order));
 
-      if (circuitId != null) {
-        final totalRounds = _circuitTotalRounds[circuitId] ?? 1;
-        final rounds = _circuitRoundSets[circuitId] ??
-            List.generate(totalRounds, (_) => {});
-        _circuitRoundSets[circuitId] = rounds;
+    for (final topItem in topItems) {
+      if (!topItem.isCircuit) {
+        final ex = topItem.data as HiveWorkoutExercise;
+        final lastSets = allLastSets[ex.exerciseKey] ?? {};
 
-        for (int r = 0; r < totalRounds; r++) {
-          rounds[r][ex.exerciseKey] =
-              List.generate(ex.sets, (i) {
-            final setNumber = i + 1;
-            final last = lastBySetNumber[setNumber];
-            return ActiveSet(
-              setNumber: setNumber,
-              weight: 0, // Sempre vuoto: lastWeight è il placeholder
-              reps: ex.targetReps,
-              lastWeight: (last != null && last.completed && last.weight > 0)
-                  ? last.weight
-                  : null,
-              lastReps:
-                  (last != null && last.completed) ? last.reps : null,
-            );
-          });
-        }
-      } else {
+        _sessionExercises.add(SessionExercise(
+          exerciseKey: ex.exerciseKey,
+          exerciseName: ex.exerciseName,
+          muscleGroup: ex.muscleGroup,
+          restSeconds: ex.restSeconds,
+          notes: ex.notes,
+          sessionNote: savedNotes[ex.exerciseKey],
+          circuitId: null,
+        ));
+
         _exerciseSets[ex.exerciseKey] =
             List.generate(ex.sets, (i) {
           final setNumber = i + 1;
-          final last = lastBySetNumber[setNumber];
+          final last = lastSets[setNumber];
           return ActiveSet(
             setNumber: setNumber,
             weight: 0,
             reps: ex.targetReps,
-            lastWeight: (last != null && last.completed && last.weight > 0)
+            lastWeight: (last != null &&
+                    last.completed &&
+                    last.weight > 0)
                 ? last.weight
                 : null,
-            lastReps:
-                (last != null && last.completed) ? last.reps : null,
+            lastReps: (last != null && last.completed)
+                ? last.reps
+                : null,
           );
         });
+      } else {
+        final c = topItem.data as HiveCircuit;
+        final cid = c.key.toString();
+        final rounds = _circuitRoundSets[cid]!;
+
+        final circuitExercises = exercises
+            .where((e) => e.isInCircuit && e.circuitId == cid)
+            .toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+        for (final ex in circuitExercises) {
+          final lastSets = allLastSets[ex.exerciseKey] ?? {};
+
+          _sessionExercises.add(SessionExercise(
+            exerciseKey: ex.exerciseKey,
+            exerciseName: ex.exerciseName,
+            muscleGroup: ex.muscleGroup,
+            restSeconds: ex.restSeconds,
+            notes: null,
+            sessionNote: savedNotes[ex.exerciseKey],
+            circuitId: cid,
+          ));
+
+          for (int r = 0; r < rounds.length; r++) {
+            rounds[r][ex.exerciseKey] =
+                List.generate(ex.sets, (i) {
+              final setNumber = i + 1;
+              final last = lastSets[setNumber];
+              return ActiveSet(
+                setNumber: setNumber,
+                weight: 0,
+                reps: ex.targetReps,
+                lastWeight: (last != null &&
+                        last.completed &&
+                        last.weight > 0)
+                    ? last.weight
+                    : null,
+                lastReps: (last != null && last.completed)
+                    ? last.reps
+                    : null,
+              );
+            });
+          }
+        }
       }
     }
 
@@ -612,19 +777,10 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── pauseSession ──────────────────────────────────────────────
-
-  void pauseSession() {
-    _stopRestTimer();
-    _savePausedState();
-    notifyListeners();
-  }
-
-  // ── abandonSession ────────────────────────────────────────────
-
   Future<void> abandonSession() async {
     if (currentSessionKey != null) {
-      await HiveDatabase.instance.deleteSession(currentSessionKey);
+      await HiveDatabase.instance
+          .deleteSession(currentSessionKey);
     }
     await _clearPausedState();
     _resetSession();
@@ -643,20 +799,23 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── toggleSet ─────────────────────────────────────────────────
-
-  void toggleSet(dynamic exerciseKey, int index, {String? circuitId}) {
+  void toggleSet(dynamic exerciseKey, int index,
+      {String? circuitId}) {
     if (circuitId != null) {
       final round = _currentRound[circuitId] ?? 0;
-      final sets = _circuitRoundSets[circuitId]?[round][exerciseKey];
+      final sets =
+          _circuitRoundSets[circuitId]?[round][exerciseKey];
       if (sets == null || index >= sets.length) return;
       final set = sets[index];
       if (!set.completed) {
         set.completed = true;
-        _startRestTimer(exerciseKey, index, circuitId: circuitId);
+        _startRestTimer(exerciseKey, index,
+            circuitId: circuitId);
       } else {
         set.completed = false;
-        if (_restingExerciseKey == exerciseKey) skipRest();
+        if (_restingExerciseKey == exerciseKey) {
+          _stopRestTimer();
+        }
       }
     } else {
       final set = _exerciseSets[exerciseKey]?[index];
@@ -668,7 +827,7 @@ class SessionProvider extends ChangeNotifier {
         set.completed = false;
         if (_restingExerciseKey == exerciseKey &&
             _restingSetIndex == index) {
-          skipRest();
+          _stopRestTimer();
         }
       }
     }
@@ -676,13 +835,13 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── updateSet ─────────────────────────────────────────────────
-
-  void updateSet(dynamic exerciseKey, int index, double weight, int reps,
+  void updateSet(dynamic exerciseKey, int index,
+      double weight, int reps,
       {String? circuitId}) {
     if (circuitId != null) {
       final round = _currentRound[circuitId] ?? 0;
-      final sets = _circuitRoundSets[circuitId]?[round][exerciseKey];
+      final sets =
+          _circuitRoundSets[circuitId]?[round][exerciseKey];
       if (sets == null || index >= sets.length) return;
       sets[index].weight = weight;
       sets[index].reps = reps;
@@ -696,43 +855,11 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Aggiorna solo round specifico (per circuiti con PageView)
-  void updateCircuitSetForRound(
-      String circuitId, int round, dynamic exerciseKey, int index,
-      double weight, int reps) {
-    final rounds = _circuitRoundSets[circuitId];
-    if (rounds == null || round >= rounds.length) return;
-    final sets = rounds[round][exerciseKey];
-    if (sets == null || index >= sets.length) return;
-    sets[index].weight = weight;
-    sets[index].reps = reps;
-    _savePausedState();
-    notifyListeners();
-  }
-
-  void toggleCircuitSetForRound(
-      String circuitId, int round, dynamic exerciseKey, int index) {
-    final rounds = _circuitRoundSets[circuitId];
-    if (rounds == null || round >= rounds.length) return;
-    final sets = rounds[round][exerciseKey];
-    if (sets == null || index >= sets.length) return;
-    final set = sets[index];
-    if (!set.completed) {
-      set.completed = true;
-      _startRestTimer(exerciseKey, index, circuitId: circuitId);
-    } else {
-      set.completed = false;
-      if (_restingExerciseKey == exerciseKey) skipRest();
-    }
-    _savePausedState();
-    notifyListeners();
-  }
-
-  // ── addSet / removeSet ────────────────────────────────────────
-
-  void addSetToExercise(dynamic exerciseKey, {String? circuitId}) {
+  void addSetToExercise(dynamic exerciseKey,
+      {String? circuitId}) {
     if (circuitId != null) {
-      final totalRounds = _circuitTotalRounds[circuitId] ?? 1;
+      final totalRounds =
+          _circuitTotalRounds[circuitId] ?? 1;
       final rounds = _circuitRoundSets[circuitId];
       if (rounds == null) return;
       for (int r = 0; r < totalRounds; r++) {
@@ -763,9 +890,11 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void removeSetFromExercise(dynamic exerciseKey, {String? circuitId}) {
+  void removeSetFromExercise(dynamic exerciseKey,
+      {String? circuitId}) {
     if (circuitId != null) {
-      final totalRounds = _circuitTotalRounds[circuitId] ?? 1;
+      final totalRounds =
+          _circuitTotalRounds[circuitId] ?? 1;
       final rounds = _circuitRoundSets[circuitId];
       if (rounds == null) return;
       for (int r = 0; r < totalRounds; r++) {
@@ -784,8 +913,6 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── addExerciseToSession ──────────────────────────────────────
-
   Future<void> addExerciseToSession({
     required dynamic exerciseKey,
     required String exerciseName,
@@ -795,8 +922,8 @@ class SessionProvider extends ChangeNotifier {
     String? notes,
   }) async {
     if (_exerciseSets.containsKey(exerciseKey)) return;
-    final lastSets =
-        HiveDatabase.instance.getLastExerciseSets(exerciseKey);
+    final lastSets = HiveDatabase.instance
+        .getLastExerciseSets(exerciseKey);
     final Map<int, HiveSessionSet> lastBySetNumber = {};
     for (final s in lastSets) {
       lastBySetNumber[s.setNumber] = s;
@@ -818,10 +945,14 @@ class SessionProvider extends ChangeNotifier {
         setNumber: setNumber,
         weight: 0,
         reps: defaultReps,
-        lastWeight: (last != null && last.completed && last.weight > 0)
+        lastWeight: (last != null &&
+                last.completed &&
+                last.weight > 0)
             ? last.weight
             : null,
-        lastReps: (last != null && last.completed) ? last.reps : null,
+        lastReps: (last != null && last.completed)
+            ? last.reps
+            : null,
       );
     });
     await _savePausedState();
@@ -832,7 +963,9 @@ class SessionProvider extends ChangeNotifier {
     _exerciseSets.remove(exerciseKey);
     _sessionExercises
         .removeWhere((e) => e.exerciseKey == exerciseKey);
-    if (_restingExerciseKey == exerciseKey) skipRest();
+    if (_restingExerciseKey == exerciseKey) {
+      _stopRestTimer();
+    }
     _savePausedState();
     notifyListeners();
   }
@@ -845,7 +978,8 @@ class SessionProvider extends ChangeNotifier {
       ex.sessionNote = note.isEmpty ? null : note;
     } catch (_) {}
     if (note.isEmpty) {
-      await HiveDatabase.instance.deleteExerciseNote(exerciseKey);
+      await HiveDatabase.instance
+          .deleteExerciseNote(exerciseKey);
     } else {
       await HiveDatabase.instance
           .saveExerciseNote(exerciseKey, note);
@@ -854,28 +988,70 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── finishSession ─────────────────────────────────────────────
+  void _startRestTimer(dynamic exerciseKey, int setIndex,
+      {String? circuitId}) {
+    _stopRestTimer();
+    _restElapsed = 0;
+    _restDoneNotified = false;
+    _restingExerciseKey = exerciseKey;
+    _restingSetIndex = setIndex;
+    SessionExercise? ex;
+    try {
+      ex = _sessionExercises
+          .firstWhere((e) => e.exerciseKey == exerciseKey);
+    } catch (_) {}
+    final targetRest = ex?.restSeconds;
+    _restTimer =
+        Timer.periodic(const Duration(seconds: 1), (_) {
+      _restElapsed++;
+      if (targetRest != null &&
+          _restElapsed >= targetRest &&
+          !_restDoneNotified) {
+        _restDoneNotified = true;
+        NotificationService.instance.playRestDone();
+        HapticFeedback.heavyImpact();
+      }
+      notifyListeners();
+    });
+  }
+
+  void stopRestTimer() {
+    if (_restingExerciseKey != null &&
+        _restingSetIndex != null) {
+      final set =
+          _exerciseSets[_restingExerciseKey]?[_restingSetIndex!];
+      if (set != null) set.restSeconds = _restElapsed;
+    }
+    _stopRestTimer();
+    notifyListeners();
+  }
+
+  void _stopRestTimer() {
+    _restTimer?.cancel();
+    _restTimer = null;
+    _restElapsed = 0;
+    _restDoneNotified = false;
+    _restingExerciseKey = null;
+    _restingSetIndex = null;
+  }
 
   Future<void> finishSession() async {
     if (currentSessionKey == null) return;
-
     final duration = _sessionStartTime != null
         ? DateTime.now()
             .difference(_sessionStartTime!)
             .inSeconds
         : null;
-
     if (duration != null) {
       await HiveDatabase.instance
           .updateSessionDuration(currentSessionKey, duration);
     }
-
-    // Esercizi liberi
     for (final ex
         in _sessionExercises.where((e) => !e.isInCircuit)) {
       final sets = _exerciseSets[ex.exerciseKey] ?? [];
       for (final set in sets) {
-        await HiveDatabase.instance.addSessionSet(HiveSessionSet(
+        await HiveDatabase.instance
+            .addSessionSet(HiveSessionSet(
           sessionKey: currentSessionKey,
           exerciseKey: ex.exerciseKey,
           exerciseName: ex.exerciseName,
@@ -888,12 +1064,11 @@ class SessionProvider extends ChangeNotifier {
         ));
       }
     }
-
-    // Circuiti — salva tutti i round
     for (final ex
         in _sessionExercises.where((e) => e.isInCircuit)) {
       final circuitId = ex.circuitId!;
-      final totalRounds = _circuitTotalRounds[circuitId] ?? 1;
+      final totalRounds =
+          _circuitTotalRounds[circuitId] ?? 1;
       final rounds = _circuitRoundSets[circuitId];
       if (rounds == null) continue;
       for (int r = 0; r < totalRounds; r++) {
@@ -903,7 +1078,8 @@ class SessionProvider extends ChangeNotifier {
               .addSessionSet(HiveSessionSet(
             sessionKey: currentSessionKey,
             exerciseKey: ex.exerciseKey,
-            exerciseName: '${ex.exerciseName} (Ciclo ${r + 1})',
+            exerciseName:
+                '${ex.exerciseName} (Ciclo ${r + 1})',
             muscleGroup: ex.muscleGroup,
             setNumber: set.setNumber,
             weight: set.weight,
@@ -914,7 +1090,6 @@ class SessionProvider extends ChangeNotifier {
         }
       }
     }
-
     await _clearPausedState();
     _resetSession();
   }

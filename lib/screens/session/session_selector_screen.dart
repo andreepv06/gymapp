@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/navigation/app_router.dart';
@@ -29,6 +30,70 @@ class _SessionSelectorScreenState
         () => context.read<WorkoutProvider>().loadWorkouts());
   }
 
+  // ── FIX 1: action sheet quando esiste sessione in pausa ──
+
+  Future<void> _handleWorkoutTap(
+    BuildContext context,
+    HiveWorkout workout,
+    WorkoutProvider workoutProvider,
+    SessionProvider sessionProvider,
+  ) async {
+    workoutProvider.loadWorkoutExercises(workout.key);
+    if (!context.mounted) return;
+
+    // Controlla se esiste una sessione esplicitamente messa in pausa
+    // per questa scheda specifica
+    if (sessionProvider.hasPausedSessionForWorkout(workout.key)) {
+      final paused =
+          sessionProvider.getMostRecentPausedForWorkout(workout.key);
+
+      final result = await showCupertinoModalPopup<String>(
+        context: context,
+        builder: (ctx) => CupertinoActionSheet(
+          title: const Text('Sessione in pausa'),
+          message: Text(
+            'Hai una sessione in pausa per "${workout.name}".\nCosa vuoi fare?',
+          ),
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(ctx, 'resume'),
+              child: const Text('Riprendi sessione'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(ctx, 'new'),
+              child: const Text('Avvia nuova sessione'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(ctx, 'cancel'),
+            child: const Text('Annulla'),
+          ),
+        ),
+      );
+
+      if (!context.mounted) return;
+      if (result == null || result == 'cancel') return;
+
+      if (result == 'resume' && paused != null) {
+        // Ripristina la sessione in pausa in-memory
+        await sessionProvider
+            .resumePausedSession(paused['id'] as String);
+        if (!context.mounted) return;
+        // Naviga: ActiveSessionScreen rileva la sessione già attiva
+        // e non ne avvia una nuova
+        pushPage(context, ActiveSessionScreen(workout: workout));
+      } else if (result == 'new') {
+        // Avvia sessione indipendente senza toccare quella in pausa.
+        // Poiché pauseSession() ha già pulito l'in-memory, startSession()
+        // creerà una sessione nuova senza interferire con la lista pausa.
+        pushPage(context, ActiveSessionScreen(workout: workout));
+      }
+    } else {
+      // Nessuna sessione in pausa → avvio normale
+      pushPage(context, ActiveSessionScreen(workout: workout));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final workoutProvider = context.watch<WorkoutProvider>();
@@ -56,11 +121,9 @@ class _SessionSelectorScreenState
                     color: cs.secondaryContainer,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.fitness_center,
-                    size: 40,
-                    color: cs.onSecondaryContainer,
-                  ),
+                  child: Icon(Icons.fitness_center,
+                      size: 40,
+                      color: cs.onSecondaryContainer),
                 ),
                 const SizedBox(height: 20),
                 Text(
@@ -104,7 +167,7 @@ class _SessionSelectorScreenState
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Banner sessione in pausa
+          // Banner sessione crash-recovery (in-memory attiva)
           if (sessionProvider.hasActiveSession)
             _PausedSessionBanner(
               workout: sessionProvider.currentWorkout!,
@@ -123,7 +186,8 @@ class _SessionSelectorScreenState
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
                       children: [
                         const Row(
                           children: [
@@ -169,7 +233,8 @@ class _SessionSelectorScreenState
           _SessionHeader(),
 
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+            padding:
+                const EdgeInsets.fromLTRB(20, 12, 20, 8),
             child: Text(
               'Scegli la scheda',
               style: Theme.of(context)
@@ -184,7 +249,8 @@ class _SessionSelectorScreenState
 
           Expanded(
             child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+              padding: const EdgeInsets.fromLTRB(
+                  16, 0, 16, 100),
               itemCount: workouts.length,
               separatorBuilder: (_, __) =>
                   const SizedBox(height: 8),
@@ -192,15 +258,14 @@ class _SessionSelectorScreenState
                 final workout = workouts[index];
                 return _WorkoutSessionCard(
                   workout: workout,
-                  onTap: () async {
-                    workoutProvider
-                        .loadWorkoutExercises(workout.key);
-                    if (!context.mounted) return;
-                    pushPage(
-                      context,
-                      ActiveSessionScreen(workout: workout),
-                    );
-                  },
+                  hasPausedSession: sessionProvider
+                      .hasPausedSessionForWorkout(workout.key),
+                  onTap: () => _handleWorkoutTap(
+                    context,
+                    workout,
+                    workoutProvider,
+                    sessionProvider,
+                  ),
                 );
               },
             ),
@@ -212,7 +277,7 @@ class _SessionSelectorScreenState
 }
 
 // ─────────────────────────────────────────────────────────────
-// _PausedSessionBanner
+// _PausedSessionBanner (crash recovery / sessione in-memory)
 // ─────────────────────────────────────────────────────────────
 
 class _PausedSessionBanner extends StatelessWidget {
@@ -229,14 +294,16 @@ class _PausedSessionBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          filter:
+              ImageFilter.blur(sigmaX: 12, sigmaY: 12),
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -261,10 +328,11 @@ class _PausedSessionBanner extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Sessione in pausa',
+                        'Sessione in corso',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
@@ -275,8 +343,8 @@ class _PausedSessionBanner extends StatelessWidget {
                         workout.name,
                         style: TextStyle(
                           fontSize: 12,
-                          color:
-                              cs.onPrimaryContainer.withOpacity(0.75),
+                          color: cs.onPrimaryContainer
+                              .withOpacity(0.75),
                         ),
                       ),
                     ],
@@ -328,11 +396,8 @@ class _SessionHeader extends StatelessWidget {
               color: cs.secondary,
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              Icons.fitness_center_rounded,
-              color: cs.onSecondary,
-              size: 26,
-            ),
+            child: Icon(Icons.fitness_center_rounded,
+                color: cs.onSecondary, size: 26),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -353,8 +418,8 @@ class _SessionHeader extends StatelessWidget {
                 Text(
                   'Scegli una scheda per iniziare',
                   style: TextStyle(
-                    color:
-                        cs.onSecondaryContainer.withOpacity(0.75),
+                    color: cs.onSecondaryContainer
+                        .withOpacity(0.75),
                     fontSize: 13,
                   ),
                 ),
@@ -374,10 +439,12 @@ class _SessionHeader extends StatelessWidget {
 class _WorkoutSessionCard extends StatelessWidget {
   final HiveWorkout workout;
   final VoidCallback onTap;
+  final bool hasPausedSession;
 
   const _WorkoutSessionCard({
     required this.workout,
     required this.onTap,
+    this.hasPausedSession = false,
   });
 
   String _formatDate(String iso) {
@@ -409,7 +476,8 @@ class _WorkoutSessionCard extends StatelessWidget {
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Text(
                       workout.name,
@@ -419,13 +487,37 @@ class _WorkoutSessionCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      _formatDate(workout.createdAt),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.outline,
+                    // Indicatore sessione in pausa
+                    if (hasPausedSession)
+                      Row(
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Colors.orange,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Sessione in pausa',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.orange,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Text(
+                        _formatDate(workout.createdAt),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.outline,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -433,11 +525,15 @@ class _WorkoutSessionCard extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: cs.primary,
+                  color: hasPausedSession
+                      ? Colors.orange
+                      : cs.primary,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.play_arrow,
+                child: Icon(
+                  hasPausedSession
+                      ? Icons.play_arrow_rounded
+                      : Icons.play_arrow,
                   color: Colors.white,
                   size: 20,
                 ),

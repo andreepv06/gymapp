@@ -355,12 +355,19 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     final allEx = _workoutProvider.currentExercises;
     final freeEx = allEx.where((e) => !e.isInCircuit).toList();
 
-    _items = [
-      for (final ex in freeEx)
-        _ListItem(type: _ItemType.exercise, refKey: ex.key),
-      for (final c in _circuits)
-        _ListItem(type: _ItemType.circuit, refKey: c.key),
-    ];
+    // Crea lista unificata e ordina per sortOrder condiviso
+    final topItems = <({int order, bool isCircuit, dynamic key})>[
+      ...freeEx.map((e) =>
+          (order: e.sortOrder, isCircuit: false, key: e.key as dynamic)),
+      ..._circuits.map((c) =>
+          (order: c.sortOrder, isCircuit: true, key: c.key as dynamic)),
+    ]..sort((a, b) => a.order.compareTo(b.order));
+
+    _items = topItems
+        .map((item) => item.isCircuit
+            ? _ListItem(type: _ItemType.circuit, refKey: item.key)
+            : _ListItem(type: _ItemType.exercise, refKey: item.key))
+        .toList();
 
     _circuitChildren = {
       for (final c in _circuits)
@@ -369,6 +376,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
             .toList(),
     };
   }
+
 
   void _syncWithProvider() {
     final allEx = _workoutProvider.currentExercises;
@@ -445,9 +453,10 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
         _persistQueue.then((_) => _persistTopLevelOrder(snapshot));
   }
 
-  Future<void> _persistTopLevelOrder(List<_ListItem> snapshot) async {
-    int exOrder = 0;
-    int circuitOrder = 0;
+  Future<void> _persistTopLevelOrder(
+    List<_ListItem> snapshot) async {
+    int unifiedOrder = 0; // Contatore unico per TUTTI gli item
+
     for (final item in snapshot) {
       if (item.type == _ItemType.exercise) {
         final we = _findExercise(item.refKey);
@@ -464,18 +473,20 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
             targetWeight: we.targetWeight,
             restSeconds: we.restSeconds,
             notes: we.notes,
-            sortOrder: exOrder++,
+            sortOrder: unifiedOrder++, // ← contatore unificato
           ),
         );
       } else {
         final c = _findCircuit(item.refKey);
         if (c == null) continue;
         await HiveDatabase.instance
-            .updateCircuitSortOrder(c.key, circuitOrder++);
+            .updateCircuitSortOrder(c.key, unifiedOrder++); // ← stesso contatore
       }
     }
     _workoutProvider.loadWorkoutExercises(widget.workoutId);
   }
+
+
 
   // ─────────────────────────────────────────
   // Collapse
