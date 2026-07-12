@@ -26,7 +26,8 @@ class AllenamentiScreen extends StatelessWidget {
             tooltip: 'Libreria esercizi',
             icon: Icon(Icons.fitness_center_outlined,
                 color: cs.tertiary),
-            onPressed: () => pushPage(context, const ExercisesScreen()),
+            onPressed: () =>
+                pushPage(context, const ExercisesScreen()),
           ),
           const SizedBox(width: 4),
         ],
@@ -44,7 +45,8 @@ class AllenamentiScreen extends StatelessWidget {
 
           // ── Le mie schede ──────────────────────────────────
           GlassCard(
-            onTap: () => pushPage(context, const WorkoutsScreen()),
+            onTap: () =>
+                pushPage(context, const WorkoutsScreen()),
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
@@ -148,8 +150,8 @@ class _PausedSessionCard extends StatelessWidget {
             ? Colors.orange.withOpacity(0.1)
             : Colors.orange.withOpacity(0.06),
         borderRadius: BorderRadius.circular(18),
-        border:
-            Border.all(color: Colors.orange.withOpacity(0.35)),
+        border: Border.all(
+            color: Colors.orange.withOpacity(0.35)),
       ),
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -167,9 +169,9 @@ class _PausedSessionCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              Text(
+              const Text(
                 'Sessione in pausa',
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.orange,
                   fontWeight: FontWeight.w700,
                   fontSize: 12,
@@ -222,7 +224,8 @@ class _PausedSessionCard extends StatelessWidget {
                             Text(
                               _fmtElapsed(elapsed),
                               style: TextStyle(
-                                  fontSize: 12, color: cs.outline),
+                                  fontSize: 12,
+                                  color: cs.outline),
                             ),
                           ],
                         ),
@@ -230,15 +233,16 @@ class _PausedSessionCard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                                Icons
-                                    .check_circle_outline_rounded,
-                                size: 12,
-                                color: cs.outline),
+                              Icons.check_circle_outline_rounded,
+                              size: 12,
+                              color: cs.outline,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               '$completed/$total serie',
                               style: TextStyle(
-                                  fontSize: 12, color: cs.outline),
+                                  fontSize: 12,
+                                  color: cs.outline),
                             ),
                           ],
                         ),
@@ -252,18 +256,16 @@ class _PausedSessionCard extends StatelessWidget {
           const SizedBox(height: 14),
 
           // Pulsante Riprendi
+          // FIX: ActiveSessionScreen richiede HiveWorkout workout,
+          // NON workoutId/workoutName. sp.currentWorkout è già
+          // il HiveWorkout corretto salvato da SessionProvider.
           GestureDetector(
             onTap: () {
-              final workoutId = sp.currentWorkout?.key;
-              final name = sp.currentWorkout?.name ??
-                  'Allenamento';
-              if (workoutId == null) return;
+              final workout = sp.currentWorkout;
+              if (workout == null) return;
               pushPage(
                 context,
-                ActiveSessionScreen(
-                  workoutId: workoutId,
-                  workoutName: name,
-                ),
+                ActiveSessionScreen(workout: workout),
               );
             },
             child: Container(

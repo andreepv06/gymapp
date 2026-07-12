@@ -1,843 +1,711 @@
-import 'dart:async';
 import 'dart:ui';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-
-import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
 import '../../providers/session_provider.dart';
+import '../../providers/exercise_provider.dart';
+import '../../providers/workout_provider.dart';
 import '../../widgets/glass_action_buttons.dart';
-import '../../widgets/glass_button.dart';
+import '../../widgets/glass_bottom_sheet.dart';
+import '../../widgets/workout_icon.dart';
+import '../../db/hive_database.dart';
 
 // ─────────────────────────────────────────────────────────────
-// ActiveSessionScreen — usa SessionProvider per tutto lo stato.
-// La schermata gestisce SOLO display timer locale e PageController
-// dei circuiti. Tutto il resto (serie, pesi, round, pausa,
-// ripristino) è in SessionProvider/Hive.
+// Tipi per lista piatta drag & drop
 // ─────────────────────────────────────────────────────────────
 
-// Elementi display top-level
-sealed class _DItem {}
+enum _SessionItemType { exercise, circuit }
 
-class _FreeExItem extends _DItem {
-  final SessionExercise ex;
-  _FreeExItem(this.ex);
-  String get key => ex.exerciseKey.toString();
+class _SessionItem {
+  final _SessionItemType type;
+  final dynamic data; // SessionExercise | String (circuitId)
+
+  _SessionItem({required this.type, required this.data});
+
+  String get stableId {
+    if (type == _SessionItemType.exercise) {
+      final ex = data as SessionExercise;
+      return 'ex_${ex.exerciseKey}';
+    } else {
+      return 'circuit_${data as String}';
+    }
+  }
 }
 
-class _CircuitItem extends _DItem {
-  final String circuitId;
-  final List<SessionExercise> exercises;
-  _CircuitItem(this.circuitId, this.exercises);
-}
-
+// ─────────────────────────────────────────────────────────────
+// ActiveSessionScreen
 // ─────────────────────────────────────────────────────────────
 
 class ActiveSessionScreen extends StatefulWidget {
-  final dynamic workoutId;
-  final String workoutName;
+  final HiveWorkout workout;
 
-  const ActiveSessionScreen({
-    super.key,
-    required this.workoutId,
-    required this.workoutName,
-  });
+  const ActiveSessionScreen({super.key, required this.workout});
 
   @override
-  State<ActiveSessionScreen> createState() => _ActiveSessionScreenState();
+  State<ActiveSessionScreen> createState() =>
+      _ActiveSessionScreenState();
 }
 
 class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
-  bool _initialized = false;
-  bool _finishing = false;
+  bool _started = false;
+  List<_SessionItem> _items = [];
+  List<String> _lastItemIds = [];
 
-  // Timer locale per display elapsed
-  Timer? _displayTimer;
-  int _displayElapsed = 0;
+  // ──────────────────────────────────────────────────────────
+  // MODALITÀ COMPATTA
+  //
+  // _expanded traccia per ogni esercizio (libero o dentro un
+  // circuito) se è stato espanso dall'utente. Vuoto = tutto
+  // compattato di default. L'espansione è indipendente per
+  // ciascun esercizio e più esercizi possono restare aperti
+  // contemporaneamente.
+  // I dati (ActiveSet, note, ecc.) non dipendono in alcun modo
+  // da questa mappa: restano intatti indipendentemente dallo
+  // stato di apertura/chiusura.
+  // ──────────────────────────────────────────────────────────
 
-  // PageController per ogni circuito (circuitId → controller)
-  final Map<String, PageController> _circuitControllers = {};
+  final Map<String, bool> _expanded = {};
+
+  bool _isExpanded(String id) => _expanded[id] ?? false;
+
+  void _toggleExpanded(String id) =>
+      setState(() => _expanded[id] = !(_expanded[id] ?? false));
+
+  String _freeExerciseId(dynamic exerciseKey) => 'ex_$exerciseKey';
+
+  String _circuitExerciseId(String circuitId, dynamic exerciseKey) =>
+      'circ_${circuitId}_$exerciseKey';
 
   @override
   void initState() {
     super.initState();
-    _initSession();
+    _startSession();
   }
 
-  @override
-  void dispose() {
-    _displayTimer?.cancel();
-    for (final c in _circuitControllers.values) {
-      c.dispose();
+  Future<void> _startSession() async {
+    final exercises =
+        context.read<WorkoutProvider>().currentExercises;
+    final circuits =
+        HiveDatabase.instance.getCircuits(widget.workout.key);
+    await context.read<SessionProvider>().startSession(
+          exercises,
+          widget.workout.key,
+          widget.workout.name,
+          widget.workout,
+          circuits: circuits,
+        );
+    if (mounted) {
+      setState(() {
+        _rebuildItemsFromProvider();
+        _started = true;
+      });
     }
-    super.dispose();
   }
 
-  // ── Init ─────────────────────────────────────────────────────
+  void _rebuildItemsFromProvider() {
+    final session = context.read<SessionProvider>();
+    final exercises = session.sessionExercises;
+    final freeEx = exercises.where((e) => !e.isInCircuit).toList();
+    final circuitIds = exercises
+        .where((e) => e.isInCircuit)
+        .map((e) => e.circuitId!)
+        .toSet()
+        .toList();
 
-  Future<void> _initSession() async {
-    final sp = context.read<SessionProvider>();
+    _items = [
+      for (final ex in freeEx)
+        _SessionItem(type: _SessionItemType.exercise, data: ex),
+      for (final cid in circuitIds)
+        _SessionItem(type: _SessionItemType.circuit, data: cid),
+    ];
+    _lastItemIds = _items.map((i) => i.stableId).toList();
+  }
 
-    // Sessione già attiva per questa scheda → ripristino
-    if (sp.hasActiveSession &&
-        sp.currentWorkout?.key == widget.workoutId) {
-      _displayElapsed = sp.elapsedSeconds;
-      _startDisplayTimer();
-      if (mounted) setState(() => _initialized = true);
+  void _syncWithProvider(SessionProvider session) {
+    final exercises = session.sessionExercises;
+    final freeEx = exercises.where((e) => !e.isInCircuit).toList();
+    final circuitIds = exercises
+        .where((e) => e.isInCircuit)
+        .map((e) => e.circuitId!)
+        .toSet()
+        .toList();
+
+    final validIds = <String>{
+      for (final ex in freeEx) 'ex_${ex.exerciseKey}',
+      for (final cid in circuitIds) 'circuit_$cid',
+    };
+    final localIds = _items.map((i) => i.stableId).toSet();
+
+    if (validIds.length == localIds.length &&
+        validIds.containsAll(localIds)) {
       return;
     }
 
-    // Carica dati dal DB
-    final db = HiveDatabase.instance;
-    final workouts = db.getWorkouts();
-    HiveWorkout? workout;
-    try {
-      workout = workouts.firstWhere((w) => w.key == widget.workoutId);
-    } catch (_) {
-      if (mounted) Navigator.of(context).pop();
-      return;
+    _items.removeWhere((i) => !validIds.contains(i.stableId));
+
+    for (final ex in freeEx) {
+      final id = 'ex_${ex.exerciseKey}';
+      if (!localIds.contains(id)) {
+        _items.add(_SessionItem(
+            type: _SessionItemType.exercise, data: ex));
+      }
+    }
+    for (final cid in circuitIds) {
+      final id = 'circuit_$cid';
+      if (!localIds.contains(id)) {
+        _items.add(
+            _SessionItem(type: _SessionItemType.circuit, data: cid));
+      }
+    }
+    _lastItemIds = _items.map((i) => i.stableId).toList();
+  }
+
+  void _onReorder(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex--;
+    if (oldIndex == newIndex) return;
+
+    setState(() {
+      final item = _items.removeAt(oldIndex);
+      _items.insert(newIndex, item);
+      _lastItemIds = _items.map((i) => i.stableId).toList();
+    });
+
+    final session = context.read<SessionProvider>();
+    final exercises = session.sessionExercises;
+    final newOrder = <SessionExercise>[];
+
+    for (final item in _items) {
+      if (item.type == _SessionItemType.exercise) {
+        newOrder.add(item.data as SessionExercise);
+      } else {
+        final cid = item.data as String;
+        final circuitExes =
+            exercises.where((e) => e.circuitId == cid).toList();
+        newOrder.addAll(circuitExes);
+      }
     }
 
-    final exercises = db.getWorkoutExercises(widget.workoutId)
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final circuits = db.getCircuits(widget.workoutId)
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    session.reorderSessionExercisesFlat(newOrder);
+  }
 
-    await sp.startSession(
-      exercises,
-      widget.workoutId,
-      widget.workoutName,
-      workout,
-      circuits: circuits,
+  Future<bool> _onWillPop() async {
+    final session = context.read<SessionProvider>();
+
+    if (!session.hasAnyData) {
+      await session.abandonSession();
+      return true;
+    }
+
+    final result = await showGlassDialog<String>(
+      context: context,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.pause_circle_outline,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 22,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Sessione in corso',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text('Cosa vuoi fare con la sessione?'),
+            const SizedBox(height: 24),
+            Column(
+              children: [
+                GlassFilledButton(
+                  onPressed: () => Navigator.pop(context, 'pause'),
+                  child: const Text('Metti in pausa'),
+                ),
+                const SizedBox(height: 10),
+                GlassFilledButton(
+                  onPressed: () => Navigator.pop(context, 'finish'),
+                  backgroundColor: Colors.green,
+                  child: const Text('Termina e salva'),
+                ),
+                const SizedBox(height: 10),
+                GlassOutlinedButton(
+                  onPressed: () =>
+                      Navigator.pop(context, 'abandon'),
+                  foregroundColor: Colors.red,
+                  child: const Text('Abbandona senza salvare'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
 
-    _displayElapsed = 0;
-    _startDisplayTimer();
+    if (result == null) return false;
 
-    if (mounted) setState(() => _initialized = true);
+    if (result == 'pause') {
+      session.pauseSession();
+      return true;
+    } else if (result == 'finish') {
+      await session.finishSession();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sessione salvata!')),
+        );
+      }
+      return true;
+    } else if (result == 'abandon') {
+      await session.abandonSession();
+      return true;
+    }
+
+    return false;
   }
 
-  void _startDisplayTimer() {
-    _displayTimer?.cancel();
-    _displayTimer =
-        Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _displayElapsed++);
+  Future<void> _finishSession() async {
+    final confirm = await showGlassDialog<bool>(
+      context: context,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.check_circle_outline,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 22,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Termina sessione',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Vuoi salvare e terminare la sessione?',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 24),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Termina',
+              onCancel: () => Navigator.pop(context, false),
+              onConfirm: () => Navigator.pop(context, true),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirm != true) return;
+
+    await context.read<SessionProvider>().finishSession();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sessione salvata!')),
+      );
+      Navigator.pop(context);
+    }
+  }
+
+  void _showAddExerciseSheet() {
+    final sessionProvider = context.read<SessionProvider>();
+    final exerciseProvider = context.read<ExerciseProvider>();
+
+    showGlassBottomSheet(
+      context: context,
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: exerciseProvider),
+          ChangeNotifierProvider.value(value: sessionProvider),
+        ],
+        child: const _AddMultipleExercisesSheet(),
+      ),
+    ).then((_) {
+      if (mounted) setState(() => _rebuildItemsFromProvider());
     });
   }
 
-  // ── Build display items ───────────────────────────────────────
-
-  List<_DItem> _buildDisplayItems(List<SessionExercise> exercises) {
-    final items = <_DItem>[];
-    final seen = <String>{};
-    for (final ex in exercises) {
-      if (ex.circuitId != null) {
-        final cid = ex.circuitId!;
-        if (!seen.contains(cid)) {
-          seen.add(cid);
-          final circuitExes =
-              exercises.where((e) => e.circuitId == cid).toList();
-          items.add(_CircuitItem(cid, circuitExes));
-        }
-      } else {
-        items.add(_FreeExItem(ex));
-      }
-    }
-    return items;
-  }
-
-  // ── PageController per circuito ───────────────────────────────
-
-  PageController _controllerFor(String circuitId, int currentRound) {
-    _circuitControllers.putIfAbsent(
-      circuitId,
-      () => PageController(initialPage: currentRound),
-    );
-    return _circuitControllers[circuitId]!;
-  }
-
-  // ── Reorder top-level ─────────────────────────────────────────
-
-  void _onTopReorder(
-      int oldIndex, int newIndex, List<_DItem> items, SessionProvider sp) {
-    if (newIndex > oldIndex) newIndex--;
-    final newItems = List<_DItem>.from(items);
-    final item = newItems.removeAt(oldIndex);
-    newItems.insert(newIndex, item);
-
-    // Ricostruisce la lista piatta di SessionExercise nel nuovo ordine
-    final newFlat = <SessionExercise>[];
-    for (final dItem in newItems) {
-      if (dItem is _FreeExItem) {
-        newFlat.add(dItem.ex);
-      } else if (dItem is _CircuitItem) {
-        final circuitExes = sp.sessionExercises
-            .where((e) => e.circuitId == dItem.circuitId)
-            .toList();
-        newFlat.addAll(circuitExes);
-      }
-    }
-
-    sp.reorderSessionExercisesFlat(newFlat);
-    HapticFeedback.selectionClick();
-  }
-
-  // ── Exit ─────────────────────────────────────────────────────
-
-  Future<void> _handleExit() async {
-    final sp = context.read<SessionProvider>();
-    _displayTimer?.cancel();
-
-    final completedSets = sp.completedSetsCount;
-    final totalSets = sp.totalSetsCount;
-
-    final result = await showCupertinoModalPopup<String>(
-      context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: const Text('Sessione di allenamento'),
-        message: Text(
-          completedSets > 0
-              ? '$completedSets/$totalSets serie completate · ${_fmtTime(_displayElapsed)}'
-              : 'Nessuna serie completata ancora.',
-        ),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(ctx, 'continue'),
-            child: const Text('Continua allenamento'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(ctx, 'pause'),
-            child: const Text('Metti in pausa'),
-          ),
-          if (completedSets > 0)
-            CupertinoActionSheetAction(
-              onPressed: () => Navigator.pop(ctx, 'save'),
-              child: const Text('Salva e termina'),
-            ),
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(ctx, 'delete'),
-            child: const Text('Elimina sessione'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(ctx, 'cancel'),
-          child: const Text('Annulla'),
-        ),
-      ),
-    );
-
-    if (!mounted) return;
-
-    switch (result) {
-      case 'continue':
-      case 'cancel':
-      case null:
-        _startDisplayTimer();
-        break;
-      case 'pause':
-        sp.pauseSession();
-        if (mounted) Navigator.of(context).pop();
-        break;
-      case 'save':
-        await _saveAndEnd(sp);
-        break;
-      case 'delete':
-        await sp.abandonSession();
-        if (mounted) Navigator.of(context).pop();
-        break;
-    }
-  }
-
-  Future<void> _saveAndEnd(SessionProvider sp) async {
-    if (_finishing) return;
-    if (sp.completedSetsCount == 0) {
-      // Nessuna serie → elimina senza salvare
-      await sp.abandonSession();
-      if (mounted) Navigator.of(context).pop();
-      return;
-    }
-    setState(() => _finishing = true);
-    await sp.finishSession();
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  String _fmtTime(int s) {
-    final h = s ~/ 3600;
-    final m = (s % 3600) ~/ 60;
-    final sec = s % 60;
-    if (h > 0) {
-      return '${h.toString().padLeft(2, '0')}:'
-          '${m.toString().padLeft(2, '0')}:'
-          '${sec.toString().padLeft(2, '0')}';
-    }
-    return '${m.toString().padLeft(2, '0')}:'
-        '${sec.toString().padLeft(2, '0')}';
-  }
-
-  // ── Build ─────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    if (!_initialized) {
-      return Scaffold(
-        backgroundColor: cs.surface,
-        appBar: AppBar(
-          backgroundColor: cs.surface,
-          title: Text(widget.workoutName),
-        ),
-        body: const Center(child: CircularProgressIndicator()),
+    if (!_started) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    final sp = context.watch<SessionProvider>();
-    final displayItems = _buildDisplayItems(sp.sessionExercises);
-    final completed = sp.completedSetsCount;
-    final total = sp.totalSetsCount;
-    final progress = total > 0 ? completed / total : 0.0;
+    final sessionProvider = context.watch<SessionProvider>();
+    _syncWithProvider(sessionProvider);
+
+    final exercises = sessionProvider.sessionExercises;
+    final exerciseSets = sessionProvider.exerciseSets;
+    final allSets =
+        exerciseSets.values.expand((s) => s).toList();
+    final completedSets = allSets.where((s) => s.completed).length;
+    final totalSets = allSets.length;
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _handleExit();
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final canPop = await _onWillPop();
+        if (canPop && mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
-        backgroundColor: cs.surface,
         appBar: AppBar(
-          backgroundColor: cs.surface,
-          leading: IconButton(
-            icon: const Icon(Icons.close_rounded),
-            onPressed: _handleExit,
-          ),
-          title: Column(
+          title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                widget.workoutName,
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w700),
+              WorkoutAvatar(
+                iconId: widget.workout.iconId,
+                iconColorIndex: widget.workout.iconColorIndex,
+                customImagePath: widget.workout.customImagePath,
+                size: 28,
+                iconSize: 14,
+                borderRadius: 7,
               ),
-              Text(
-                _fmtTime(_displayElapsed),
-                style: TextStyle(fontSize: 12, color: cs.outline),
-              ),
+              const SizedBox(width: 8),
+              Text(widget.workout.name),
             ],
           ),
-          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios),
+            onPressed: () async {
+              final canPop = await _onWillPop();
+              if (canPop && mounted) Navigator.of(context).pop();
+            },
+          ),
           actions: [
-            _finishing
-                ? const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : GlassTextButton(
-                    onPressed: completed > 0
-                        ? () => _saveAndEnd(sp)
-                        : null,
-                    foregroundColor:
-                        completed > 0 ? cs.primary : cs.outline,
-                    child: const Text(
-                      'Termina',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
+            GlassTextButton(
+              onPressed: _showAddExerciseSheet,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.fitness_center, size: 18),
+                  SizedBox(width: 6),
+                  Text('Aggiungi'),
+                ],
+              ),
+            ),
+            GlassTextButton(
+              onPressed: _finishSession,
+              child: const Text('Termina'),
+            ),
             const SizedBox(width: 4),
           ],
         ),
-        body: Stack(
+        body: Column(
           children: [
-            // Corpo principale
-            CustomScrollView(
-              slivers: [
-                // Barra progresso
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                    child: Column(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 8,
-                            backgroundColor:
-                                cs.primary.withOpacity(0.12),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$completed / $total serie completate',
-                          style: TextStyle(
-                              fontSize: 11, color: cs.outline),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+            // Barra progresso
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: LinearProgressIndicator(
+                      value: totalSets > 0
+                          ? completedSets / totalSets
+                          : 0,
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ),
-                ),
-
-                // Lista riordinabile
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                      16,
-                      8,
-                      16,
-                      // Spazio extra per rest overlay + bottom bar
-                      sp.isResting ? 200 : 120),
-                  sliver: SliverReorderableList(
-                    itemCount: displayItems.length,
-                    itemBuilder: (ctx, index) {
-                      final item = displayItems[index];
-                      final stableKey = item is _FreeExItem
-                          ? ValueKey('fex_${item.key}')
-                          : ValueKey(
-                              'circuit_${(item as _CircuitItem).circuitId}');
-                      return ReorderableDelayedDragStartListener(
-                        key: stableKey,
-                        index: index,
-                        child: item is _FreeExItem
-                            ? _FreeExCard(
-                                key: ValueKey(
-                                    'fex_card_${item.key}'),
-                                ex: item.ex,
-                                sp: sp,
-                              )
-                            : _CircuitBlock(
-                                key: ValueKey(
-                                    'circuit_block_${(item as _CircuitItem).circuitId}'),
-                                circuitId: item.circuitId,
-                                exercises: item.exercises,
-                                sp: sp,
-                                controller: _controllerFor(
-                                    item.circuitId,
-                                    sp.getCurrentRound(
-                                        item.circuitId)),
-                              ),
-                      );
-                    },
-                    onReorder: (oldIndex, newIndex) =>
-                        _onTopReorder(
-                            oldIndex, newIndex, displayItems, sp),
-                    proxyDecorator: (child, index, animation) =>
-                        AnimatedBuilder(
-                      animation: animation,
-                      builder: (_, __) => Material(
-                        elevation: 8,
-                        borderRadius: BorderRadius.circular(16),
-                        shadowColor: Colors.black38,
-                        color: Colors.transparent,
-                        child: child,
-                      ),
-                    ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '$completedSets / $totalSets serie',
+                    style: Theme.of(context).textTheme.labelMedium,
                   ),
-                ),
-              ],
-            ),
-
-            // Rest timer overlay
-            if (sp.isResting)
-              _RestOverlay(
-                total: sp.restTotal,
-                remaining: sp.restRemaining,
-                paused: sp.restPaused,
-                onTogglePause: sp.toggleRestPause,
-                onSkip: sp.skipRest,
-                onAddTime: sp.addRestTime,
+                ],
               ),
+            ),
+            const SizedBox(height: 8),
+
+            // Lista esercizi riordinabile
+            Expanded(
+              child: ReorderableListView(
+                padding:
+                    const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                buildDefaultDragHandles: false,
+                proxyDecorator: (child, index, animation) =>
+                    AnimatedBuilder(
+                  animation: animation,
+                  builder: (_, __) => Material(
+                    elevation: 8,
+                    borderRadius: BorderRadius.circular(16),
+                    shadowColor: Colors.black38,
+                    child: child,
+                  ),
+                ),
+                onReorder: _onReorder,
+                children: _items.asMap().entries.map((e) {
+                  final index = e.key;
+                  final item = e.value;
+
+                  if (item.type == _SessionItemType.exercise) {
+                    final ex = item.data as SessionExercise;
+                    final sets =
+                        exerciseSets[ex.exerciseKey] ?? [];
+                    final id = _freeExerciseId(ex.exerciseKey);
+
+                    return ReorderableDelayedDragStartListener(
+                      key: ValueKey(item.stableId),
+                      index: index,
+                      child: _ExerciseSessionCard(
+                        sessionExercise: ex,
+                        sets: sets,
+                        isExpanded: _isExpanded(id),
+                        onToggleExpand: () =>
+                            _toggleExpanded(id),
+                        onToggle: (i) => sessionProvider
+                            .toggleSet(ex.exerciseKey, i),
+                        onUpdate: (i, w, r) =>
+                            sessionProvider.updateSet(
+                                ex.exerciseKey, i, w, r),
+                        onAddSet: () => sessionProvider
+                            .addSetToExercise(ex.exerciseKey),
+                        onRemoveSet: () =>
+                            sessionProvider.removeSetFromExercise(
+                                ex.exerciseKey),
+                        onRemoveExercise: () {
+                          sessionProvider
+                              .removeExerciseFromSession(
+                                  ex.exerciseKey);
+                          setState(
+                              () => _rebuildItemsFromProvider());
+                        },
+                        onEditNote: (note) =>
+                            sessionProvider.updateExerciseNote(
+                                ex.exerciseKey, note),
+                      ),
+                    );
+                  } else {
+                    final circuitId = item.data as String;
+                    final circuitExercises = exercises
+                        .where((ex) => ex.circuitId == circuitId)
+                        .toList();
+
+                    return ReorderableDelayedDragStartListener(
+                      key: ValueKey(item.stableId),
+                      index: index,
+                      child: _CircuitSessionBlock(
+                        circuitId: circuitId,
+                        exercises: circuitExercises,
+                        isExpanded: (exKey) => _isExpanded(
+                            _circuitExerciseId(circuitId, exKey)),
+                        onToggleExpand: (exKey) =>
+                            _toggleExpanded(_circuitExerciseId(
+                                circuitId, exKey)),
+                        onReorderExercises: (reordered) {
+                          sessionProvider.reorderCircuitExercises(
+                              circuitId, reordered);
+                        },
+                      ),
+                    );
+                  }
+                }).toList(),
+              ),
+            ),
           ],
         ),
-        bottomNavigationBar: Padding(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            8,
-            24,
-            MediaQuery.of(context).padding.bottom + 16,
-          ),
-          child: GlassButton(
-            onTap: _finishing
-                ? () {}
-                : () => _saveAndEnd(sp),
-            icon: completed > 0
-                ? Icons.check_circle_outline_rounded
-                : Icons.close_rounded,
-            label: _finishing
-                ? 'Salvataggio...'
-                : completed > 0
-                    ? 'Termina sessione'
-                    : 'Chiudi senza salvare',
-          ),
-        ),
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _FreeExCard — card esercizio libero
+// Blocco circuito — drag & drop interno
 // ─────────────────────────────────────────────────────────────
 
-class _FreeExCard extends StatelessWidget {
-  final SessionExercise ex;
-  final SessionProvider sp;
-
-  const _FreeExCard({super.key, required this.ex, required this.sp});
-
-  @override
-  Widget build(BuildContext context) {
-    final sets = sp.exerciseSets[ex.exerciseKey] ?? [];
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isDark ? cs.surface.withOpacity(0.8) : cs.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withOpacity(0.1)
-              : cs.outlineVariant,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color:
-                Colors.black.withOpacity(isDark ? 0.15 : 0.04),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Row(
-              children: [
-                Icon(Icons.drag_handle_rounded,
-                    size: 18, color: cs.outline.withOpacity(0.4)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(ex.exerciseName,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15)),
-                      Text(ex.muscleGroup,
-                          style: TextStyle(
-                              fontSize: 12, color: cs.outline)),
-                    ],
-                  ),
-                ),
-                if ((ex.restSeconds ?? 0) > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: cs.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.timer_outlined,
-                            size: 12, color: cs.primary),
-                        const SizedBox(width: 4),
-                        Text('${ex.restSeconds}s',
-                            style: TextStyle(
-                                fontSize: 11, color: cs.primary)),
-                      ],
-                    ),
-                  ),
-                const SizedBox(width: 8),
-                // Aggiungi/rimuovi serie
-                GestureDetector(
-                  onTap: () =>
-                      sp.removeSetFromExercise(ex.exerciseKey),
-                  child: Icon(Icons.remove_circle_outline,
-                      size: 18, color: cs.outline.withOpacity(0.5)),
-                ),
-                const SizedBox(width: 6),
-                GestureDetector(
-                  onTap: () => sp.addSetToExercise(ex.exerciseKey),
-                  child: Icon(Icons.add_circle_outline,
-                      size: 18, color: cs.primary),
-                ),
-              ],
-            ),
-          ),
-
-          // Intestazioni
-          _SetHeaders(cs: cs),
-          const SizedBox(height: 4),
-
-          // Righe serie
-          ...sets.asMap().entries.map((e) => _SetRow(
-                key: ValueKey('free_${ex.exerciseKey}_${e.key}'),
-                index: e.key,
-                set: e.value,
-                onToggle: () =>
-                    sp.toggleSet(ex.exerciseKey, e.key),
-                onWeightChanged: (w) => sp.updateSet(
-                    ex.exerciseKey, e.key, w, e.value.reps),
-                onRepsChanged: (r) => sp.updateSet(
-                    ex.exerciseKey, e.key, e.value.weight, r),
-              )),
-          const SizedBox(height: 10),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// _CircuitBlock — circuito con PageView per round
-// ─────────────────────────────────────────────────────────────
-
-class _CircuitBlock extends StatefulWidget {
+class _CircuitSessionBlock extends StatelessWidget {
   final String circuitId;
   final List<SessionExercise> exercises;
-  final SessionProvider sp;
-  final PageController controller;
+  final bool Function(dynamic exerciseKey) isExpanded;
+  final void Function(dynamic exerciseKey) onToggleExpand;
+  final void Function(List<SessionExercise>) onReorderExercises;
 
-  const _CircuitBlock({
+  const _CircuitSessionBlock({
     super.key,
     required this.circuitId,
     required this.exercises,
-    required this.sp,
-    required this.controller,
+    required this.isExpanded,
+    required this.onToggleExpand,
+    required this.onReorderExercises,
   });
 
   @override
-  State<_CircuitBlock> createState() => _CircuitBlockState();
-}
-
-class _CircuitBlockState extends State<_CircuitBlock> {
-  @override
   Widget build(BuildContext context) {
+    final session = context.watch<SessionProvider>();
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final sp = widget.sp;
-    final totalRounds = sp.getTotalRounds(widget.circuitId);
-    final currentRound = sp.getCurrentRound(widget.circuitId);
-
-    // Altezza stimata: header + navigazione + esercizi
-    final estimatedHeight = 80.0 + // header
-        (totalRounds > 1 ? 52.0 : 0) + // navigazione
-        widget.exercises.length * 152.0; // esercizi
+    final currentRound = session.getCurrentRound(circuitId);
+    final totalRounds = session.getTotalRounds(circuitId);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isDark
-            ? cs.tertiaryContainer.withOpacity(0.15)
-            : cs.tertiaryContainer.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(16),
+            ? cs.tertiaryContainer.withOpacity(0.12)
+            : cs.tertiaryContainer.withOpacity(0.25),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: cs.tertiary.withOpacity(0.4),
+          color: cs.tertiary.withOpacity(0.35),
           width: 1.5,
         ),
       ),
       child: Column(
         children: [
-          // Header circuito
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          // Header circuito con navigazione round
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: cs.tertiary.withOpacity(0.15),
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(18)),
+            ),
             child: Row(
               children: [
-                Icon(Icons.drag_handle_rounded,
-                    size: 18,
-                    color: cs.outline.withOpacity(0.4)),
+                Icon(Icons.loop_rounded,
+                    color: cs.tertiary, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Circuito',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: cs.tertiary,
+                    fontSize: 14,
+                  ),
+                ),
+                const Spacer(),
+                _RoundNavBtn(
+                  icon: Icons.chevron_left,
+                  enabled: currentRound > 0,
+                  color: cs.tertiary,
+                  onTap: () => session.prevRound(circuitId),
+                ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: cs.tertiaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.loop_rounded,
-                      color: cs.onTertiaryContainer, size: 16),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        // Nome circuito non disponibile in SessionExercise
-                        // usiamo "Circuito" come fallback
-                        widget.exercises.isNotEmpty
-                            ? 'Circuito'
-                            : 'Circuito',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          color: cs.onSurface,
-                        ),
-                      ),
-                      Text(
-                        '$totalRounds cicl${totalRounds == 1 ? 'o' : 'i'} · ${widget.exercises.length} esercizi',
-                        style:
-                            TextStyle(fontSize: 12, color: cs.tertiary),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  'Ciclo ${currentRound + 1}/$totalRounds',
-                  style: TextStyle(
-                    fontSize: 12,
                     color: cs.tertiary,
-                    fontWeight: FontWeight.w700,
+                    borderRadius: BorderRadius.circular(20),
                   ),
+                  child: Text(
+                    'Ciclo ${currentRound + 1} di $totalRounds',
+                    style: TextStyle(
+                      color: cs.onTertiary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _RoundNavBtn(
+                  icon: Icons.chevron_right,
+                  enabled: currentRound < totalRounds - 1,
+                  color: cs.tertiary,
+                  onTap: () => session.nextRound(circuitId),
                 ),
               ],
             ),
           ),
 
-          // Navigazione round (solo se > 1)
-          if (totalRounds > 1)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Row(
-                children: [
-                  _CircuitNavBtn(
-                    icon: Icons.chevron_left_rounded,
-                    enabled: currentRound > 0,
-                    cs: cs,
-                    onTap: () {
-                      final prev = currentRound - 1;
-                      if (prev >= 0) {
-                        widget.controller.animateToPage(
-                          prev,
-                          duration:
-                              const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                        sp.setRound(widget.circuitId, prev);
-                      }
-                    },
-                  ),
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(totalRounds, (i) {
-                        final isCur = i == currentRound;
-                        // Conta completati nel round i
-                        int done = 0;
-                        int tot = 0;
-                        for (final ex in widget.exercises) {
-                          final sets = sp.getCircuitSetsForRound(
-                              widget.circuitId, i, ex.exerciseKey);
-                          done +=
-                              sets.where((s) => s.completed).length;
-                          tot += sets.length;
-                        }
-                        final allDone = tot > 0 && done == tot;
-
-                        return GestureDetector(
-                          onTap: () {
-                            widget.controller.animateToPage(
-                              i,
-                              duration:
-                                  const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                            );
-                            sp.setRound(widget.circuitId, i);
-                          },
-                          child: AnimatedContainer(
-                            duration:
-                                const Duration(milliseconds: 200),
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 4),
-                            width: isCur ? 36 : 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: allDone
-                                  ? cs.tertiary
-                                  : isCur
-                                      ? cs.tertiaryContainer
-                                      : cs.outlineVariant
-                                          .withOpacity(0.3),
-                              borderRadius:
-                                  BorderRadius.circular(14),
-                              border: isCur
-                                  ? Border.all(
-                                      color: cs.tertiary,
-                                      width: 1.5)
-                                  : null,
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${i + 1}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: allDone
-                                      ? cs.onTertiary
-                                      : isCur
-                                          ? cs.tertiary
-                                          : cs.outline,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
+          // Esercizi del circuito riordinabili
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: exercises.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      'Nessun esercizio',
+                      style: TextStyle(
+                        color: cs.outline,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
-                  ),
-                  _CircuitNavBtn(
-                    icon: Icons.chevron_right_rounded,
-                    enabled: currentRound < totalRounds - 1,
-                    cs: cs,
-                    onTap: () {
-                      final next = currentRound + 1;
-                      if (next < totalRounds) {
-                        widget.controller.animateToPage(
-                          next,
-                          duration:
-                              const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                        sp.setRound(widget.circuitId, next);
-                      }
+                  )
+                : ReorderableListView(
+                    shrinkWrap: true,
+                    physics:
+                        const NeverScrollableScrollPhysics(),
+                    buildDefaultDragHandles: false,
+                    proxyDecorator: (child, index, animation) =>
+                        AnimatedBuilder(
+                      animation: animation,
+                      builder: (_, __) => Material(
+                        elevation: 6,
+                        borderRadius: BorderRadius.circular(14),
+                        child: child,
+                      ),
+                    ),
+                    onReorder: (oldIndex, newIndex) {
+                      if (newIndex > oldIndex) newIndex--;
+                      final reordered =
+                          List<SessionExercise>.from(exercises);
+                      final item = reordered.removeAt(oldIndex);
+                      reordered.insert(newIndex, item);
+                      onReorderExercises(reordered);
                     },
-                  ),
-                ],
-              ),
-            ),
+                    children: exercises.asMap().entries.map((e) {
+                      final ex = e.value;
+                      final sets = session.getCircuitSets(
+                          circuitId, ex.exerciseKey);
 
-          // PageView dei round
-          SizedBox(
-            height: estimatedHeight,
-            child: PageView.builder(
-              controller: widget.controller,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: totalRounds,
-              onPageChanged: (i) {
-                sp.setRound(widget.circuitId, i);
-              },
-              itemBuilder: (ctx, roundIdx) {
-                return _CircuitRoundPage(
-                  circuitId: widget.circuitId,
-                  roundIndex: roundIdx,
-                  exercises: widget.exercises,
-                  sp: sp,
-                );
-              },
-            ),
+                      return ReorderableDelayedDragStartListener(
+                        key: ValueKey(
+                            '${ex.exerciseKey}_$circuitId'),
+                        index: e.key,
+                        child: _ExerciseSessionCard(
+                          key: ValueKey(
+                              '${ex.exerciseKey}_${circuitId}_$currentRound'),
+                          sessionExercise: ex,
+                          sets: sets,
+                          isInCircuit: true,
+                          isExpanded: isExpanded(ex.exerciseKey),
+                          onToggleExpand: () =>
+                              onToggleExpand(ex.exerciseKey),
+                          onToggle: (i) => session.toggleSet(
+                              ex.exerciseKey, i,
+                              circuitId: circuitId),
+                          onUpdate: (i, w, r) => session.updateSet(
+                              ex.exerciseKey, i, w, r,
+                              circuitId: circuitId),
+                          onAddSet: () => session.addSetToExercise(
+                              ex.exerciseKey,
+                              circuitId: circuitId),
+                          onRemoveSet: () =>
+                              session.removeSetFromExercise(
+                                  ex.exerciseKey,
+                                  circuitId: circuitId),
+                          onRemoveExercise: () =>
+                              session.removeExerciseFromSession(
+                                  ex.exerciseKey),
+                          onEditNote: (note) =>
+                              session.updateExerciseNote(
+                                  ex.exerciseKey, note),
+                        ),
+                      );
+                    }).toList(),
+                  ),
           ),
         ],
       ),
@@ -845,16 +713,20 @@ class _CircuitBlockState extends State<_CircuitBlock> {
   }
 }
 
-class _CircuitNavBtn extends StatelessWidget {
+// ─────────────────────────────────────────────────────────────
+// _RoundNavBtn
+// ─────────────────────────────────────────────────────────────
+
+class _RoundNavBtn extends StatelessWidget {
   final IconData icon;
   final bool enabled;
-  final ColorScheme cs;
+  final Color color;
   final VoidCallback onTap;
 
-  const _CircuitNavBtn({
+  const _RoundNavBtn({
     required this.icon,
     required this.enabled,
-    required this.cs,
+    required this.color,
     required this.onTap,
   });
 
@@ -863,19 +735,23 @@ class _CircuitNavBtn extends StatelessWidget {
     return GestureDetector(
       onTap: enabled ? onTap : null,
       child: Container(
-        width: 36,
-        height: 36,
+        width: 32,
+        height: 32,
         decoration: BoxDecoration(
           color: enabled
-              ? cs.tertiaryContainer
-              : cs.outlineVariant.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(10),
+              ? color.withOpacity(0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: enabled
+                ? color.withOpacity(0.4)
+                : color.withOpacity(0.15),
+          ),
         ),
         child: Icon(
           icon,
-          color:
-              enabled ? cs.tertiary : cs.outline.withOpacity(0.3),
-          size: 22,
+          color: enabled ? color : color.withOpacity(0.3),
+          size: 20,
         ),
       ),
     );
@@ -883,165 +759,676 @@ class _CircuitNavBtn extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _CircuitRoundPage — pagina singola round di un circuito
+// Sheet aggiungi esercizi multipli
 // ─────────────────────────────────────────────────────────────
 
-class _CircuitRoundPage extends StatelessWidget {
-  final String circuitId;
-  final int roundIndex;
-  final List<SessionExercise> exercises;
-  final SessionProvider sp;
+class _AddMultipleExercisesSheet extends StatefulWidget {
+  const _AddMultipleExercisesSheet();
 
-  const _CircuitRoundPage({
-    required this.circuitId,
-    required this.roundIndex,
-    required this.exercises,
-    required this.sp,
-  });
+  @override
+  State<_AddMultipleExercisesSheet> createState() =>
+      _AddMultipleExercisesSheetState();
+}
+
+class _AddMultipleExercisesSheetState
+    extends State<_AddMultipleExercisesSheet> {
+  String _search = '';
+  String _muscleFilter = 'Tutti';
+  final Set<dynamic> _selected = {};
+  bool _loading = false;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final allExercises = context.watch<ExerciseProvider>().exercises;
+    final sessionProvider = context.read<SessionProvider>();
+    final alreadyIn = sessionProvider.sessionExercises
+        .map((e) => e.exerciseKey)
+        .toSet();
+    final muscleGroups =
+        ({...allExercises.map((e) => e.muscleGroup)}.toList()
+          ..sort());
+    final groups = ['Tutti', ...muscleGroups];
+    final filtered = allExercises.where((e) {
+      final matchMuscle = _muscleFilter == 'Tutti' ||
+          e.muscleGroup == _muscleFilter;
+      final matchSearch = _search.isEmpty ||
+          e.name.toLowerCase().contains(_search.toLowerCase());
+      return matchMuscle && matchSearch;
+    }).toList();
 
-    return Column(
-      children: exercises.map((ex) {
-        final sets = sp.getCircuitSetsForRound(
-            circuitId, roundIndex, ex.exerciseKey);
-
-        return Container(
-          margin: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-          decoration: BoxDecoration(
-            color: isDark
-                ? cs.surface.withOpacity(0.7)
-                : cs.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withOpacity(0.08)
-                  : cs.outlineVariant.withOpacity(0.6),
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.85,
+      child: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: GlassSheetHandle(),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _selected.isEmpty
+                        ? 'Aggiungi esercizi'
+                        : '${_selected.length} selezionati',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                if (_selected.isNotEmpty)
+                  GlassTextButton(
+                    onPressed: () =>
+                        setState(() => _selected.clear()),
+                    child: const Text('Deseleziona tutto'),
+                  ),
+              ],
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header esercizio nel circuito
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(ex.exerciseName,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14)),
-                          Text(ex.muscleGroup,
-                              style: TextStyle(
-                                  fontSize: 11, color: cs.outline)),
-                        ],
-                      ),
-                    ),
-                    // Aggiungi/rimuovi serie
-                    GestureDetector(
-                      onTap: () => sp.removeSetFromExercise(
-                          ex.exerciseKey,
-                          circuitId: circuitId),
-                      child: Icon(Icons.remove_circle_outline,
-                          size: 16,
-                          color: cs.outline.withOpacity(0.5)),
-                    ),
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () => sp.addSetToExercise(
-                          ex.exerciseKey,
-                          circuitId: circuitId),
-                      child: Icon(Icons.add_circle_outline,
-                          size: 16, color: cs.tertiary),
-                    ),
-                  ],
-                ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              decoration: const InputDecoration(
+                hintText: 'Cerca esercizio...',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
               ),
-              _SetHeaders(cs: cs),
-              const SizedBox(height: 2),
-              ...sets.asMap().entries.map((e) => _SetRow(
-                    key: ValueKey(
-                        'circuit_${circuitId}_r${roundIndex}_${ex.exerciseKey}_${e.key}'),
-                    index: e.key,
-                    set: e.value,
-                    onToggle: () => sp.toggleCircuitSetForRound(
-                        circuitId,
-                        roundIndex,
-                        ex.exerciseKey,
-                        e.key),
-                    onWeightChanged: (w) =>
-                        sp.updateCircuitSetForRound(
-                            circuitId,
-                            roundIndex,
-                            ex.exerciseKey,
-                            e.key,
-                            w,
-                            e.value.reps),
-                    onRepsChanged: (r) =>
-                        sp.updateCircuitSetForRound(
-                            circuitId,
-                            roundIndex,
-                            ex.exerciseKey,
-                            e.key,
-                            e.value.weight,
-                            r),
-                  )),
-              const SizedBox(height: 8),
-            ],
+              onChanged: (v) => setState(() => _search = v),
+            ),
           ),
-        );
-      }).toList(),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 40,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: groups.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: 8),
+              itemBuilder: (_, i) {
+                final g = groups[i];
+                return ChoiceChip(
+                  label: Text(g),
+                  selected: _muscleFilter == g,
+                  onSelected: (_) =>
+                      setState(() => _muscleFilter = g),
+                  visualDensity: VisualDensity.compact,
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView.builder(
+              itemCount: filtered.length,
+              itemBuilder: (_, i) {
+                final ex = filtered[i];
+                final isAlreadyIn = alreadyIn.contains(ex.key);
+                final isSelected = _selected.contains(ex.key);
+
+                return ListTile(
+                  leading: isAlreadyIn
+                      ? Icon(
+                          Icons.check_circle,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary,
+                        )
+                      : Checkbox(
+                          value: isSelected,
+                          onChanged: (_) {
+                            setState(() {
+                              if (isSelected) {
+                                _selected.remove(ex.key);
+                              } else {
+                                _selected.add(ex.key);
+                              }
+                            });
+                          },
+                        ),
+                  title: Text(
+                    ex.name,
+                    style: TextStyle(
+                      color: isAlreadyIn
+                          ? Theme.of(context).colorScheme.outline
+                          : null,
+                    ),
+                  ),
+                  subtitle: Text(ex.muscleGroup),
+                  enabled: !isAlreadyIn,
+                  onTap: isAlreadyIn
+                      ? null
+                      : () {
+                          setState(() {
+                            if (isSelected) {
+                              _selected.remove(ex.key);
+                            } else {
+                              _selected.add(ex.key);
+                            }
+                          });
+                        },
+                );
+              },
+            ),
+          ),
+          if (_selected.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                MediaQuery.of(context).padding.bottom + 16,
+              ),
+              child: GlassFilledButton(
+                onPressed: _loading
+                    ? null
+                    : () async {
+                        setState(() => _loading = true);
+                        final allEx = context
+                            .read<ExerciseProvider>()
+                            .exercises;
+                        for (final key in _selected) {
+                          try {
+                            final ex = allEx
+                                .firstWhere((e) => e.key == key);
+                            await context
+                                .read<SessionProvider>()
+                                .addExerciseToSession(
+                                  exerciseKey: ex.key,
+                                  exerciseName: ex.name,
+                                  muscleGroup: ex.muscleGroup,
+                                  notes: ex.notes,
+                                );
+                          } catch (_) {}
+                        }
+                        if (mounted) Navigator.pop(context);
+                      },
+                child: _loading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        'Aggiungi ${_selected.length} esercizi'),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _SetHeaders
+// Scheda esercizio nella sessione — compatta o espansa
 // ─────────────────────────────────────────────────────────────
 
-class _SetHeaders extends StatelessWidget {
-  final ColorScheme cs;
-  const _SetHeaders({required this.cs});
+class _ExerciseSessionCard extends StatelessWidget {
+  final SessionExercise sessionExercise;
+  final List<ActiveSet> sets;
+  final bool isExpanded;
+  final VoidCallback onToggleExpand;
+  final void Function(int) onToggle;
+  final void Function(int, double, int) onUpdate;
+  final VoidCallback onAddSet;
+  final VoidCallback onRemoveSet;
+  final VoidCallback onRemoveExercise;
+  final void Function(String) onEditNote;
+  final bool isInCircuit;
+
+  const _ExerciseSessionCard({
+    super.key,
+    required this.sessionExercise,
+    required this.sets,
+    required this.isExpanded,
+    required this.onToggleExpand,
+    required this.onToggle,
+    required this.onUpdate,
+    required this.onAddSet,
+    required this.onRemoveSet,
+    required this.onRemoveExercise,
+    required this.onEditNote,
+    this.isInCircuit = false,
+  });
+
+  void _showNoteDialog(BuildContext context) {
+    final ctrl = TextEditingController(
+        text: sessionExercise.sessionNote ?? '');
+
+    showGlassDialog(
+      context: context,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.sticky_note_2_outlined,
+                  color: Theme.of(context).colorScheme.tertiary,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Nota — ${sessionExercise.exerciseName}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              maxLines: 3,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText:
+                    'Es. grip più stretto, ROM completo...',
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (sessionExercise.sessionNote != null &&
+                sessionExercise.sessionNote!.isNotEmpty)
+              GlassTextButton(
+                onPressed: () {
+                  onEditNote('');
+                  Navigator.pop(context);
+                },
+                foregroundColor: Colors.red,
+                child: const Text('Elimina nota'),
+              ),
+            const SizedBox(height: 8),
+            GlassDialogActions(
+              cancelLabel: 'Annulla',
+              confirmLabel: 'Salva',
+              onCancel: () => Navigator.pop(context),
+              onConfirm: () {
+                onEditNote(ctrl.text.trim());
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(48, 2, 12, 0),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Text(
-              'Peso (kg)',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 10,
-                color: cs.outline,
-                fontWeight: FontWeight.w600,
-              ),
+    final ex = sessionExercise;
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final completedCount = sets.where((s) => s.completed).length;
+    final allDone =
+        completedCount == sets.length && sets.isNotEmpty;
+    final hasNote =
+        ex.sessionNote != null && ex.sessionNote!.isNotEmpty;
+    final hasExerciseNote =
+        ex.notes != null && ex.notes!.isNotEmpty;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+        child: Container(
+          margin: EdgeInsets.only(bottom: isInCircuit ? 8 : 12),
+          decoration: BoxDecoration(
+            color: isDark
+                ? cs.surface.withOpacity(0.7)
+                : cs.surface.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withOpacity(0.08)
+                  : cs.outlineVariant.withOpacity(0.8),
+              width: 1,
             ),
           ),
-          Expanded(
-            flex: 4,
-            child: Text(
-              'Ripetizioni',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 10,
-                color: cs.outline,
-                fontWeight: FontWeight.w600,
-              ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header — sempre visibile, tap = toggle
+                GestureDetector(
+                  onTap: onToggleExpand,
+                  child: Row(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.drag_handle_rounded,
+                        color: cs.outline.withOpacity(0.4),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              ex.exerciseName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              ex.muscleGroup,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.outline),
+                            ),
+                            if (!isExpanded)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  '${sets.length} serie',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: cs.primary,
+                                  ),
+                                ),
+                              ),
+                            if (isExpanded && hasExerciseNote)
+                              Text(
+                                ex.notes!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic,
+                                  color: cs.outline,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: allDone
+                              ? cs.primaryContainer
+                              : cs.surfaceContainerHighest,
+                          borderRadius:
+                              BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '$completedCount/${sets.length}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: allDone
+                                ? cs.onPrimaryContainer
+                                : cs.onSurface,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        isExpanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                        size: 20,
+                        color: cs.outline,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Corpo — visibile solo se espanso
+                if (isExpanded) ...[
+                  // Nota di sessione
+                  if (hasNote)
+                    GestureDetector(
+                      onTap: () => _showNoteDialog(context),
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: cs.tertiaryContainer
+                              .withOpacity(0.5),
+                          borderRadius:
+                              BorderRadius.circular(8),
+                          border: Border.all(
+                            color:
+                                cs.tertiary.withOpacity(0.2),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.sticky_note_2_outlined,
+                              size: 14,
+                              color: cs.tertiary,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                ex.sessionNote!,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.tertiary),
+                              ),
+                            ),
+                            Icon(Icons.edit,
+                                size: 12, color: cs.tertiary),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(height: 10),
+
+                  // Intestazioni colonne
+                  Row(
+                    children: [
+                      const SizedBox(width: 28),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          'Peso (kg)',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 11, color: cs.outline),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        flex: 4,
+                        child: Text(
+                          'Reps',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 11, color: cs.outline),
+                        ),
+                      ),
+                      const SizedBox(width: 40),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Righe serie
+                  ...sets.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final set = entry.value;
+                    return _SetRow(
+                      key: ValueKey('${ex.exerciseKey}_$i'),
+                      setNumber: set.setNumber,
+                      set: set,
+                      onToggle: () => onToggle(i),
+                      onUpdate: (weight, reps) =>
+                          onUpdate(i, weight, reps),
+                    );
+                  }),
+
+                  const SizedBox(height: 8),
+
+                  // Pulsanti azione
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _MiniBtn(
+                        label: '− Serie',
+                        color: Colors.red,
+                        onTap: sets.length > 1
+                            ? onRemoveSet
+                            : null,
+                      ),
+                      _MiniBtn(
+                        label: '+ Serie',
+                        color: cs.primary,
+                        onTap: onAddSet,
+                      ),
+                      _MiniBtn(
+                        label: hasNote
+                            ? 'Modifica nota'
+                            : 'Nota',
+                        color: cs.tertiary,
+                        onTap: () =>
+                            _showNoteDialog(context),
+                      ),
+                      _MiniBtn(
+                        label: 'Rimuovi',
+                        color: Colors.red,
+                        onTap: () {
+                          showGlassDialog(
+                            context: context,
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize:
+                                    MainAxisSize.min,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Rimuovere ${ex.exerciseName}?',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(
+                                            fontWeight:
+                                                FontWeight.w700),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  GlassDialogActions(
+                                    cancelLabel: 'Annulla',
+                                    confirmLabel: 'Rimuovi',
+                                    confirmColor: Colors.red,
+                                    onCancel: () =>
+                                        Navigator.pop(context),
+                                    onConfirm: () {
+                                      Navigator.pop(context);
+                                      onRemoveExercise();
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+
+                  // Banner recupero
+                  Consumer<SessionProvider>(
+                    builder: (_, session, __) {
+                      final isResting = session.isResting &&
+                          session.restingExerciseId ==
+                              ex.exerciseKey;
+                      if (!isResting)
+                        return const SizedBox.shrink();
+                      return _RestBanner(
+                        elapsed: session.restElapsed,
+                        targetRest: ex.restSeconds,
+                        onStop: () => session.stopRestTimer(),
+                      );
+                    },
+                  ),
+                ],
+              ],
             ),
           ),
-          const SizedBox(width: 50),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _MiniBtn
+// ─────────────────────────────────────────────────────────────
+
+class _MiniBtn extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const _MiniBtn({
+    required this.label,
+    required this.color,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDisabled = onTap == null;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isDisabled
+              ? Colors.transparent
+              : color.withOpacity(isDark ? 0.15 : 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDisabled
+                ? Theme.of(context)
+                    .colorScheme
+                    .outlineVariant
+                    .withOpacity(0.4)
+                : color.withOpacity(0.5),
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: isDisabled
+                ? Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withOpacity(0.3)
+                : color,
+          ),
+        ),
       ),
     );
   }
@@ -1052,19 +1439,17 @@ class _SetHeaders extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 
 class _SetRow extends StatefulWidget {
-  final int index;
+  final int setNumber;
   final ActiveSet set;
   final VoidCallback onToggle;
-  final void Function(double) onWeightChanged;
-  final void Function(int) onRepsChanged;
+  final void Function(double, int) onUpdate;
 
   const _SetRow({
     super.key,
-    required this.index,
+    required this.setNumber,
     required this.set,
     required this.onToggle,
-    required this.onWeightChanged,
-    required this.onRepsChanged,
+    required this.onUpdate,
   });
 
   @override
@@ -1072,233 +1457,234 @@ class _SetRow extends StatefulWidget {
 }
 
 class _SetRowState extends State<_SetRow> {
-  late TextEditingController _wCtrl;
-  late TextEditingController _rCtrl;
+  late TextEditingController _weightCtrl;
+  late TextEditingController _repsCtrl;
+  late int _currentReps;
 
   @override
   void initState() {
     super.initState();
-    final w = widget.set.weight;
-    // Peso: vuoto se 0 (lastWeight viene mostrato come placeholder)
-    _wCtrl = TextEditingController(
-      text: w > 0
-          ? (w % 1 == 0 ? w.toInt().toString() : w.toString())
+    _currentReps = widget.set.lastReps ?? widget.set.reps;
+    _weightCtrl = TextEditingController(
+      text: widget.set.weight > 0
+          ? (widget.set.weight % 1 == 0
+              ? widget.set.weight.toInt().toString()
+              : widget.set.weight.toString())
           : '',
     );
-    _rCtrl = TextEditingController(text: '${widget.set.reps}');
+    _repsCtrl =
+        TextEditingController(text: _currentReps.toString());
+  }
+
+  @override
+  void didUpdateWidget(_SetRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.set != widget.set) {
+      _currentReps = widget.set.lastReps ?? widget.set.reps;
+      final newWeight = widget.set.weight > 0
+          ? (widget.set.weight % 1 == 0
+              ? widget.set.weight.toInt().toString()
+              : widget.set.weight.toString())
+          : '';
+      if (_weightCtrl.text != newWeight) {
+        _weightCtrl.text = newWeight;
+      }
+      final newReps = _currentReps.toString();
+      if (_repsCtrl.text != newReps) {
+        _repsCtrl.text = newReps;
+      }
+    }
   }
 
   @override
   void dispose() {
-    _wCtrl.dispose();
-    _rCtrl.dispose();
+    _weightCtrl.dispose();
+    _repsCtrl.dispose();
     super.dispose();
   }
 
-  /// Quando completa una serie con campo peso vuoto, usa lastWeight
-  void _handleToggle() {
-    if (!widget.set.completed) {
-      final text = _wCtrl.text.trim();
-      if (text.isEmpty) {
-        final lw = widget.set.lastWeight;
-        if (lw != null && lw > 0) {
-          final str =
-              lw % 1 == 0 ? lw.toInt().toString() : lw.toString();
-          setState(() => _wCtrl.text = str);
-          widget.onWeightChanged(lw);
-        }
-      }
-    }
-    widget.onToggle();
+  void _notifyUpdate() {
+    final weight = double.tryParse(_weightCtrl.text) ??
+        widget.set.lastWeight ??
+        widget.set.weight;
+    final reps = int.tryParse(_repsCtrl.text) ?? _currentReps;
+    widget.onUpdate(weight, reps);
   }
 
-  void _decReps() {
-    final cur = widget.set.reps;
-    if (cur <= 1) return;
-    widget.onRepsChanged(cur - 1);
-    setState(() => _rCtrl.text = '${cur - 1}');
-    HapticFeedback.selectionClick();
-  }
-
-  void _incReps() {
-    final cur = widget.set.reps;
-    widget.onRepsChanged(cur + 1);
-    setState(() => _rCtrl.text = '${cur + 1}');
-    HapticFeedback.selectionClick();
-  }
-
-  String get _weightHint {
-    final lw = widget.set.lastWeight;
-    if (lw == null || lw <= 0) return '';
-    return lw % 1 == 0 ? lw.toInt().toString() : lw.toString();
+  void _changeReps(int delta) {
+    if (widget.set.completed) return;
+    final current =
+        int.tryParse(_repsCtrl.text) ?? _currentReps;
+    final newVal = (current + delta).clamp(0, 999);
+    setState(() {
+      _currentReps = newVal;
+      _repsCtrl.text = newVal.toString();
+    });
+    _notifyUpdate();
   }
 
   @override
   Widget build(BuildContext context) {
+    final isCompleted = widget.set.completed;
     final cs = Theme.of(context).colorScheme;
-    final done = widget.set.completed;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Placeholder: mostra lastWeight come hint se il campo è vuoto
+    final weightHint = widget.set.lastWeight != null
+        ? (widget.set.lastWeight! % 1 == 0
+            ? widget.set.lastWeight!.toInt().toString()
+            : widget.set.lastWeight.toString())
+        : (widget.set.weight > 0
+            ? widget.set.weight.toString()
+            : '-');
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
       decoration: BoxDecoration(
-        color: done ? cs.primary.withOpacity(0.07) : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        color: isCompleted
+            ? cs.primaryContainer.withOpacity(0.4)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
           // Numero serie
           SizedBox(
-            width: 32,
+            width: 28,
             child: Text(
-              '${widget.index + 1}',
+              '${widget.setNumber}',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: done ? cs.primary : cs.onSurface,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: isCompleted ? cs.primary : cs.outline,
               ),
             ),
           ),
+          const SizedBox(width: 4),
 
-          // Peso con placeholder lastWeight
+          // Campo peso con placeholder (lastWeight)
           Expanded(
             flex: 3,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: TextField(
-                controller: _wCtrl,
-                textAlign: TextAlign.center,
-                keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true),
-                decoration: InputDecoration(
-                  hintText: _weightHint,
-                  hintStyle: TextStyle(
-                    color: cs.outline.withOpacity(0.5),
-                    fontWeight: FontWeight.normal,
+            child: TextField(
+              controller: _weightCtrl,
+              enabled: !isCompleted,
+              textAlign: TextAlign.center,
+              keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: weightHint,
+                hintStyle: TextStyle(
+                  fontSize: 12,
+                  color: cs.outline.withOpacity(0.6),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    vertical: 7, horizontal: 6),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                filled: isCompleted,
+                fillColor:
+                    cs.surfaceContainerHighest.withOpacity(0.3),
+              ),
+              onChanged: (_) => _notifyUpdate(),
+            ),
+          ),
+          const SizedBox(width: 4),
+
+          // Reps: [-] campo [+]
+          Expanded(
+            flex: 4,
+            child: Container(
+              decoration: BoxDecoration(
+                color: isCompleted
+                    ? cs.surfaceContainerHighest.withOpacity(0.3)
+                    : isDark
+                        ? Colors.white.withOpacity(0.05)
+                        : cs.surfaceContainerHighest
+                            .withOpacity(0.4),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isCompleted
+                      ? cs.outlineVariant.withOpacity(0.3)
+                      : cs.outlineVariant,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  _RepsBtn(
+                    icon: Icons.remove,
+                    onTap: isCompleted
+                        ? null
+                        : () => _changeReps(-1),
+                    color: cs.outline,
                   ),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                      vertical: 8, horizontal: 6),
-                  filled: done,
-                  fillColor:
-                      done ? cs.primary.withOpacity(0.05) : null,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(
-                      color: done
-                          ? cs.primary.withOpacity(0.3)
-                          : cs.outlineVariant,
+                  Expanded(
+                    child: TextField(
+                      controller: _repsCtrl,
+                      enabled: !isCompleted,
+                      textAlign: TextAlign.center,
+                      keyboardType: TextInputType.number,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isCompleted
+                            ? cs.outline
+                            : cs.onSurface,
+                      ),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                            vertical: 7),
+                      ),
+                      onChanged: (v) {
+                        _currentReps =
+                            int.tryParse(v) ?? _currentReps;
+                        _notifyUpdate();
+                      },
                     ),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: cs.primary),
+                  _RepsBtn(
+                    icon: Icons.add,
+                    onTap: isCompleted
+                        ? null
+                        : () => _changeReps(1),
+                    color: cs.primary,
                   ),
-                ),
-                style: TextStyle(
-                  fontSize: 14,
-                  color: done ? cs.primary : null,
-                  fontWeight:
-                      done ? FontWeight.w600 : FontWeight.normal,
-                ),
-                onChanged: (v) =>
-                    widget.onWeightChanged(double.tryParse(v) ?? 0),
+                ],
               ),
             ),
           ),
-
-          // Rep: [-] campo [+]
-          Expanded(
-            flex: 4,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _RepBtn(
-                  icon: Icons.remove_rounded,
-                  cs: cs,
-                  done: done,
-                  onTap: _decReps,
-                ),
-                const SizedBox(width: 4),
-                SizedBox(
-                  width: 50,
-                  child: TextField(
-                    controller: _rCtrl,
-                    textAlign: TextAlign.center,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                          vertical: 8, horizontal: 4),
-                      filled: done,
-                      fillColor: done
-                          ? cs.primary.withOpacity(0.05)
-                          : null,
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                          color: done
-                              ? cs.primary.withOpacity(0.3)
-                              : cs.outlineVariant,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide:
-                            BorderSide(color: cs.primary),
-                      ),
-                    ),
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: done ? cs.primary : null,
-                      fontWeight: done
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                    ),
-                    onChanged: (v) {
-                      final r = int.tryParse(v);
-                      if (r != null) widget.onRepsChanged(r);
-                    },
-                  ),
-                ),
-                const SizedBox(width: 4),
-                _RepBtn(
-                  icon: Icons.add_rounded,
-                  cs: cs,
-                  done: done,
-                  onTap: _incReps,
-                ),
-              ],
-            ),
-          ),
-
           const SizedBox(width: 4),
 
           // Pulsante completa
-          GestureDetector(
-            onTap: _handleToggle,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: done ? cs.primary : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: done ? cs.primary : cs.outlineVariant,
-                  width: 1.5,
-                ),
-              ),
-              child: Icon(
-                Icons.check_rounded,
-                size: 20,
-                color: done ? cs.onPrimary : cs.outline,
+          SizedBox(
+            width: 40,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              onPressed: () {
+                final weight =
+                    double.tryParse(_weightCtrl.text) ??
+                        widget.set.lastWeight ??
+                        widget.set.weight;
+                final reps =
+                    int.tryParse(_repsCtrl.text) ??
+                        _currentReps;
+                widget.onUpdate(weight, reps);
+                widget.onToggle();
+              },
+              icon: Icon(
+                isCompleted
+                    ? Icons.check_circle
+                    : Icons.check_circle_outline,
+                color:
+                    isCompleted ? cs.primary : cs.outline,
+                size: 26,
               ),
             ),
           ),
@@ -1308,254 +1694,132 @@ class _SetRowState extends State<_SetRow> {
   }
 }
 
-class _RepBtn extends StatelessWidget {
-  final IconData icon;
-  final ColorScheme cs;
-  final bool done;
-  final VoidCallback onTap;
+// ─────────────────────────────────────────────────────────────
+// _RepsBtn
+// ─────────────────────────────────────────────────────────────
 
-  const _RepBtn({
+class _RepsBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final Color color;
+
+  const _RepsBtn({
     required this.icon,
-    required this.cs,
-    required this.done,
     required this.onTap,
+    required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 30,
-        height: 30,
-        decoration: BoxDecoration(
-          color: done
-              ? cs.primary.withOpacity(0.12)
-              : cs.surfaceContainerHighest.withOpacity(0.5),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: done
-                ? cs.primary.withOpacity(0.3)
-                : cs.outlineVariant.withOpacity(0.5),
-          ),
+      child: SizedBox(
+        width: 28,
+        height: 36,
+        child: Icon(
+          icon,
+          size: 16,
+          color: onTap == null
+              ? color.withOpacity(0.3)
+              : color,
         ),
-        child: Icon(icon,
-            size: 16,
-            color: done ? cs.primary : cs.outline),
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _RestOverlay — overlay Glass countdown recupero
+// _RestBanner — banner recupero inline nella card esercizio
 // ─────────────────────────────────────────────────────────────
 
-class _RestOverlay extends StatelessWidget {
-  final int total;
-  final int remaining;
-  final bool paused;
-  final VoidCallback onTogglePause;
-  final VoidCallback onSkip;
-  final void Function(int) onAddTime;
+class _RestBanner extends StatelessWidget {
+  final int elapsed;
+  final int? targetRest;
+  final VoidCallback onStop;
 
-  const _RestOverlay({
-    required this.total,
-    required this.remaining,
-    required this.paused,
-    required this.onTogglePause,
-    required this.onSkip,
-    required this.onAddTime,
+  const _RestBanner({
+    required this.elapsed,
+    required this.targetRest,
+    required this.onStop,
   });
+
+  String _format(int seconds) {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return '${m.toString().padLeft(2, '0')}:'
+        '${s.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final progress = total > 0 ? remaining / total : 0.0;
+    final isOver =
+        targetRest != null && elapsed >= targetRest!;
+    final bg = isOver ? cs.errorContainer : cs.secondaryContainer;
+    final fg =
+        isOver ? cs.onErrorContainer : cs.onSecondaryContainer;
 
-    return Positioned(
-      left: 16,
-      right: 16,
-      bottom: MediaQuery.of(context).padding.bottom + 96,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      margin: const EdgeInsets.only(top: 10),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
           child: Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: isDark
-                  ? cs.surface.withOpacity(0.94)
-                  : cs.surface.withOpacity(0.97),
-              borderRadius: BorderRadius.circular(20),
+              color: bg.withOpacity(isDark ? 0.7 : 0.85),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isDark
-                    ? Colors.white.withOpacity(0.15)
-                    : cs.primary.withOpacity(0.2),
-                width: 1.2,
+                color: (isOver ? cs.error : cs.secondary)
+                    .withOpacity(0.3),
+                width: 1,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black
-                      .withOpacity(isDark ? 0.4 : 0.12),
-                  blurRadius: 24,
-                  offset: const Offset(0, 6),
-                ),
-              ],
             ),
             child: Row(
               children: [
-                // Timer circolare
-                SizedBox(
-                  width: 72,
-                  height: 72,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 72,
-                        height: 72,
-                        child: CircularProgressIndicator(
-                          value: 1,
-                          strokeWidth: 5,
-                          color: cs.primary.withOpacity(0.12),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 72,
-                        height: 72,
-                        child: CircularProgressIndicator(
-                          value: progress.clamp(0.0, 1.0),
-                          strokeWidth: 5,
-                          color: cs.primary,
-                          strokeCap: StrokeCap.round,
-                        ),
-                      ),
-                      Text(
-                        '$remaining',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: cs.primary,
-                        ),
-                      ),
-                    ],
-                  ),
+                Icon(
+                  isOver
+                      ? Icons.notifications_active
+                      : Icons.timer_outlined,
+                  color: fg,
+                  size: 20,
                 ),
-                const SizedBox(width: 16),
-
-                // Controlli
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Recupero',
+                        isOver
+                            ? 'Recupero terminato!'
+                            : 'Recupero in corso',
                         style: TextStyle(
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.bold,
                           fontSize: 13,
-                          color: cs.primary,
+                          color: fg,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _RestCtrlBtn(
-                            label: '-10s',
-                            cs: cs,
-                            onTap: () => onAddTime(-10),
-                          ),
-                          _RestCtrlBtn(
-                            label: paused ? '▶' : '⏸',
-                            cs: cs,
-                            filled: true,
-                            onTap: onTogglePause,
-                          ),
-                          _RestCtrlBtn(
-                            label: '+30s',
-                            cs: cs,
-                            onTap: () => onAddTime(30),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: onSkip,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 6),
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainerHighest
-                                .withOpacity(0.4),
-                            borderRadius:
-                                BorderRadius.circular(10),
-                            border: Border.all(
-                                color: cs.outlineVariant
-                                    .withOpacity(0.4)),
-                          ),
-                          child: Text(
-                            'Salta recupero',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: cs.outline,
-                            ),
-                          ),
-                        ),
+                      Text(
+                        targetRest != null
+                            ? '${_format(elapsed)} / ${_format(targetRest!)}'
+                            : _format(elapsed),
+                        style:
+                            TextStyle(fontSize: 12, color: fg),
                       ),
                     ],
                   ),
                 ),
+                GlassTextButton(
+                  onPressed: onStop,
+                  foregroundColor: fg,
+                  child: const Text('Stop'),
+                ),
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RestCtrlBtn extends StatelessWidget {
-  final String label;
-  final ColorScheme cs;
-  final VoidCallback onTap;
-  final bool filled;
-
-  const _RestCtrlBtn({
-    required this.label,
-    required this.cs,
-    required this.onTap,
-    this.filled = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 54,
-        height: 36,
-        decoration: BoxDecoration(
-          color: filled
-              ? cs.primary
-              : cs.primary.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: cs.primary.withOpacity(filled ? 0 : 0.3),
-          ),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: filled ? Colors.white : cs.primary,
             ),
           ),
         ),
