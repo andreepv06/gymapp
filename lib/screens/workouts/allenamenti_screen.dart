@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/navigation/app_router.dart';
 import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
+import '../../providers/exercise_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../providers/workout_provider.dart';
 import '../../widgets/cosmic_background.dart';
@@ -47,6 +48,15 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  Future<T?> _showKeyboardSafeSheet<T>({required Widget child}) {
+    return showModalBottomSheet<T>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => child,
+    );
   }
 
   Future<void> _handlePlayTap(
@@ -129,23 +139,49 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
 
   Future<void> _showCreateWorkoutSheet() async {
     final ctrl = TextEditingController();
-    await showGlassBottomSheet(
-      context: context,
+    await _showKeyboardSafeSheet(
       child: _CreateWorkoutSheet(
         nameController: ctrl,
         onConfirm: () {
           final name = ctrl.text.trim();
           if (name.isEmpty) return;
-          // FIX: addWorkout prende HiveWorkout, non una String
           HiveDatabase.instance.addWorkout(HiveWorkout(
             name: name,
             iconId: 'dumbbell',
             iconColorIndex: 0,
             createdAt: DateTime.now().toIso8601String(),
           ));
-          // loadWorkouts() ritorna void — niente await
           if (mounted) {
             context.read<WorkoutProvider>().loadWorkouts();
+            Navigator.pop(context);
+          }
+        },
+      ),
+    );
+  }
+
+  Future<void> _showNewExerciseSheet() async {
+    final nameCtrl = TextEditingController();
+    final muscleCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    await _showKeyboardSafeSheet(
+      child: _NewExerciseSheet(
+        nameController: nameCtrl,
+        muscleController: muscleCtrl,
+        notesController: notesCtrl,
+        onConfirm: () {
+          final name = nameCtrl.text.trim();
+          final muscle = muscleCtrl.text.trim();
+          if (name.isEmpty || muscle.isEmpty) return;
+          final notes = notesCtrl.text.trim();
+          // FIX: addExercise accetta HiveExercise, non String separati
+          HiveDatabase.instance.addExercise(HiveExercise(
+            name: name,
+            muscleGroup: muscle,
+            notes: notes.isNotEmpty ? notes : null,
+          ));
+          if (mounted) {
+            context.read<ExerciseProvider>().loadExercises();
             Navigator.pop(context);
           }
         },
@@ -168,7 +204,7 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Header ────────────────────────────────────
+                // ── Header ───────────────────────────────────
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -199,7 +235,11 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    _GestioneEserciziPanel(),
+                    _GestioneEserciziPill(
+                      onLibrary: () => pushPage(
+                          context, const ExercisesScreen()),
+                      onNewExercise: _showNewExerciseSheet,
+                    ),
                   ],
                 ),
 
@@ -221,7 +261,8 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                   const SizedBox(height: 10),
                   ...sp.pausedSessions.map(
                     (data) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding:
+                          const EdgeInsets.only(bottom: 12),
                       child: _PausedSessionPanel(
                         data: data,
                         sp: sp,
@@ -233,9 +274,11 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                           final wk = data['workoutKey'];
                           if (wk == null) return;
                           try {
-                            final workout = HiveDatabase.instance
+                            final workout = HiveDatabase
+                                .instance
                                 .getWorkouts()
-                                .firstWhere((w) => w.key == wk);
+                                .firstWhere(
+                                    (w) => w.key == wk);
                             pushPage(
                               context,
                               ActiveSessionScreen(
@@ -280,70 +323,111 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GestioneEserciziPanel
+// _GestioneEserciziPill — pillola a 2 icone senza testo
 // ─────────────────────────────────────────────────────────────
 
-class _GestioneEserciziPanel extends StatelessWidget {
+class _GestioneEserciziPill extends StatelessWidget {
+  final VoidCallback onLibrary;
+  final VoidCallback onNewExercise;
+
+  const _GestioneEserciziPill({
+    required this.onLibrary,
+    required this.onNewExercise,
+  });
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => pushPage(context, const ExercisesScreen()),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withOpacity(0.12),
-                  Colors.white.withOpacity(0.05),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  width: 1),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.list_alt_rounded,
-                        size: 15, color: Colors.white70),
-                    const SizedBox(width: 5),
-                    Icon(Icons.add_rounded,
-                        size: 15, color: _teal),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'GESTIONE\nESERCIZI',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Visualizza la lista completa,\ncrea i tuoi custom.',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.45),
-                    fontSize: 8.5,
-                    height: 1.4,
-                  ),
-                ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.12),
+                Colors.white.withOpacity(0.05),
               ],
             ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: Colors.white.withOpacity(0.2), width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _PillButton(
+                icon: Icons.list_alt_rounded,
+                color: Colors.white70,
+                onTap: onLibrary,
+                tooltip: 'Libreria esercizi',
+              ),
+              Container(
+                width: 1,
+                height: 20,
+                color: Colors.white.withOpacity(0.15),
+              ),
+              _PillButton(
+                icon: Icons.add_rounded,
+                color: _teal,
+                onTap: onNewExercise,
+                tooltip: 'Nuovo esercizio',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PillButton extends StatefulWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final String tooltip;
+
+  const _PillButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    required this.tooltip,
+  });
+
+  @override
+  State<_PillButton> createState() => _PillButtonState();
+}
+
+class _PillButtonState extends State<_PillButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: widget.tooltip,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) {
+          setState(() => _pressed = false);
+          widget.onTap();
+        },
+        onTapCancel: () => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale: _pressed ? 0.85 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: _pressed
+                  ? widget.color.withOpacity(0.15)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(widget.icon,
+                size: 20, color: widget.color),
           ),
         ),
       ),
@@ -627,9 +711,7 @@ class _PausedSessionPanel extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-              color: _orange.withOpacity(0.45),
-              width: 1.3,
-            ),
+                color: _orange.withOpacity(0.45), width: 1.3),
             boxShadow: [
               BoxShadow(
                 color: _orange.withOpacity(0.2),
@@ -681,14 +763,11 @@ class _PausedSessionPanel extends StatelessWidget {
                           border: Border.all(
                               color: _red.withOpacity(0.35)),
                         ),
-                        child: const Text(
-                          'Elimina',
-                          style: TextStyle(
-                            color: _red,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        child: const Text('Elimina',
+                            style: TextStyle(
+                                color: _red,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ],
@@ -710,20 +789,18 @@ class _PausedSessionPanel extends StatelessWidget {
                   runSpacing: 6,
                   children: [
                     _StatChip(
-                      icon: Icons.timer_outlined,
-                      label: _fmt(elapsed),
-                      color: _orange,
-                    ),
+                        icon: Icons.timer_outlined,
+                        label: _fmt(elapsed),
+                        color: _orange),
                     _StatChip(
-                      icon: Icons.access_time_rounded,
-                      label: _age(),
-                      color: _orange,
-                    ),
+                        icon: Icons.access_time_rounded,
+                        label: _age(),
+                        color: _orange),
                     _StatChip(
-                      icon: Icons.check_circle_outline_rounded,
-                      label: '$completed/$total serie',
-                      color: _orange,
-                    ),
+                        icon:
+                            Icons.check_circle_outline_rounded,
+                        label: '$completed/$total serie',
+                        color: _orange),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -735,8 +812,7 @@ class _PausedSessionPanel extends StatelessWidget {
                         vertical: 14),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [_orange, _orangeWarm],
-                      ),
+                          colors: [_orange, _orangeWarm]),
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
@@ -753,14 +829,11 @@ class _PausedSessionPanel extends StatelessWidget {
                         Icon(Icons.play_arrow_rounded,
                             color: Colors.white, size: 22),
                         SizedBox(width: 8),
-                        Text(
-                          'Riprendi allenamento',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                          ),
-                        ),
+                        Text('Riprendi allenamento',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15)),
                       ],
                     ),
                   ),
@@ -819,9 +892,7 @@ class _NuovaSessionePanel extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(28),
             border: Border.all(
-              color: _teal.withOpacity(0.35),
-              width: 1.3,
-            ),
+                color: _teal.withOpacity(0.35), width: 1.3),
             boxShadow: [
               BoxShadow(
                 color: _teal.withOpacity(0.12),
@@ -851,22 +922,16 @@ class _NuovaSessionePanel extends StatelessWidget {
                       crossAxisAlignment:
                           CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Nuova Sessione',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        Text(
-                          'Scegli come iniziare',
-                          style: TextStyle(
-                            color:
-                                Colors.white.withOpacity(0.45),
-                            fontSize: 12,
-                          ),
-                        ),
+                        const Text('Nuova Sessione',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800)),
+                        Text('Scegli come iniziare',
+                            style: TextStyle(
+                                color: Colors.white
+                                    .withOpacity(0.45),
+                                fontSize: 12)),
                       ],
                     ),
                   ],
@@ -874,36 +939,31 @@ class _NuovaSessionePanel extends StatelessWidget {
                 const SizedBox(height: 22),
                 Row(
                   children: [
-                    Text(
-                      'Le tue schede',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
+                    Text('Le tue schede',
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.7),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.3)),
                     const Spacer(),
                     if (workouts.isNotEmpty)
                       GestureDetector(
                         onTap: onViewAll,
                         child: Row(
                           children: [
-                            Text(
-                              'Vedi tutte',
-                              style: TextStyle(
-                                color:
-                                    _teal.withOpacity(0.8),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                            Text('Vedi tutte',
+                                style: TextStyle(
+                                    color:
+                                        _teal.withOpacity(0.8),
+                                    fontSize: 12,
+                                    fontWeight:
+                                        FontWeight.w600)),
                             const SizedBox(width: 3),
                             Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 11,
-                              color: _teal.withOpacity(0.8),
-                            ),
+                                Icons
+                                    .arrow_forward_ios_rounded,
+                                size: 11,
+                                color: _teal.withOpacity(0.8)),
                           ],
                         ),
                       ),
@@ -966,10 +1026,9 @@ class _NuovaSessionePanel extends StatelessWidget {
                               boxShadow: active
                                   ? [
                                       BoxShadow(
-                                        color: _teal
-                                            .withOpacity(0.5),
-                                        blurRadius: 6,
-                                      )
+                                          color: _teal
+                                              .withOpacity(0.5),
+                                          blurRadius: 6)
                                     ]
                                   : null,
                             ),
@@ -990,23 +1049,19 @@ class _NuovaSessionePanel extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         vertical: 15),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          _teal.withOpacity(0.25),
-                          _tealDark.withOpacity(0.15),
-                        ],
-                      ),
+                      gradient: LinearGradient(colors: [
+                        _teal.withOpacity(0.25),
+                        _tealDark.withOpacity(0.15),
+                      ]),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: _teal.withOpacity(0.5),
-                        width: 1.3,
-                      ),
+                          color: _teal.withOpacity(0.5),
+                          width: 1.3),
                       boxShadow: [
                         BoxShadow(
-                          color: _teal.withOpacity(0.2),
-                          blurRadius: 20,
-                          spreadRadius: 1,
-                        ),
+                            color: _teal.withOpacity(0.2),
+                            blurRadius: 20,
+                            spreadRadius: 1)
                       ],
                     ),
                     child: Row(
@@ -1024,14 +1079,11 @@ class _NuovaSessionePanel extends StatelessWidget {
                               color: _teal, size: 16),
                         ),
                         const SizedBox(width: 10),
-                        const Text(
-                          'Crea nuova scheda',
-                          style: TextStyle(
-                            color: _teal,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
-                        ),
+                        const Text('Crea nuova scheda',
+                            style: TextStyle(
+                                color: _teal,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15)),
                       ],
                     ),
                   ),
@@ -1111,9 +1163,9 @@ class _WorkoutCarouselCard extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: (indicator ?? _teal).withOpacity(0.15),
-                blurRadius: 20,
-              ),
+                  color:
+                      (indicator ?? _teal).withOpacity(0.15),
+                  blurRadius: 20)
             ],
           ),
           child: Padding(
@@ -1134,10 +1186,9 @@ class _WorkoutCarouselCard extends StatelessWidget {
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color:
-                                    indicator.withOpacity(0.6),
-                                blurRadius: 4,
-                              )
+                                  color:
+                                      indicator.withOpacity(0.6),
+                                  blurRadius: 4)
                             ],
                           ),
                         ),
@@ -1147,18 +1198,15 @@ class _WorkoutCarouselCard extends StatelessWidget {
                               ? 'In pausa'
                               : 'In corso',
                           style: TextStyle(
-                            color: indicator,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                          ),
+                              color: indicator,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5),
                         ),
                       ],
                     ),
                   ),
                 Row(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.center,
                   children: [
                     WorkoutAvatar(
                       iconId: workout.iconId ?? 'dumbbell',
@@ -1175,16 +1223,13 @@ class _WorkoutCarouselCard extends StatelessWidget {
                         crossAxisAlignment:
                             CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            workout.name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          Text(workout.name,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
                           const SizedBox(height: 4),
                           Wrap(
                             spacing: 6,
@@ -1208,29 +1253,22 @@ class _WorkoutCarouselCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Row(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.center,
                   children: [
                     GestureDetector(
                       onTap: onEdit,
                       child: Row(
                         children: [
-                          Icon(
-                            Icons.edit_outlined,
-                            size: 13,
-                            color:
-                                Colors.white.withOpacity(0.5),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            'Modifica',
-                            style: TextStyle(
+                          Icon(Icons.edit_outlined,
+                              size: 13,
                               color:
-                                  Colors.white.withOpacity(0.5),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                                  Colors.white.withOpacity(0.5)),
+                          const SizedBox(width: 5),
+                          Text('Modifica',
+                              style: TextStyle(
+                                  color: Colors.white
+                                      .withOpacity(0.5),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500)),
                         ],
                       ),
                     ),
@@ -1248,7 +1286,7 @@ class _WorkoutCarouselCard extends StatelessWidget {
                                 ? [_orange, _orangeWarm]
                                 : [
                                     const Color(0xFF22C55E),
-                                    const Color(0xFF16A34A),
+                                    const Color(0xFF16A34A)
                                   ],
                           ),
                           shape: BoxShape.circle,
@@ -1264,10 +1302,9 @@ class _WorkoutCarouselCard extends StatelessWidget {
                           ],
                         ),
                         child: const Icon(
-                          Icons.play_arrow_rounded,
-                          color: Colors.white,
-                          size: 28,
-                        ),
+                            Icons.play_arrow_rounded,
+                            color: Colors.white,
+                            size: 28),
                       ),
                     ),
                   ],
@@ -1311,9 +1348,7 @@ class _EmptyCarouselCard extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(22),
               border: Border.all(
-                color: _teal.withOpacity(0.3),
-                width: 1.3,
-              ),
+                  color: _teal.withOpacity(0.3), width: 1.3),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1331,22 +1366,16 @@ class _EmptyCarouselCard extends StatelessWidget {
                       color: _teal, size: 28),
                 ),
                 const SizedBox(height: 14),
-                const Text(
-                  'Crea la tua prima scheda',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                const Text('Crea la tua prima scheda',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
-                Text(
-                  'Inizia il tuo percorso fitness',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.45),
-                    fontSize: 12,
-                  ),
-                ),
+                Text('Inizia il tuo percorso fitness',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.45),
+                        fontSize: 12)),
               ],
             ),
           ),
@@ -1357,7 +1386,7 @@ class _EmptyCarouselCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _TinyChip
+// _TinyChip / _StatChip
 // ─────────────────────────────────────────────────────────────
 
 class _TinyChip extends StatelessWidget {
@@ -1376,21 +1405,14 @@ class _TinyChip extends StatelessWidget {
         border: Border.all(
             color: Colors.white.withOpacity(0.12), width: 0.8),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.6),
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      child: Text(label,
+          style: TextStyle(
+              color: Colors.white.withOpacity(0.6),
+              fontSize: 10,
+              fontWeight: FontWeight.w600)),
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// _StatChip
-// ─────────────────────────────────────────────────────────────
 
 class _StatChip extends StatelessWidget {
   final IconData icon;
@@ -1410,14 +1432,11 @@ class _StatChip extends StatelessWidget {
       children: [
         Icon(icon, size: 11, color: color.withOpacity(0.7)),
         const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: color.withOpacity(0.7),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        Text(label,
+            style: TextStyle(
+                fontSize: 11,
+                color: color.withOpacity(0.7),
+                fontWeight: FontWeight.w500)),
       ],
     );
   }
@@ -1438,19 +1457,35 @@ class _CreateWorkoutSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 24,
-        right: 24,
-        top: 24,
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF100B22).withOpacity(0.97),
+        borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(24)),
+        border: Border.all(
+            color: Colors.white.withOpacity(0.12), width: 1),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const GlassSheetHandle(),
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
             const SizedBox(height: 20),
             Row(
               children: [
@@ -1464,14 +1499,11 @@ class _CreateWorkoutSheet extends StatelessWidget {
                       color: _teal, size: 20),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'Nuova scheda',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+                const Text('Nuova scheda',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800)),
               ],
             ),
             const SizedBox(height: 20),
@@ -1490,11 +1522,165 @@ class _CreateWorkoutSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            GlassFilledButton(
-              onPressed: onConfirm,
-              child: const Text('Crea scheda'),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onConfirm,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _teal,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Crea scheda',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _NewExerciseSheet — creazione esercizio custom dalla dashboard
+// ─────────────────────────────────────────────────────────────
+
+class _NewExerciseSheet extends StatelessWidget {
+  final TextEditingController nameController;
+  final TextEditingController muscleController;
+  final TextEditingController notesController;
+  final VoidCallback onConfirm;
+
+  const _NewExerciseSheet({
+    required this.nameController,
+    required this.muscleController,
+    required this.notesController,
+    required this.onConfirm,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF100B22).withOpacity(0.97),
+        borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(24)),
+        border: Border.all(
+            color: Colors.white.withOpacity(0.12), width: 1),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _teal.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                      Icons.fitness_center_rounded,
+                      color: _teal,
+                      size: 20),
+                ),
+                const SizedBox(width: 12),
+                const Text('Nuovo esercizio',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800)),
+              ],
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'Nome esercizio',
+                hintText: 'Es. Panca piana, Squat...',
+                labelStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.5)),
+                hintStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.3)),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: muscleController,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'Gruppo muscolare',
+                hintText: 'Es. Petto, Gambe, Dorso...',
+                labelStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.5)),
+                hintStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.3)),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: notesController,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: 'Note (opzionale)',
+                hintText:
+                    'Indicazioni tecniche, varianti...',
+                labelStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.5)),
+                hintStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.3)),
+              ),
             ),
             const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onConfirm,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _teal,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Aggiungi esercizio',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15)),
+              ),
+            ),
           ],
         ),
       ),

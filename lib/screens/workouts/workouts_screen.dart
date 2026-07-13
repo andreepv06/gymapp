@@ -8,12 +8,29 @@ import '../../models/hive_models.dart';
 import '../../providers/workout_provider.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/glass_action_buttons.dart';
-import '../../widgets/glass_bottom_sheet.dart';
 import '../../widgets/workout_icon.dart';
 import 'workout_detail_screen.dart';
 
 const _teal = Color(0xFF00D4AA);
 const _red = Color(0xFFFF3B30);
+
+// ─────────────────────────────────────────────────────────────
+// Helper per bottom sheet con gestione tastiera
+// ─────────────────────────────────────────────────────────────
+
+Future<T?> _showKeyboardSafeSheet<T>(
+    BuildContext context, Widget child) {
+  return showModalBottomSheet<T>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => child,
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// WorkoutsScreen
+// ─────────────────────────────────────────────────────────────
 
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
@@ -26,21 +43,22 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   @override
   void initState() {
     super.initState();
-    // loadWorkouts() ritorna void — niente await
     Future.microtask(
         () => context.read<WorkoutProvider>().loadWorkouts());
   }
 
+  // ── Crea nuova scheda ──────────────────────────────────────
+
   Future<void> _showCreateSheet() async {
     final ctrl = TextEditingController();
-    await showGlassBottomSheet(
-      context: context,
-      child: _WorkoutCreateSheet(
+    await _showKeyboardSafeSheet(
+      context,
+      _WorkoutCreateSheet(
         nameController: ctrl,
         onConfirm: () {
           final name = ctrl.text.trim();
           if (name.isEmpty) return;
-          // FIX: addWorkout prende HiveWorkout, non una String
+          // FIX: addWorkout accetta HiveWorkout
           HiveDatabase.instance.addWorkout(HiveWorkout(
             name: name,
             iconId: 'dumbbell',
@@ -56,10 +74,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
   }
 
+  // ── Opzioni scheda ─────────────────────────────────────────
+
   void _showWorkoutOptions(HiveWorkout workout) {
-    showGlassBottomSheet(
-      context: context,
-      child: _WorkoutOptionsSheet(
+    _showKeyboardSafeSheet(
+      context,
+      _WorkoutOptionsSheet(
         workout: workout,
         onRename: () {
           Navigator.pop(context);
@@ -79,14 +99,14 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
 
   Future<void> _showRenameSheet(HiveWorkout workout) async {
     final ctrl = TextEditingController(text: workout.name);
-    await showGlassBottomSheet(
-      context: context,
-      child: _WorkoutRenameSheet(
+    await _showKeyboardSafeSheet(
+      context,
+      _WorkoutRenameSheet(
         nameController: ctrl,
         onConfirm: () {
           final name = ctrl.text.trim();
           if (name.isEmpty) return;
-          // updateWorkout prende (key, String name) — corretto
+          // FIX: updateWorkout(key, name) — solo il nome
           HiveDatabase.instance.updateWorkout(workout.key, name);
           if (mounted) {
             context.read<WorkoutProvider>().loadWorkouts();
@@ -98,17 +118,20 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 
   Future<void> _showIconSheet(HiveWorkout workout) async {
-    await showGlassBottomSheet(
-      context: context,
-      child: _WorkoutIconSheet(
+    await _showKeyboardSafeSheet(
+      context,
+      _WorkoutIconSheet(
+        // FIX: null safety
         currentIconId: workout.iconId ?? 'dumbbell',
         currentColorIndex: workout.iconColorIndex ?? 0,
         onSelect: (iconId, colorIndex) {
-          // Aggiornamento diretto sull'oggetto Hive
+          // FIX: mutazione diretta + save() sull'oggetto Hive
+          // Funziona perché HiveWorkout estende HiveObject.
           workout.iconId = iconId;
           workout.iconColorIndex = colorIndex;
           workout.save();
           if (mounted) {
+            // Forza il refresh del Provider per aggiornare la UI
             context.read<WorkoutProvider>().loadWorkouts();
             Navigator.pop(context);
           }
@@ -118,47 +141,44 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 
   Future<void> _confirmDelete(HiveWorkout workout) async {
-    final confirm = await showGlassDialog<bool>(
+    final confirm = await showDialog<bool>(
       context: context,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+      barrierColor: Colors.black54,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1030),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18)),
+        title: Row(
           children: [
-            const Row(
-              children: [
-                Icon(Icons.delete_outline, color: _red, size: 22),
-                SizedBox(width: 10),
-                Text(
-                  'Elimina scheda',
-                  style: TextStyle(
+            const Icon(Icons.delete_outline, color: _red, size: 22),
+            const SizedBox(width: 10),
+            const Text('Elimina scheda',
+                style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Eliminare "${workout.name}"? '
-              'Questa azione non può essere annullata.',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 24),
-            GlassDialogActions(
-              cancelLabel: 'Annulla',
-              confirmLabel: 'Elimina',
-              confirmColor: _red,
-              onCancel: () => Navigator.pop(context, false),
-              onConfirm: () => Navigator.pop(context, true),
-            ),
+                    fontSize: 16)),
           ],
         ),
+        content: Text(
+          'Eliminare "${workout.name}"? '
+          'Questa azione non può essere annullata.',
+          style: TextStyle(
+              color: Colors.white.withOpacity(0.7), fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Annulla',
+                style:
+                    TextStyle(color: Colors.white.withOpacity(0.6))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Elimina',
+                style: TextStyle(
+                    color: _red, fontWeight: FontWeight.w700)),
+          ),
+        ],
       ),
     );
 
@@ -242,6 +262,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           ),
         ),
       ),
+
+      // FIX 3: FAB senza doppia icona
       floatingActionButtonLocation:
           FloatingActionButtonLocation.centerFloat,
       floatingActionButton: Padding(
@@ -255,43 +277,34 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                   ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    vertical: 16, horizontal: 24),
+                    vertical: 16, horizontal: 28),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      _teal.withOpacity(0.25),
-                      const Color(0xFF00A880).withOpacity(0.15),
+                      _teal.withOpacity(0.28),
+                      const Color(0xFF00A880).withOpacity(0.18),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: _teal.withOpacity(0.55),
-                    width: 1.3,
-                  ),
+                      color: _teal.withOpacity(0.55), width: 1.3),
                   boxShadow: [
                     BoxShadow(
-                      color: _teal.withOpacity(0.25),
-                      blurRadius: 20,
-                      spreadRadius: 1,
-                    ),
+                        color: _teal.withOpacity(0.25),
+                        blurRadius: 20,
+                        spreadRadius: 1)
                   ],
                 ),
+                // FIX 3: rimossa Container con Icons.add_rounded.
+                // Il "+" è solo nell'icona prefix, il testo è solo testo.
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: _teal.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.add_rounded,
-                          color: _teal, size: 15),
-                    ),
+                    const Icon(Icons.add_rounded,
+                        color: _teal, size: 20),
                     const SizedBox(width: 10),
                     const Text(
-                      '+ Nuova scheda',
+                      'Nuova scheda',
                       style: TextStyle(
                         color: _teal,
                         fontWeight: FontWeight.w800,
@@ -318,11 +331,8 @@ class _GlassAppBar extends StatelessWidget {
   final VoidCallback onBack;
   final Widget? action;
 
-  const _GlassAppBar({
-    required this.title,
-    required this.onBack,
-    this.action,
-  });
+  const _GlassAppBar(
+      {required this.title, required this.onBack, this.action});
 
   @override
   Widget build(BuildContext context) {
@@ -347,24 +357,20 @@ class _GlassAppBar extends StatelessWidget {
                         color: Colors.white.withOpacity(0.15)),
                   ),
                   child: const Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white,
-                    size: 16,
-                  ),
+                      Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white,
+                      size: 16),
                 ),
               ),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+            child: Text(title,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800)),
           ),
           if (action != null) action!,
         ],
@@ -425,18 +431,16 @@ class _WorkoutGlassCard extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: Colors.white.withOpacity(0.12),
-                width: 1,
-              ),
+                  color: Colors.white.withOpacity(0.12), width: 1),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
+                  // FIX: null safety su iconId e iconColorIndex
                   WorkoutAvatar(
                     iconId: workout.iconId ?? 'dumbbell',
-                    iconColorIndex:
-                        workout.iconColorIndex ?? 0,
+                    iconColorIndex: workout.iconColorIndex ?? 0,
                     customImagePath: workout.customImagePath,
                     size: 52,
                     iconSize: 26,
@@ -448,36 +452,30 @@ class _WorkoutGlassCard extends StatelessWidget {
                       crossAxisAlignment:
                           CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          workout.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        Text(workout.name,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 6),
                         Wrap(
                           spacing: 8,
                           children: [
                             if (freeEx > 0)
                               _CardInfoTag(
-                                icon: Icons
-                                    .fitness_center_outlined,
-                                label: '$freeEx eserc.',
-                              ),
+                                  icon: Icons
+                                      .fitness_center_outlined,
+                                  label: '$freeEx eserc.'),
                             if (circuits > 0)
                               _CardInfoTag(
-                                icon: Icons.loop_rounded,
-                                label: '$circuits circuiti',
-                              ),
+                                  icon: Icons.loop_rounded,
+                                  label: '$circuits circuiti'),
                             if (sets > 0)
                               _CardInfoTag(
-                                icon: Icons.repeat_rounded,
-                                label: '$sets serie',
-                              ),
+                                  icon: Icons.repeat_rounded,
+                                  label: '$sets serie'),
                           ],
                         ),
                       ],
@@ -500,20 +498,16 @@ class _WorkoutGlassCard extends StatelessWidget {
                             borderRadius:
                                 BorderRadius.circular(8),
                           ),
-                          child: Icon(
-                            Icons.more_horiz_rounded,
-                            color:
-                                Colors.white.withOpacity(0.5),
-                            size: 18,
-                          ),
+                          child: Icon(Icons.more_horiz_rounded,
+                              color:
+                                  Colors.white.withOpacity(0.5),
+                              size: 18),
                         ),
                       ),
                       const SizedBox(height: 10),
-                      Icon(
-                        Icons.arrow_forward_ios_rounded,
-                        size: 13,
-                        color: Colors.white.withOpacity(0.35),
-                      ),
+                      Icon(Icons.arrow_forward_ios_rounded,
+                          size: 13,
+                          color: Colors.white.withOpacity(0.35)),
                     ],
                   ),
                 ],
@@ -526,18 +520,11 @@ class _WorkoutGlassCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _CardInfoTag
-// ─────────────────────────────────────────────────────────────
-
 class _CardInfoTag extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _CardInfoTag({
-    required this.icon,
-    required this.label,
-  });
+  const _CardInfoTag({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -546,14 +533,11 @@ class _CardInfoTag extends StatelessWidget {
       children: [
         Icon(icon, size: 11, color: Colors.white38),
         const SizedBox(width: 3),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.45),
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        Text(label,
+            style: TextStyle(
+                color: Colors.white.withOpacity(0.45),
+                fontSize: 11,
+                fontWeight: FontWeight.w500)),
       ],
     );
   }
@@ -583,33 +567,25 @@ class _EmptyWorkoutsState extends StatelessWidget {
                 color: _teal.withOpacity(0.1),
                 shape: BoxShape.circle,
                 border: Border.all(
-                    color: _teal.withOpacity(0.25),
-                    width: 1.5),
+                    color: _teal.withOpacity(0.25), width: 1.5),
               ),
-              child: const Icon(
-                Icons.fitness_center_outlined,
-                size: 38,
-                color: _teal,
-              ),
+              child: const Icon(Icons.fitness_center_outlined,
+                  size: 38, color: _teal),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Nessuna scheda',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+            const Text('Nessuna scheda',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             Text(
               'Crea la tua prima scheda\ne inizia ad allenarti',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.45),
-                fontSize: 14,
-                height: 1.5,
-              ),
+                  color: Colors.white.withOpacity(0.45),
+                  fontSize: 14,
+                  height: 1.5),
             ),
             const SizedBox(height: 28),
             GestureDetector(
@@ -618,29 +594,23 @@ class _EmptyWorkoutsState extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 28, vertical: 14),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      _teal.withOpacity(0.3),
-                      _teal.withOpacity(0.15),
-                    ],
-                  ),
+                  gradient: LinearGradient(colors: [
+                    _teal.withOpacity(0.3),
+                    _teal.withOpacity(0.15)
+                  ]),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: _teal.withOpacity(0.5)),
+                  border: Border.all(color: _teal.withOpacity(0.5)),
                   boxShadow: [
                     BoxShadow(
                         color: _teal.withOpacity(0.2),
                         blurRadius: 16)
                   ],
                 ),
-                child: const Text(
-                  '+ Crea nuova scheda',
-                  style: TextStyle(
-                    color: _teal,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
-                ),
+                child: const Text('Crea nuova scheda',
+                    style: TextStyle(
+                        color: _teal,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14)),
               ),
             ),
           ],
@@ -651,7 +621,7 @@ class _EmptyWorkoutsState extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutOptionsSheet
+// _WorkoutOptionsSheet — iOS Glass
 // ─────────────────────────────────────────────────────────────
 
 class _WorkoutOptionsSheet extends StatelessWidget {
@@ -669,13 +639,29 @@ class _WorkoutOptionsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF100B22).withOpacity(0.97),
+        borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(24)),
+        border: Border.all(
+            color: Colors.white.withOpacity(0.12), width: 1),
+      ),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const GlassSheetHandle(),
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -689,16 +675,13 @@ class _WorkoutOptionsSheet extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  workout.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: Text(workout.name,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
               ),
             ],
           ),
@@ -724,10 +707,9 @@ class _WorkoutOptionsSheet extends StatelessWidget {
                       onTap: onRename,
                     ),
                     Divider(
-                      height: 1,
-                      color: Colors.white.withOpacity(0.06),
-                      indent: 52,
-                    ),
+                        height: 1,
+                        color: Colors.white.withOpacity(0.06),
+                        indent: 52),
                     _OptionRow(
                       icon: Icons.image_outlined,
                       label: 'Cambia icona / immagine',
@@ -772,12 +754,11 @@ class _OptionRow extends StatelessWidget {
   final VoidCallback onTap;
   final Color? color;
 
-  const _OptionRow({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.color,
-  });
+  const _OptionRow(
+      {required this.icon,
+      required this.label,
+      required this.onTap,
+      this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -802,20 +783,13 @@ class _OptionRow extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: c,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: c.withOpacity(0.4),
-            ),
+                child: Text(label,
+                    style: TextStyle(
+                        color: c,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500))),
+            Icon(Icons.chevron_right_rounded,
+                size: 18, color: c.withOpacity(0.4)),
           ],
         ),
       ),
@@ -824,33 +798,47 @@ class _OptionRow extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutCreateSheet
+// _WorkoutCreateSheet / _WorkoutRenameSheet
 // ─────────────────────────────────────────────────────────────
 
 class _WorkoutCreateSheet extends StatelessWidget {
   final TextEditingController nameController;
   final VoidCallback onConfirm;
 
-  const _WorkoutCreateSheet({
-    required this.nameController,
-    required this.onConfirm,
-  });
+  const _WorkoutCreateSheet(
+      {required this.nameController, required this.onConfirm});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 24,
-        right: 24,
-        top: 24,
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF100B22).withOpacity(0.97),
+        borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(24)),
+        border: Border.all(
+            color: Colors.white.withOpacity(0.12), width: 1),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const GlassSheetHandle(),
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
             const SizedBox(height: 20),
             Row(
               children: [
@@ -864,14 +852,11 @@ class _WorkoutCreateSheet extends StatelessWidget {
                       color: _teal, size: 20),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'Nuova scheda',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+                const Text('Nuova scheda',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800)),
               ],
             ),
             const SizedBox(height: 20),
@@ -890,11 +875,24 @@ class _WorkoutCreateSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            GlassFilledButton(
-              onPressed: onConfirm,
-              child: const Text('Crea scheda'),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onConfirm,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _teal,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Crea scheda',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15)),
+              ),
             ),
-            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -902,43 +900,50 @@ class _WorkoutCreateSheet extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _WorkoutRenameSheet
-// ─────────────────────────────────────────────────────────────
-
 class _WorkoutRenameSheet extends StatelessWidget {
   final TextEditingController nameController;
   final VoidCallback onConfirm;
 
-  const _WorkoutRenameSheet({
-    required this.nameController,
-    required this.onConfirm,
-  });
+  const _WorkoutRenameSheet(
+      {required this.nameController, required this.onConfirm});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 24,
-        right: 24,
-        top: 24,
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF100B22).withOpacity(0.97),
+        borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(24)),
+        border: Border.all(
+            color: Colors.white.withOpacity(0.12), width: 1),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const GlassSheetHandle(),
-            const SizedBox(height: 20),
-            const Text(
-              'Rinomina scheda',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
+            const SizedBox(height: 20),
+            const Text('Rinomina scheda',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800)),
             const SizedBox(height: 20),
             TextField(
               controller: nameController,
@@ -952,11 +957,24 @@ class _WorkoutRenameSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            GlassFilledButton(
-              onPressed: onConfirm,
-              child: const Text('Salva'),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onConfirm,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _teal,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Salva',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15)),
+              ),
             ),
-            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -965,10 +983,11 @@ class _WorkoutRenameSheet extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutIconSheet
+// FIX 1: _WorkoutIconSheet — salvataggio corretto icona+colore
 // ─────────────────────────────────────────────────────────────
 
 class _WorkoutIconSheet extends StatefulWidget {
+  // Parametri non-nullable: il chiamante applica già il fallback
   final String currentIconId;
   final int currentColorIndex;
   final void Function(String iconId, int colorIndex) onSelect;
@@ -985,6 +1004,8 @@ class _WorkoutIconSheet extends StatefulWidget {
 }
 
 class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
+  // Mapping IDENTICO a quello atteso da WorkoutAvatar.
+  // Le chiavi String sono i valori salvati in HiveWorkout.iconId.
   static const _icons = [
     ('dumbbell', Icons.fitness_center_rounded),
     ('bike', Icons.directions_bike_rounded),
@@ -1000,15 +1021,16 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
     ('fire', Icons.local_fire_department_rounded),
   ];
 
+  // Palette colori: l'indice (0-7) corrisponde a HiveWorkout.iconColorIndex.
   static const _colors = [
-    Color(0xFF00D4AA),
-    Color(0xFF6366F1),
-    Color(0xFF22C55E),
-    Color(0xFFF59E0B),
-    Color(0xFFEC4899),
-    Color(0xFFEF4444),
-    Color(0xFF3B82F6),
-    Color(0xFF8B5CF6),
+    Color(0xFF00D4AA), // 0 — teal
+    Color(0xFF6366F1), // 1 — indigo
+    Color(0xFF22C55E), // 2 — green
+    Color(0xFFF59E0B), // 3 — amber
+    Color(0xFFEC4899), // 4 — pink
+    Color(0xFFEF4444), // 5 — red
+    Color(0xFF3B82F6), // 6 — blue
+    Color(0xFF8B5CF6), // 7 — purple
   ];
 
   late String _selectedIcon;
@@ -1018,132 +1040,180 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
   void initState() {
     super.initState();
     _selectedIcon = widget.currentIconId;
+    // Clamp per evitare out-of-bounds se iconColorIndex è fuori range
     _selectedColor =
         widget.currentColorIndex.clamp(0, _colors.length - 1);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF100B22).withOpacity(0.97),
+        borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(24)),
+        border: Border.all(
+            color: Colors.white.withOpacity(0.12), width: 1),
+      ),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const GlassSheetHandle(),
-          const SizedBox(height: 16),
-          const Text(
-            'Icona e colore',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Colore',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: _colors.asMap().entries.map((e) {
-              final selected = e.key == _selectedColor;
-              return GestureDetector(
-                onTap: () =>
-                    setState(() => _selectedColor = e.key),
-                child: AnimatedContainer(
-                  duration:
-                      const Duration(milliseconds: 150),
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: e.value,
-                    shape: BoxShape.circle,
-                    border: selected
-                        ? Border.all(
-                            color: Colors.white, width: 2.5)
-                        : null,
-                    boxShadow: selected
-                        ? [
-                            BoxShadow(
-                              color:
-                                  e.value.withOpacity(0.5),
-                              blurRadius: 10,
-                            )
-                          ]
-                        : null,
-                  ),
-                  child: selected
-                      ? const Icon(Icons.check_rounded,
-                          color: Colors.white, size: 18)
-                      : null,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            'Icona',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: _icons.map((icon) {
-              final selected = icon.$1 == _selectedIcon;
-              final accentColor = _colors[_selectedColor];
-              return GestureDetector(
-                onTap: () => setState(
-                    () => _selectedIcon = icon.$1),
-                child: AnimatedContainer(
-                  duration:
-                      const Duration(milliseconds: 150),
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? accentColor.withOpacity(0.2)
-                        : Colors.white.withOpacity(0.06),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: selected
-                          ? accentColor.withOpacity(0.6)
-                          : Colors.white.withOpacity(0.1),
-                      width: selected ? 1.5 : 1,
+            const SizedBox(height: 16),
+
+            // Anteprima live
+            Center(
+              child: Column(
+                children: [
+                  WorkoutAvatar(
+                    iconId: _selectedIcon,
+                    iconColorIndex: _selectedColor,
+                    size: 72,
+                    iconSize: 36,
+                    borderRadius: 18,
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Anteprima',
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 11)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            const Text('Icona e colore',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800)),
+            const SizedBox(height: 16),
+
+            // Selezione colore
+            Text('Colore',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5)),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: _colors.asMap().entries.map((e) {
+                final selected = e.key == _selectedColor;
+                return GestureDetector(
+                  onTap: () =>
+                      setState(() => _selectedColor = e.key),
+                  child: AnimatedContainer(
+                    duration:
+                        const Duration(milliseconds: 150),
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: e.value,
+                      shape: BoxShape.circle,
+                      border: selected
+                          ? Border.all(
+                              color: Colors.white, width: 2.5)
+                          : Border.all(
+                              color: Colors.transparent),
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: e.value.withOpacity(0.6),
+                                blurRadius: 10,
+                              )
+                            ]
+                          : null,
                     ),
+                    child: selected
+                        ? const Icon(Icons.check_rounded,
+                            color: Colors.white, size: 18)
+                        : null,
                   ),
-                  child: Icon(
-                    icon.$2,
-                    color: selected
-                        ? accentColor
-                        : Colors.white.withOpacity(0.5),
-                    size: 24,
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 18),
+
+            // Selezione icona
+            Text('Icona',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5)),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: _icons.map((icon) {
+                final selected = icon.$1 == _selectedIcon;
+                final accentColor = _colors[_selectedColor];
+                return GestureDetector(
+                  onTap: () =>
+                      setState(() => _selectedIcon = icon.$1),
+                  child: AnimatedContainer(
+                    duration:
+                        const Duration(milliseconds: 150),
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? accentColor.withOpacity(0.2)
+                          : Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: selected
+                            ? accentColor.withOpacity(0.6)
+                            : Colors.white.withOpacity(0.1),
+                        width: selected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Icon(icon.$2,
+                        color: selected
+                            ? accentColor
+                            : Colors.white.withOpacity(0.5),
+                        size: 24),
                   ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () =>
+                    widget.onSelect(_selectedIcon, _selectedColor),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _colors[_selectedColor],
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
                 ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 24),
-          GlassFilledButton(
-            onPressed: () => widget.onSelect(
-                _selectedIcon, _selectedColor),
-            child: const Text('Applica'),
-          ),
-        ],
+                child: const Text('Applica',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
