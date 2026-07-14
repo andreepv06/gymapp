@@ -1,13 +1,10 @@
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'jarvis_theme.dart';
 
-/// Sfondo cosmico glass riutilizzabile.
-/// Fornisce gradiente spaziale, nebulosa sfocata e campo stellare.
 class CosmicBackground extends StatelessWidget {
   final Widget child;
-
-  /// Se true usa una variante leggermente più chiara per sottopagine.
   final bool subtle;
 
   const CosmicBackground({
@@ -21,74 +18,76 @@ class CosmicBackground extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Gradiente base spaziale
+        // Gradiente base OLED
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
               colors: subtle
                   ? const [
-                      Color(0xFF0C0918),
-                      Color(0xFF100B22),
-                      Color(0xFF0A0A16),
+                      Color(0xFF03040A),
+                      Color(0xFF060B14),
+                      Color(0xFF03040A),
                     ]
                   : const [
-                      Color(0xFF06060F),
-                      Color(0xFF0D0820),
-                      Color(0xFF130B2A),
-                      Color(0xFF080810),
+                      Color(0xFF03040A),
+                      Color(0xFF060B14),
+                      Color(0xFF0A0F1E),
+                      Color(0xFF03040A),
                     ],
             ),
           ),
         ),
 
-        // Nebulosa viola — in alto a sinistra
+        // Nebulosa viola — top left
         Positioned(
-          top: -110,
-          left: -90,
+          top: -120,
+          left: -100,
           child: _NebulaBlob(
             size: 380,
-            color: const Color(0xFF7C3AED),
-            opacity: subtle ? 0.16 : 0.22,
+            color: const Color(0xFF4A1578),
+            opacity: subtle ? 0.14 : 0.20,
           ),
         ),
 
-        // Nebulosa blu-indaco — destra centrale
+        // Nebulosa cyan — right center (HUD accent)
         Positioned(
-          top: 200,
-          right: -130,
+          top: 180,
+          right: -120,
           child: _NebulaBlob(
-            size: 290,
-            color: const Color(0xFF1D4ED8),
-            opacity: subtle ? 0.12 : 0.17,
+            size: 260,
+            color: const Color(0xFF004D5C),
+            opacity: subtle ? 0.10 : 0.15,
           ),
         ),
 
-        // Accento teal — basso sinistra
+        // Accento teal — bottom left
         Positioned(
-          bottom: -70,
-          left: -50,
+          bottom: -80,
+          left: -60,
           child: _NebulaBlob(
-            size: 230,
-            color: const Color(0xFF0E7490),
-            opacity: subtle ? 0.10 : 0.14,
+            size: 220,
+            color: const Color(0xFF004D44),
+            opacity: subtle ? 0.08 : 0.12,
           ),
         ),
 
-        // Campo stellare statico
+        // Campo stellare
         const Positioned.fill(child: _StarField()),
 
-        // Contenuto dell'app
+        // Griglia HUD leggera (linee sottili orizzontali)
+        if (!subtle)
+          Positioned.fill(
+            child: CustomPaint(painter: _HudGridPainter()),
+          ),
+
+        // Contenuto
         child,
       ],
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// _NebulaBlob
-// ─────────────────────────────────────────────────────────────
 
 class _NebulaBlob extends StatelessWidget {
   final double size;
@@ -104,7 +103,7 @@ class _NebulaBlob extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ImageFiltered(
-      imageFilter: ImageFilter.blur(sigmaX: 65, sigmaY: 65),
+      imageFilter: ImageFilter.blur(sigmaX: 70, sigmaY: 70),
       child: Container(
         width: size,
         height: size,
@@ -113,20 +112,16 @@ class _NebulaBlob extends StatelessWidget {
           gradient: RadialGradient(
             colors: [
               color.withOpacity(opacity),
-              color.withOpacity(opacity * 0.4),
+              color.withOpacity(opacity * 0.35),
               Colors.transparent,
             ],
-            stops: const [0.0, 0.55, 1.0],
+            stops: const [0.0, 0.5, 1.0],
           ),
         ),
       ),
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// _StarField
-// ─────────────────────────────────────────────────────────────
 
 class _StarField extends StatelessWidget {
   const _StarField();
@@ -139,30 +134,60 @@ class _StarField extends StatelessWidget {
 class _StarPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final rng = math.Random(42);
     final paint = Paint();
+    final rng = math.Random(42);
 
-    // Stelle base
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 90; i++) {
       final x = rng.nextDouble() * size.width;
       final y = rng.nextDouble() * size.height;
-      final radius = rng.nextDouble() * 1.2 + 0.2;
-      final opacity = rng.nextDouble() * 0.5 + 0.08;
+      final radius = rng.nextDouble() * 1.1 + 0.2;
+      final opacity = rng.nextDouble() * 0.4 + 0.05;
       paint.color = Colors.white.withOpacity(opacity);
       canvas.drawCircle(Offset(x, y), radius, paint);
     }
 
-    // Stelle luminose rare
-    final rng2 = math.Random(137);
-    for (int i = 0; i < 14; i++) {
+    // Stelle cyan — accento HUD
+    final rng2 = math.Random(99);
+    for (int i = 0; i < 8; i++) {
       final x = rng2.nextDouble() * size.width;
       final y = rng2.nextDouble() * size.height;
       paint.color =
-          Colors.white.withOpacity(0.65 + rng2.nextDouble() * 0.35);
-      canvas.drawCircle(Offset(x, y), 1.4, paint);
+          JarvisTheme.cyan.withOpacity(0.5 + rng2.nextDouble() * 0.3);
+      canvas.drawCircle(Offset(x, y), 1.2, paint);
+      // Micro-glow
+      paint.color = JarvisTheme.cyan.withOpacity(0.08);
+      canvas.drawCircle(Offset(x, y), 4, paint);
+    }
+
+    // Stelle luminose bianche
+    final rng3 = math.Random(137);
+    for (int i = 0; i < 12; i++) {
+      final x = rng3.nextDouble() * size.width;
+      final y = rng3.nextDouble() * size.height;
+      paint.color =
+          Colors.white.withOpacity(0.6 + rng3.nextDouble() * 0.35);
+      canvas.drawCircle(Offset(x, y), 1.3, paint);
     }
   }
 
   @override
   bool shouldRepaint(_StarPainter old) => false;
+}
+
+class _HudGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = JarvisTheme.cyan.withOpacity(0.025)
+      ..strokeWidth = 0.5;
+
+    // Linee orizzontali sottili — effetto HUD
+    const spacing = 80.0;
+    for (double y = spacing; y < size.height; y += spacing) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HudGridPainter old) => false;
 }
