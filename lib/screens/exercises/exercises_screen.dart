@@ -10,6 +10,17 @@ import '../../widgets/cosmic_background.dart';
 const _teal = Color(0xFF00D4AA);
 const _red = Color(0xFFFF3B30);
 
+// FIX 6: gruppi muscolari predefiniti
+const _kPredefinedGroups = [
+  'Petto',
+  'Schiena',
+  'Spalle',
+  'Bicipiti',
+  'Tricipiti',
+  'Gambe',
+  'Addominali',
+];
+
 class ExercisesScreen extends StatefulWidget {
   const ExercisesScreen({super.key});
 
@@ -33,30 +44,25 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => child,
+      builder: (ctx) => GestureDetector(
+        onTap: () => FocusScope.of(ctx).unfocus(),
+        child: child,
+      ),
     );
   }
 
   Future<void> _showAddSheet() async {
-    final nameCtrl = TextEditingController();
-    final muscleCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
-
+    final exercises =
+        context.read<ExerciseProvider>().exercises;
     await _showKeyboardSafeSheet(
-      _AddExerciseSheet(
-        nameController: nameCtrl,
-        muscleController: muscleCtrl,
-        notesController: notesCtrl,
-        onConfirm: () {
-          final name = nameCtrl.text.trim();
-          final muscle = muscleCtrl.text.trim();
-          if (name.isEmpty || muscle.isEmpty) return;
-          final notes = notesCtrl.text.trim();
-          // FIX: addExercise accetta HiveExercise, non String separati
+      _ExerciseFormSheet(
+        existingExercises: exercises,
+        onConfirm: (name, muscleGroup, notes) {
           HiveDatabase.instance.addExercise(HiveExercise(
             name: name,
-            muscleGroup: muscle,
+            muscleGroup: muscleGroup,
             notes: notes.isNotEmpty ? notes : null,
           ));
           if (mounted) {
@@ -69,29 +75,23 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
   }
 
   Future<void> _showEditSheet(HiveExercise exercise) async {
-    final nameCtrl =
-        TextEditingController(text: exercise.name);
-    final muscleCtrl =
-        TextEditingController(text: exercise.muscleGroup);
-    final notesCtrl =
-        TextEditingController(text: exercise.notes ?? '');
-
+    final exercises = context.read<ExerciseProvider>().exercises;
     await _showKeyboardSafeSheet(
-      _AddExerciseSheet(
-        nameController: nameCtrl,
-        muscleController: muscleCtrl,
-        notesController: notesCtrl,
+      _ExerciseFormSheet(
+        initialName: exercise.name,
+        initialMuscleGroup: exercise.muscleGroup,
+        initialNotes: exercise.notes ?? '',
+        // Escludi l'esercizio corrente dal controllo duplicati
+        existingExercises: exercises
+            .where((e) => e.key != exercise.key)
+            .toList(),
         title: 'Modifica esercizio',
         confirmLabel: 'Salva',
-        onConfirm: () {
-          final name = nameCtrl.text.trim();
-          final muscle = muscleCtrl.text.trim();
-          if (name.isEmpty || muscle.isEmpty) return;
-          final notes = notesCtrl.text.trim();
-          // Mutazione diretta + save() sull'oggetto Hive
+        onConfirm: (name, muscleGroup, notes) {
           exercise.name = name;
-          exercise.muscleGroup = muscle;
-          exercise.notes = notes.isNotEmpty ? notes : null;
+          exercise.muscleGroup = muscleGroup;
+          exercise.notes =
+              notes.isNotEmpty ? notes : null;
           exercise.save();
           if (mounted) {
             context.read<ExerciseProvider>().loadExercises();
@@ -110,8 +110,8 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
         backgroundColor: const Color(0xFF1A1030),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18)),
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             Icon(Icons.delete_outline, color: _red, size: 22),
             SizedBox(width: 10),
             Text('Elimina esercizio',
@@ -144,7 +144,6 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
         ],
       ),
     );
-
     if (confirm == true && mounted) {
       await HiveDatabase.instance.deleteExercise(exercise.key);
       context.read<ExerciseProvider>().loadExercises();
@@ -156,18 +155,16 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
     final exercises =
         context.watch<ExerciseProvider>().exercises;
 
-    // Gruppi muscolari
-    final muscleGroups = <String>{'Tutti'};
-    for (final ex in exercises) {
-      muscleGroups.add(ex.muscleGroup);
-    }
-    final groups = muscleGroups.toList()..sort();
-    if (groups.contains('Tutti')) {
-      groups.remove('Tutti');
-      groups.insert(0, 'Tutti');
-    }
+    // Gruppi muscolari: predefiniti + esistenti in DB
+    final existingGroups =
+        exercises.map((e) => e.muscleGroup).toSet();
+    final allGroups = <String>{
+      ..._kPredefinedGroups,
+      ...existingGroups
+    }.toList()
+      ..sort();
+    final groups = ['Tutti', ...allGroups];
 
-    // Filtraggio
     final filtered = exercises.where((ex) {
       final matchMuscle = _muscleFilter == 'Tutti' ||
           ex.muscleGroup == _muscleFilter;
@@ -181,7 +178,6 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
       return matchMuscle && matchSearch;
     }).toList();
 
-    // Raggruppamento per gruppo muscolare
     final grouped = <String, List<HiveExercise>>{};
     for (final ex in filtered) {
       grouped.putIfAbsent(ex.muscleGroup, () => []).add(ex);
@@ -221,10 +217,10 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                                       .withOpacity(0.15)),
                             ),
                             child: const Icon(
-                              Icons.arrow_back_ios_new_rounded,
-                              color: Colors.white,
-                              size: 16,
-                            ),
+                                Icons
+                                    .arrow_back_ios_new_rounded,
+                                color: Colors.white,
+                                size: 16),
                           ),
                         ),
                       ),
@@ -235,22 +231,16 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                         crossAxisAlignment:
                             CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Libreria esercizi',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            '${exercises.length} esercizi',
-                            style: TextStyle(
-                              color:
-                                  Colors.white.withOpacity(0.45),
-                              fontSize: 12,
-                            ),
-                          ),
+                          const Text('Libreria esercizi',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800)),
+                          Text('${exercises.length} esercizi',
+                              style: TextStyle(
+                                  color: Colors.white
+                                      .withOpacity(0.45),
+                                  fontSize: 12)),
                         ],
                       ),
                     ),
@@ -272,7 +262,6 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 14),
 
               // ── Ricerca Glass ─────────────────────────────
@@ -323,8 +312,8 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                           ),
                           if (_search.isNotEmpty)
                             GestureDetector(
-                              onTap: () =>
-                                  setState(() => _search = ''),
+                              onTap: () => setState(
+                                  () => _search = ''),
                               child: Padding(
                                 padding:
                                     const EdgeInsets.all(8),
@@ -343,10 +332,9 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 10),
 
-              // ── Filtri gruppi muscolari ───────────────────
+              // ── Filtri Glass ──────────────────────────────
               SizedBox(
                 height: 36,
                 child: ListView.separated(
@@ -382,31 +370,27 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                           boxShadow: selected
                               ? [
                                   BoxShadow(
-                                    color:
-                                        _teal.withOpacity(0.2),
-                                    blurRadius: 8,
-                                  )
+                                      color:
+                                          _teal.withOpacity(0.2),
+                                      blurRadius: 8)
                                 ]
                               : null,
                         ),
-                        child: Text(
-                          g,
-                          style: TextStyle(
-                            color: selected
-                                ? _teal
-                                : Colors.white.withOpacity(0.55),
-                            fontSize: 12,
-                            fontWeight: selected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                          ),
-                        ),
+                        child: Text(g,
+                            style: TextStyle(
+                                color: selected
+                                    ? _teal
+                                    : Colors.white
+                                        .withOpacity(0.55),
+                                fontSize: 12,
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500)),
                       ),
                     );
                   },
                 ),
               ),
-
               const SizedBox(height: 12),
 
               // ── Lista esercizi ────────────────────────────
@@ -438,15 +422,14 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                           final group = sortedGroups[gi];
                           final groupExercises =
                               grouped[group] ?? [];
-
                           return Column(
                             crossAxisAlignment:
                                 CrossAxisAlignment.start,
                             children: [
-                              // Intestazione categoria
                               Padding(
-                                padding: const EdgeInsets.only(
-                                    bottom: 8, top: 4),
+                                padding:
+                                    const EdgeInsets.only(
+                                        bottom: 8, top: 4),
                                 child: Row(
                                   children: [
                                     Container(
@@ -461,44 +444,39 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      group.toUpperCase(),
-                                      style: TextStyle(
-                                        color: Colors.white
-                                            .withOpacity(0.9),
-                                        fontSize: 11,
-                                        fontWeight:
-                                            FontWeight.w800,
-                                        letterSpacing: 1.0,
-                                      ),
-                                    ),
+                                        group.toUpperCase(),
+                                        style: TextStyle(
+                                            color: Colors.white
+                                                .withOpacity(0.9),
+                                            fontSize: 11,
+                                            fontWeight:
+                                                FontWeight.w800,
+                                            letterSpacing: 1.0)),
                                     const SizedBox(width: 8),
                                     Text(
-                                      '${groupExercises.length}',
-                                      style: TextStyle(
-                                        color: Colors.white
-                                            .withOpacity(0.35),
-                                        fontSize: 11,
-                                        fontWeight:
-                                            FontWeight.w600,
-                                      ),
-                                    ),
+                                        '${groupExercises.length}',
+                                        style: TextStyle(
+                                            color: Colors.white
+                                                .withOpacity(0.35),
+                                            fontSize: 11,
+                                            fontWeight:
+                                                FontWeight.w600)),
                                   ],
                                 ),
                               ),
-                              // Card esercizi del gruppo
-                              ...groupExercises.map(
-                                (ex) => Padding(
-                                  padding: const EdgeInsets.only(
-                                      bottom: 8),
-                                  child: _ExerciseGlassCard(
-                                    exercise: ex,
-                                    onEdit: () =>
-                                        _showEditSheet(ex),
-                                    onDelete: () =>
-                                        _confirmDelete(ex),
-                                  ),
-                                ),
-                              ),
+                              ...groupExercises.map((ex) =>
+                                  Padding(
+                                    padding:
+                                        const EdgeInsets.only(
+                                            bottom: 8),
+                                    child: _ExerciseGlassCard(
+                                      exercise: ex,
+                                      onEdit: () =>
+                                          _showEditSheet(ex),
+                                      onDelete: () =>
+                                          _confirmDelete(ex),
+                                    ),
+                                  )),
                               const SizedBox(height: 8),
                             ],
                           );
@@ -599,22 +577,15 @@ class _ExerciseGlassCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _CardAction(
-                      icon: Icons.edit_outlined,
-                      color: Colors.white.withOpacity(0.4),
-                      onTap: onEdit,
-                    ),
-                    const SizedBox(width: 4),
-                    _CardAction(
-                      icon: Icons.delete_outline_rounded,
-                      color: _red.withOpacity(0.7),
-                      onTap: onDelete,
-                    ),
-                  ],
-                ),
+                _CardAction(
+                    icon: Icons.edit_outlined,
+                    color: Colors.white.withOpacity(0.4),
+                    onTap: onEdit),
+                const SizedBox(width: 4),
+                _CardAction(
+                    icon: Icons.delete_outline_rounded,
+                    color: _red.withOpacity(0.7),
+                    onTap: onDelete),
               ],
             ),
           ),
@@ -629,11 +600,10 @@ class _CardAction extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
-  const _CardAction({
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
+  const _CardAction(
+      {required this.icon,
+      required this.color,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -654,145 +624,361 @@ class _CardAction extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _AddExerciseSheet — crea o modifica esercizio
+// FIX 6: _ExerciseFormSheet — crea o modifica esercizio
+// - selettore gruppo muscolare (predefiniti + custom)
+// - validazione: button disabilitato se campi vuoti
+// - controllo duplicati case-insensitive
 // ─────────────────────────────────────────────────────────────
 
-class _AddExerciseSheet extends StatelessWidget {
-  final TextEditingController nameController;
-  final TextEditingController muscleController;
-  final TextEditingController notesController;
-  final VoidCallback onConfirm;
+class _ExerciseFormSheet extends StatefulWidget {
+  final String initialName;
+  final String initialMuscleGroup;
+  final String initialNotes;
+  final List<HiveExercise> existingExercises;
+  final void Function(String name, String muscleGroup,
+      String notes) onConfirm;
   final String title;
   final String confirmLabel;
 
-  const _AddExerciseSheet({
-    required this.nameController,
-    required this.muscleController,
-    required this.notesController,
+  const _ExerciseFormSheet({
+    required this.existingExercises,
     required this.onConfirm,
+    this.initialName = '',
+    this.initialMuscleGroup = '',
+    this.initialNotes = '',
     this.title = 'Nuovo esercizio',
     this.confirmLabel = 'Aggiungi esercizio',
   });
 
   @override
+  State<_ExerciseFormSheet> createState() =>
+      _ExerciseFormSheetState();
+}
+
+class _ExerciseFormSheetState
+    extends State<_ExerciseFormSheet> {
+  late TextEditingController _nameCtrl;
+  late TextEditingController _notesCtrl;
+  late TextEditingController _customMuscleCtrl;
+
+  String _selectedMuscle = '';
+  bool _showCustomMuscleField = false;
+  String? _duplicateError;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl =
+        TextEditingController(text: widget.initialName);
+    _notesCtrl =
+        TextEditingController(text: widget.initialNotes);
+    _customMuscleCtrl = TextEditingController();
+
+    // Imposta gruppo muscolare iniziale
+    final initial = widget.initialMuscleGroup;
+    if (_kPredefinedGroups.contains(initial)) {
+      _selectedMuscle = initial;
+    } else if (initial.isNotEmpty) {
+      _selectedMuscle = initial;
+      _showCustomMuscleField = true;
+      _customMuscleCtrl.text = initial;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _notesCtrl.dispose();
+    _customMuscleCtrl.dispose();
+    super.dispose();
+  }
+
+  String get _effectiveMuscle =>
+      _showCustomMuscleField && _customMuscleCtrl.text.trim().isNotEmpty
+          ? _customMuscleCtrl.text.trim()
+          : _selectedMuscle;
+
+  bool get _canSubmit =>
+      _nameCtrl.text.trim().isNotEmpty &&
+      _effectiveMuscle.isNotEmpty &&
+      _duplicateError == null;
+
+  void _checkDuplicate(String name) {
+    final trimmed = name.trim().toLowerCase();
+    final isDuplicate = widget.existingExercises.any(
+        (e) => e.name.trim().toLowerCase() == trimmed);
+    setState(() {
+      _duplicateError = isDuplicate
+          ? 'Un esercizio con questo nome esiste già.'
+          : null;
+    });
+  }
+
+  void _onConfirm() {
+    if (!_canSubmit) return;
+    final name = _nameCtrl.text.trim();
+    final muscle = _effectiveMuscle;
+    final notes = _notesCtrl.text.trim();
+    widget.onConfirm(name, muscle, notes);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF100B22).withOpacity(0.97),
-        borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(24)),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.12), width: 1),
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      padding: EdgeInsets.fromLTRB(
-        24,
-        24,
-        24,
-        MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF100B22).withOpacity(0.97),
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24)),
+              border: Border.all(
+                  color: Colors.white.withOpacity(0.12),
+                  width: 1),
             ),
-            const SizedBox(height: 20),
-            Row(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _teal.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                  child: const Icon(
-                      Icons.fitness_center_rounded,
-                      color: _teal,
-                      size: 20),
                 ),
-                const SizedBox(width: 12),
-                Text(title,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800)),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: _teal.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                          Icons.fitness_center_rounded,
+                          color: _teal,
+                          size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(widget.title,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800)),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Nome — con controllo duplicati
+                TextField(
+                  controller: _nameCtrl,
+                  autofocus: true,
+                  textCapitalization:
+                      TextCapitalization.sentences,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Nome esercizio',
+                    hintText: 'Es. Panca piana, Squat...',
+                    labelStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.5)),
+                    hintStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.3)),
+                    // FIX 6: errore duplicato in rosso
+                    errorText: _duplicateError,
+                    errorStyle: const TextStyle(
+                        color: _red, fontSize: 12),
+                  ),
+                  onChanged: (v) {
+                    setState(() {}); // aggiorna _canSubmit
+                    _checkDuplicate(v);
+                  },
+                ),
+                const SizedBox(height: 18),
+
+                // Gruppo muscolare — chips predefiniti
+                Text('Gruppo muscolare',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.4)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ..._kPredefinedGroups.map((g) {
+                      final selected = !_showCustomMuscleField &&
+                          _selectedMuscle == g;
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedMuscle = g;
+                            _showCustomMuscleField = false;
+                            _customMuscleCtrl.clear();
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration:
+                              const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? _teal.withOpacity(0.2)
+                                : Colors.white.withOpacity(0.06),
+                            borderRadius:
+                                BorderRadius.circular(10),
+                            border: Border.all(
+                              color: selected
+                                  ? _teal.withOpacity(0.6)
+                                  : Colors.white.withOpacity(0.1),
+                              width: selected ? 1.3 : 1,
+                            ),
+                          ),
+                          child: Text(g,
+                              style: TextStyle(
+                                  color: selected
+                                      ? _teal
+                                      : Colors.white
+                                          .withOpacity(0.6),
+                                  fontSize: 12,
+                                  fontWeight: selected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500)),
+                        ),
+                      );
+                    }),
+                    // "+ Personalizzato"
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _showCustomMuscleField = true;
+                          _selectedMuscle = '';
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration:
+                            const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: _showCustomMuscleField
+                              ? _teal.withOpacity(0.15)
+                              : Colors.white.withOpacity(0.04),
+                          borderRadius:
+                              BorderRadius.circular(10),
+                          border: Border.all(
+                            color: _showCustomMuscleField
+                                ? _teal.withOpacity(0.5)
+                                : Colors.white.withOpacity(0.08),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.add_rounded,
+                                size: 13,
+                                color: _showCustomMuscleField
+                                    ? _teal
+                                    : Colors.white
+                                        .withOpacity(0.45)),
+                            const SizedBox(width: 5),
+                            Text('Personalizzato',
+                                style: TextStyle(
+                                    color: _showCustomMuscleField
+                                        ? _teal
+                                        : Colors.white
+                                            .withOpacity(0.45),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Campo testo per gruppo custom
+                if (_showCustomMuscleField) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _customMuscleCtrl,
+                    autofocus: true,
+                    textCapitalization:
+                        TextCapitalization.sentences,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Gruppo personalizzato',
+                      hintText: 'Es. Glutei, Polpacci...',
+                      labelStyle: TextStyle(
+                          color: Colors.white.withOpacity(0.5)),
+                      hintStyle: TextStyle(
+                          color: Colors.white.withOpacity(0.3)),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
+
+                const SizedBox(height: 14),
+
+                // Note opzionali
+                TextField(
+                  controller: _notesCtrl,
+                  textCapitalization:
+                      TextCapitalization.sentences,
+                  style: const TextStyle(color: Colors.white),
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: 'Note (opzionale)',
+                    hintText:
+                        'Indicazioni tecniche, varianti...',
+                    labelStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.5)),
+                    hintStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.3)),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 24),
+
+                // Pulsante conferma — disabilitato se campi vuoti
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _canSubmit ? _onConfirm : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _teal,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor:
+                          Colors.white.withOpacity(0.1),
+                      disabledForegroundColor:
+                          Colors.white.withOpacity(0.3),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(14)),
+                    ),
+                    child: Text(widget.confirmLabel,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15)),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: nameController,
-              autofocus: true,
-              textCapitalization: TextCapitalization.sentences,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Nome esercizio',
-                hintText: 'Es. Panca piana, Squat...',
-                labelStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.5)),
-                hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.3)),
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: muscleController,
-              textCapitalization: TextCapitalization.sentences,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Gruppo muscolare',
-                hintText: 'Es. Petto, Gambe, Dorso...',
-                labelStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.5)),
-                hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.3)),
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: notesController,
-              textCapitalization: TextCapitalization.sentences,
-              style: const TextStyle(color: Colors.white),
-              maxLines: 2,
-              decoration: InputDecoration(
-                labelText: 'Note (opzionale)',
-                hintText:
-                    'Indicazioni tecniche, varianti...',
-                labelStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.5)),
-                hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.3)),
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: onConfirm,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _teal,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(14)),
-                ),
-                child: Text(confirmLabel,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15)),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

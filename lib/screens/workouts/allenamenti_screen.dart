@@ -11,10 +11,10 @@ import '../../providers/session_provider.dart';
 import '../../providers/workout_provider.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/glass_action_buttons.dart';
-import '../../widgets/glass_bottom_sheet.dart';
 import '../../widgets/workout_icon.dart';
 import '../exercises/exercises_screen.dart';
 import '../session/active_session_screen.dart';
+import 'workout_detail_screen.dart';
 import 'workouts_screen.dart';
 
 const _teal = Color(0xFF00D4AA);
@@ -23,6 +23,33 @@ const _green = Color(0xFF22C55E);
 const _orange = Color(0xFFFF8C00);
 const _orangeWarm = Color(0xFFFF6B00);
 const _red = Color(0xFFFF3B30);
+
+// Palette colori condivisa con _WorkoutIconSheet
+const _kIconColors = [
+  Color(0xFF00D4AA), // 0 teal
+  Color(0xFF6366F1), // 1 indigo
+  Color(0xFF22C55E), // 2 green
+  Color(0xFFF59E0B), // 3 amber
+  Color(0xFFEC4899), // 4 pink
+  Color(0xFFEF4444), // 5 red
+  Color(0xFF3B82F6), // 6 blue
+  Color(0xFF8B5CF6), // 7 purple
+];
+
+const _kIcons = [
+  ('dumbbell', Icons.fitness_center_rounded),
+  ('bike', Icons.directions_bike_rounded),
+  ('run', Icons.directions_run_rounded),
+  ('swim', Icons.pool_rounded),
+  ('yoga', Icons.self_improvement_rounded),
+  ('sports', Icons.sports_rounded),
+  ('heart', Icons.favorite_rounded),
+  ('star', Icons.star_rounded),
+  ('flash', Icons.bolt_rounded),
+  ('target', Icons.track_changes_rounded),
+  ('mountain', Icons.terrain_rounded),
+  ('fire', Icons.local_fire_department_rounded),
+];
 
 class AllenamentiScreen extends StatefulWidget {
   const AllenamentiScreen({super.key});
@@ -50,12 +77,16 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
     super.dispose();
   }
 
-  Future<T?> _showKeyboardSafeSheet<T>({required Widget child}) {
+  Future<T?> _showKeyboardSafeSheet<T>(Widget child) {
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => child,
+      builder: (ctx) => GestureDetector(
+        onTap: () => FocusScope.of(ctx).unfocus(),
+        child: child,
+      ),
     );
   }
 
@@ -63,9 +94,7 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
       BuildContext ctx, HiveWorkout workout) async {
     final wp = ctx.read<WorkoutProvider>();
     final sp = ctx.read<SessionProvider>();
-
     wp.loadWorkoutExercises(workout.key);
-
     if (sp.hasActiveSession &&
         sp.currentWorkout?.key == workout.key) {
       final result = await showCupertinoModalPopup<String>(
@@ -98,7 +127,6 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
       pushPage(ctx, ActiveSessionScreen(workout: workout));
       return;
     }
-
     if (sp.hasPausedSessionForWorkout(workout.key)) {
       final paused =
           sp.getMostRecentPausedForWorkout(workout.key);
@@ -133,22 +161,32 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
       pushPage(ctx, ActiveSessionScreen(workout: workout));
       return;
     }
-
     pushPage(ctx, ActiveSessionScreen(workout: workout));
   }
 
+  // FIX 1: "Modifica" apre direttamente WorkoutDetailScreen
+  void _handleEditTap(HiveWorkout workout) {
+    context.read<WorkoutProvider>().loadWorkoutExercises(workout.key);
+    pushPage(
+      context,
+      WorkoutDetailScreen(
+        workoutId: workout.key,
+        workoutName: workout.name,
+      ),
+    );
+  }
+
+  // FIX 2: crea scheda con icon + color picker
   Future<void> _showCreateWorkoutSheet() async {
-    final ctrl = TextEditingController();
     await _showKeyboardSafeSheet(
-      child: _CreateWorkoutSheet(
-        nameController: ctrl,
-        onConfirm: () {
-          final name = ctrl.text.trim();
-          if (name.isEmpty) return;
+      _CreateWorkoutSheetWithPicker(
+        onConfirm: (name, iconId, colorIndex) {
+          if (name.trim().isEmpty) return;
+          // FIX: salva iconId e colorIndex correttamente
           HiveDatabase.instance.addWorkout(HiveWorkout(
-            name: name,
-            iconId: 'dumbbell',
-            iconColorIndex: 0,
+            name: name.trim(),
+            iconId: iconId,
+            iconColorIndex: colorIndex,
             createdAt: DateTime.now().toIso8601String(),
           ));
           if (mounted) {
@@ -161,23 +199,12 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
   }
 
   Future<void> _showNewExerciseSheet() async {
-    final nameCtrl = TextEditingController();
-    final muscleCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
     await _showKeyboardSafeSheet(
-      child: _NewExerciseSheet(
-        nameController: nameCtrl,
-        muscleController: muscleCtrl,
-        notesController: notesCtrl,
-        onConfirm: () {
-          final name = nameCtrl.text.trim();
-          final muscle = muscleCtrl.text.trim();
-          if (name.isEmpty || muscle.isEmpty) return;
-          final notes = notesCtrl.text.trim();
-          // FIX: addExercise accetta HiveExercise, non String separati
+      _NewExerciseSheet(
+        onConfirm: (name, muscleGroup, notes) {
           HiveDatabase.instance.addExercise(HiveExercise(
             name: name,
-            muscleGroup: muscle,
+            muscleGroup: muscleGroup,
             notes: notes.isNotEmpty ? notes : null,
           ));
           if (mounted) {
@@ -204,7 +231,6 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Header ───────────────────────────────────
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -213,24 +239,18 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                         crossAxisAlignment:
                             CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Allenamenti',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 32,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
+                          const Text('Allenamenti',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.5)),
                           const SizedBox(height: 4),
-                          Text(
-                            'Il tuo spazio fitness',
-                            style: TextStyle(
-                              color:
-                                  Colors.white.withOpacity(0.5),
-                              fontSize: 14,
-                            ),
-                          ),
+                          Text('Il tuo spazio fitness',
+                              style: TextStyle(
+                                  color: Colors.white
+                                      .withOpacity(0.5),
+                                  fontSize: 14)),
                         ],
                       ),
                     ),
@@ -245,13 +265,11 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
 
                 const SizedBox(height: 28),
 
-                // ── Sessione crash-recovery ───────────────────
                 if (sp.hasActiveSession) ...[
                   _ActiveRecoveryBanner(sp: sp),
                   const SizedBox(height: 16),
                 ],
 
-                // ── Sessioni in pausa ─────────────────────────
                 if (sp.hasPausedSessions) ...[
                   _SectionLabel(
                     label: 'PAUSED SESSION',
@@ -298,7 +316,6 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                   const SizedBox(height: 8),
                 ],
 
-                // ── Nuova Sessione panel ──────────────────────
                 _NuovaSessionePanel(
                   workouts: workouts,
                   currentPage: _currentPage,
@@ -306,8 +323,9 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                   onPageChanged: (i) =>
                       setState(() => _currentPage = i),
                   onPlay: (w) => _handlePlayTap(context, w),
-                  onEdit: (_) =>
-                      pushPage(context, const WorkoutsScreen()),
+                  // FIX 1: "Modifica" → diretto a WorkoutDetailScreen
+                  onEdit: _handleEditTap,
+                  // FIX 1: "Vedi tutte" → WorkoutsScreen
                   onViewAll: () =>
                       pushPage(context, const WorkoutsScreen()),
                   onCreateNew: _showCreateWorkoutSheet,
@@ -323,7 +341,7 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GestioneEserciziPill — pillola a 2 icone senza testo
+// _GestioneEserciziPill
 // ─────────────────────────────────────────────────────────────
 
 class _GestioneEserciziPill extends StatelessWidget {
@@ -469,15 +487,12 @@ class _SectionLabel extends StatelessWidget {
         const SizedBox(width: 8),
         Icon(icon, size: 14, color: color),
         const SizedBox(width: 6),
-        Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.2,
-          ),
-        ),
+        Text(label,
+            style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2)),
       ],
     );
   }
@@ -529,7 +544,8 @@ class _ActiveRecoveryBanner extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF3B82F6).withOpacity(0.15),
+                color:
+                    const Color(0xFF3B82F6).withOpacity(0.15),
                 blurRadius: 24,
                 spreadRadius: 1,
               ),
@@ -546,50 +562,41 @@ class _ActiveRecoveryBanner extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
-                  Icons.sports_gymnastics_rounded,
-                  color: Color(0xFF60A5FA),
-                  size: 24,
-                ),
+                    Icons.sports_gymnastics_rounded,
+                    color: Color(0xFF60A5FA),
+                    size: 24),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Sessione interrotta',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
+                    Text('Sessione interrotta',
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.6),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5)),
                     const SizedBox(height: 2),
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Text(name,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 4),
                     Row(
                       children: [
                         _StatChip(
-                          icon: Icons.timer_outlined,
-                          label: _fmt(elapsed),
-                          color: const Color(0xFF60A5FA),
-                        ),
+                            icon: Icons.timer_outlined,
+                            label: _fmt(elapsed),
+                            color: const Color(0xFF60A5FA)),
                         const SizedBox(width: 8),
                         _StatChip(
-                          icon: Icons.check_rounded,
-                          label: '$completed/$total serie',
-                          color: const Color(0xFF60A5FA),
-                        ),
+                            icon: Icons.check_rounded,
+                            label: '$completed/$total serie',
+                            color: const Color(0xFF60A5FA)),
                       ],
                     ),
                   ],
@@ -618,14 +625,11 @@ class _ActiveRecoveryBanner extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: const Text(
-                    'Riprendi',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
+                  child: const Text('Riprendi',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
                 ),
               ),
             ],
@@ -714,10 +718,9 @@ class _PausedSessionPanel extends StatelessWidget {
                 color: _orange.withOpacity(0.45), width: 1.3),
             boxShadow: [
               BoxShadow(
-                color: _orange.withOpacity(0.2),
-                blurRadius: 28,
-                spreadRadius: 1,
-              ),
+                  color: _orange.withOpacity(0.2),
+                  blurRadius: 28,
+                  spreadRadius: 1)
             ],
           ),
           child: Padding(
@@ -741,15 +744,12 @@ class _PausedSessionPanel extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      'PAUSED SESSION',
-                      style: TextStyle(
-                        color: _orange,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
+                    Text('PAUSED SESSION',
+                        style: TextStyle(
+                            color: _orange,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1)),
                     const Spacer(),
                     GestureDetector(
                       onTap: onDelete,
@@ -773,16 +773,13 @@ class _PausedSessionPanel extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
-                Text(
-                  _name(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text(_name(),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
@@ -816,10 +813,9 @@ class _PausedSessionPanel extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
-                          color: _orange.withOpacity(0.4),
-                          blurRadius: 16,
-                          offset: const Offset(0, 4),
-                        ),
+                            color: _orange.withOpacity(0.4),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4))
                       ],
                     ),
                     child: const Row(
@@ -857,6 +853,7 @@ class _NuovaSessionePanel extends StatelessWidget {
   final PageController pageController;
   final void Function(int) onPageChanged;
   final void Function(HiveWorkout) onPlay;
+  // FIX 1: onEdit ora riceve la specifica scheda
   final void Function(HiveWorkout) onEdit;
   final VoidCallback onViewAll;
   final VoidCallback onCreateNew;
@@ -895,10 +892,9 @@ class _NuovaSessionePanel extends StatelessWidget {
                 color: _teal.withOpacity(0.35), width: 1.3),
             boxShadow: [
               BoxShadow(
-                color: _teal.withOpacity(0.12),
-                blurRadius: 32,
-                spreadRadius: 1,
-              ),
+                  color: _teal.withOpacity(0.12),
+                  blurRadius: 32,
+                  spreadRadius: 1)
             ],
           ),
           child: Padding(
@@ -946,25 +942,49 @@ class _NuovaSessionePanel extends StatelessWidget {
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.3)),
                     const Spacer(),
+                    // FIX 1: "Vedi tutte" → pulsante Glass visibile
                     if (workouts.isNotEmpty)
                       GestureDetector(
                         onTap: onViewAll,
-                        child: Row(
-                          children: [
-                            Text('Vedi tutte',
-                                style: TextStyle(
-                                    color:
-                                        _teal.withOpacity(0.8),
-                                    fontSize: 12,
-                                    fontWeight:
-                                        FontWeight.w600)),
-                            const SizedBox(width: 3),
-                            Icon(
-                                Icons
-                                    .arrow_forward_ios_rounded,
-                                size: 11,
-                                color: _teal.withOpacity(0.8)),
-                          ],
+                        child: ClipRRect(
+                          borderRadius:
+                              BorderRadius.circular(10),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(
+                                sigmaX: 8, sigmaY: 8),
+                            child: Container(
+                              padding:
+                                  const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 7),
+                              decoration: BoxDecoration(
+                                color: _teal.withOpacity(0.12),
+                                borderRadius:
+                                    BorderRadius.circular(10),
+                                border: Border.all(
+                                    color: _teal
+                                        .withOpacity(0.35),
+                                    width: 1),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Vedi tutte',
+                                      style: TextStyle(
+                                          color: _teal,
+                                          fontSize: 12,
+                                          fontWeight:
+                                              FontWeight.w700)),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                      Icons
+                                          .arrow_forward_ios_rounded,
+                                      size: 10,
+                                      color: _teal),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                   ],
@@ -994,6 +1014,7 @@ class _NuovaSessionePanel extends StatelessWidget {
                                 sp.currentWorkout?.key ==
                                     w.key,
                             onPlay: () => onPlay(w),
+                            // FIX 1: passa w (scheda specifica)
                             onEdit: () => onEdit(w),
                           ),
                         );
@@ -1254,6 +1275,7 @@ class _WorkoutCarouselCard extends StatelessWidget {
                 const Spacer(),
                 Row(
                   children: [
+                    // FIX 1: "Modifica" ora apre direttamente la scheda
                     GestureDetector(
                       onTap: onEdit,
                       child: Row(
@@ -1443,104 +1465,235 @@ class _StatChip extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _CreateWorkoutSheet
+// FIX 2: _CreateWorkoutSheetWithPicker — crea scheda con
+// icona e colore (anteprima live, salvataggio corretto)
 // ─────────────────────────────────────────────────────────────
 
-class _CreateWorkoutSheet extends StatelessWidget {
-  final TextEditingController nameController;
-  final VoidCallback onConfirm;
+class _CreateWorkoutSheetWithPicker extends StatefulWidget {
+  final void Function(String name, String iconId, int colorIndex)
+      onConfirm;
 
-  const _CreateWorkoutSheet({
-    required this.nameController,
-    required this.onConfirm,
-  });
+  const _CreateWorkoutSheetWithPicker(
+      {required this.onConfirm});
+
+  @override
+  State<_CreateWorkoutSheetWithPicker> createState() =>
+      _CreateWorkoutSheetWithPickerState();
+}
+
+class _CreateWorkoutSheetWithPickerState
+    extends State<_CreateWorkoutSheetWithPicker> {
+  final _nameCtrl = TextEditingController();
+  String _selectedIconId = 'dumbbell';
+  int _selectedColorIndex = 0;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF100B22).withOpacity(0.97),
-        borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(24)),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.12), width: 1),
+    final accentColor = _kIconColors[_selectedColorIndex];
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      padding: EdgeInsets.fromLTRB(
-        24,
-        24,
-        24,
-        MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF100B22).withOpacity(0.97),
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24)),
+              border: Border.all(
+                  color: Colors.white.withOpacity(0.12),
+                  width: 1),
             ),
-            const SizedBox(height: 20),
-            Row(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _teal.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                  child: const Icon(Icons.add_rounded,
-                      color: _teal, size: 20),
                 ),
-                const SizedBox(width: 12),
-                const Text('Nuova scheda',
+                const SizedBox(height: 20),
+
+                // Anteprima + nome
+                Row(
+                  children: [
+                    WorkoutAvatar(
+                      iconId: _selectedIconId,
+                      iconColorIndex: _selectedColorIndex,
+                      size: 60,
+                      iconSize: 30,
+                      borderRadius: 16,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextField(
+                        controller: _nameCtrl,
+                        autofocus: true,
+                        textCapitalization:
+                            TextCapitalization.sentences,
+                        style:
+                            const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'Nome scheda',
+                          hintText: 'Es. Push Day, Full Body...',
+                          labelStyle: TextStyle(
+                              color:
+                                  Colors.white.withOpacity(0.5)),
+                          hintStyle: TextStyle(
+                              color:
+                                  Colors.white.withOpacity(0.3)),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Colore
+                Text('Colore',
                     style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800)),
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children:
+                      _kIconColors.asMap().entries.map((e) {
+                    final selected =
+                        e.key == _selectedColorIndex;
+                    return GestureDetector(
+                      onTap: () => setState(
+                          () => _selectedColorIndex = e.key),
+                      child: AnimatedContainer(
+                        duration:
+                            const Duration(milliseconds: 150),
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: e.value,
+                          shape: BoxShape.circle,
+                          border: selected
+                              ? Border.all(
+                                  color: Colors.white,
+                                  width: 2.5)
+                              : Border.all(
+                                  color: Colors.transparent),
+                          boxShadow: selected
+                              ? [
+                                  BoxShadow(
+                                      color: e.value
+                                          .withOpacity(0.6),
+                                      blurRadius: 8)
+                                ]
+                              : null,
+                        ),
+                        child: selected
+                            ? const Icon(Icons.check_rounded,
+                                color: Colors.white, size: 16)
+                            : null,
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+
+                // Icona
+                Text('Icona',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _kIcons.map((icon) {
+                    final selected =
+                        icon.$1 == _selectedIconId;
+                    return GestureDetector(
+                      onTap: () => setState(
+                          () => _selectedIconId = icon.$1),
+                      child: AnimatedContainer(
+                        duration:
+                            const Duration(milliseconds: 150),
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? accentColor.withOpacity(0.2)
+                              : Colors.white.withOpacity(0.06),
+                          borderRadius:
+                              BorderRadius.circular(11),
+                          border: Border.all(
+                            color: selected
+                                ? accentColor.withOpacity(0.6)
+                                : Colors.white.withOpacity(0.1),
+                            width: selected ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Icon(icon.$2,
+                            color: selected
+                                ? accentColor
+                                : Colors.white.withOpacity(0.5),
+                            size: 22),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 24),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _nameCtrl.text.trim().isEmpty
+                        ? null
+                        : () => widget.onConfirm(
+                              _nameCtrl.text.trim(),
+                              _selectedIconId,
+                              _selectedColorIndex,
+                            ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accentColor,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor:
+                          Colors.white.withOpacity(0.1),
+                      disabledForegroundColor:
+                          Colors.white.withOpacity(0.3),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(14)),
+                    ),
+                    child: const Text('Crea scheda',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15)),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: nameController,
-              autofocus: true,
-              textCapitalization: TextCapitalization.sentences,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Nome scheda',
-                hintText: 'Es. Push, Pull, Gambe...',
-                labelStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.5)),
-                hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.3)),
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: onConfirm,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _teal,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                ),
-                child: const Text('Crea scheda',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15)),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1548,140 +1701,148 @@ class _CreateWorkoutSheet extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _NewExerciseSheet — creazione esercizio custom dalla dashboard
+// _NewExerciseSheet
 // ─────────────────────────────────────────────────────────────
 
 class _NewExerciseSheet extends StatelessWidget {
-  final TextEditingController nameController;
-  final TextEditingController muscleController;
-  final TextEditingController notesController;
-  final VoidCallback onConfirm;
+  final void Function(String name, String muscleGroup,
+      String notes) onConfirm;
 
-  const _NewExerciseSheet({
-    required this.nameController,
-    required this.muscleController,
-    required this.notesController,
-    required this.onConfirm,
-  });
+  const _NewExerciseSheet({required this.onConfirm});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF100B22).withOpacity(0.97),
-        borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(24)),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.12), width: 1),
+    final nameCtrl = TextEditingController();
+    final muscleCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      padding: EdgeInsets.fromLTRB(
-        24,
-        24,
-        24,
-        MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF100B22).withOpacity(0.97),
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24)),
+              border: Border.all(
+                  color: Colors.white.withOpacity(0.12),
+                  width: 1),
             ),
-            const SizedBox(height: 20),
-            Row(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _teal.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                  child: const Icon(
-                      Icons.fitness_center_rounded,
-                      color: _teal,
-                      size: 20),
                 ),
-                const SizedBox(width: 12),
-                const Text('Nuovo esercizio',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800)),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: _teal.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                          Icons.fitness_center_rounded,
+                          color: _teal,
+                          size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Nuovo esercizio',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800)),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: nameCtrl,
+                  autofocus: true,
+                  textCapitalization:
+                      TextCapitalization.sentences,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Nome esercizio',
+                    hintText: 'Es. Panca piana, Squat...',
+                    labelStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.5)),
+                    hintStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.3)),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: muscleCtrl,
+                  textCapitalization:
+                      TextCapitalization.sentences,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Gruppo muscolare',
+                    hintText: 'Es. Petto, Gambe...',
+                    labelStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.5)),
+                    hintStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.3)),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: notesCtrl,
+                  textCapitalization:
+                      TextCapitalization.sentences,
+                  style: const TextStyle(color: Colors.white),
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: 'Note (opzionale)',
+                    hintText:
+                        'Indicazioni tecniche, varianti...',
+                    labelStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.5)),
+                    hintStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.3)),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => onConfirm(
+                      nameCtrl.text.trim(),
+                      muscleCtrl.text.trim(),
+                      notesCtrl.text.trim(),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _teal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(14)),
+                    ),
+                    child: const Text('Aggiungi esercizio',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15)),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: nameController,
-              autofocus: true,
-              textCapitalization: TextCapitalization.sentences,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Nome esercizio',
-                hintText: 'Es. Panca piana, Squat...',
-                labelStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.5)),
-                hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.3)),
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: muscleController,
-              textCapitalization: TextCapitalization.sentences,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Gruppo muscolare',
-                hintText: 'Es. Petto, Gambe, Dorso...',
-                labelStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.5)),
-                hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.3)),
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: notesController,
-              textCapitalization: TextCapitalization.sentences,
-              style: const TextStyle(color: Colors.white),
-              maxLines: 2,
-              decoration: InputDecoration(
-                labelText: 'Note (opzionale)',
-                hintText:
-                    'Indicazioni tecniche, varianti...',
-                labelStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.5)),
-                hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.3)),
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: onConfirm,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _teal,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                ),
-                child: const Text('Aggiungi esercizio',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15)),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

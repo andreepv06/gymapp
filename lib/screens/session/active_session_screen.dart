@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/hive_models.dart';
@@ -89,7 +90,6 @@ class _ActiveSessionScreenState
     final exercises = session.sessionExercises;
     final seenCircuits = <String>{};
     final items = <_SessionItem>[];
-
     for (final ex in exercises) {
       if (ex.circuitId != null) {
         final cid = ex.circuitId!;
@@ -103,7 +103,6 @@ class _ActiveSessionScreenState
             type: _SessionItemType.exercise, data: ex));
       }
     }
-
     _items = items;
     _lastItemIds = _items.map((i) => i.stableId).toList();
   }
@@ -112,7 +111,6 @@ class _ActiveSessionScreenState
     final exercises = session.sessionExercises;
     final seenCircuits = <String>{};
     final validIds = <String>[];
-
     for (final ex in exercises) {
       if (ex.circuitId != null) {
         final cid = ex.circuitId!;
@@ -124,13 +122,10 @@ class _ActiveSessionScreenState
         validIds.add('ex_${ex.exerciseKey}');
       }
     }
-
     final validSet = validIds.toSet();
     final localIds = _items.map((i) => i.stableId).toSet();
-
     if (validSet.length == localIds.length &&
         validSet.containsAll(localIds)) return;
-
     final items = <_SessionItem>[];
     final seen2 = <String>{};
     for (final ex in exercises) {
@@ -146,7 +141,6 @@ class _ActiveSessionScreenState
             type: _SessionItemType.exercise, data: ex));
       }
     }
-
     _items = items;
     _lastItemIds = _items.map((i) => i.stableId).toList();
   }
@@ -301,6 +295,37 @@ class _ActiveSessionScreenState
     }
   }
 
+  // ── FIX 5: mostra scelta tra esercizio singolo e circuito ──
+
+  void _showAddMenu() {
+    showCupertinoModalPopup<String>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: const Text('Aggiungi alla sessione'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showAddExerciseSheet();
+            },
+            child: const Text('Aggiungi esercizio'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showAddCircuitSheet();
+            },
+            child: const Text('Aggiungi circuito (super-set)'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Annulla'),
+        ),
+      ),
+    );
+  }
+
   void _showAddExerciseSheet() {
     final sessionProvider = context.read<SessionProvider>();
     final exerciseProvider = context.read<ExerciseProvider>();
@@ -316,6 +341,35 @@ class _ActiveSessionScreenState
     ).then((_) {
       if (mounted) setState(() => _rebuildItemsFromProvider());
     });
+  }
+
+  // ── FIX 5: aggiunta circuito in sessione ──────────────────
+
+  void _showAddCircuitSheet() {
+    final sessionProvider = context.read<SessionProvider>();
+    final exerciseProvider = context.read<ExerciseProvider>();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: exerciseProvider),
+          ChangeNotifierProvider.value(value: sessionProvider),
+        ],
+        child: _AddCircuitSheet(
+          onConfirm: (exercises, rounds) async {
+            await sessionProvider.addCircuitToSession(
+              exercises: exercises,
+              rounds: rounds,
+            );
+            if (mounted) {
+              setState(() => _rebuildItemsFromProvider());
+            }
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -349,8 +403,9 @@ class _ActiveSessionScreenState
             mainAxisSize: MainAxisSize.min,
             children: [
               WorkoutAvatar(
-                iconId: widget.workout.iconId,
-                iconColorIndex: widget.workout.iconColorIndex,
+                iconId: widget.workout.iconId ?? 'dumbbell',
+                iconColorIndex:
+                    widget.workout.iconColorIndex ?? 0,
                 customImagePath: widget.workout.customImagePath,
                 size: 28,
                 iconSize: 14,
@@ -369,13 +424,14 @@ class _ActiveSessionScreenState
             },
           ),
           actions: [
+            // FIX 5: "Aggiungi" ora mostra menu con esercizio o circuito
             GlassTextButton(
-              onPressed: _showAddExerciseSheet,
+              onPressed: _showAddMenu,
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.fitness_center, size: 18),
-                  SizedBox(width: 6),
+                  Icon(Icons.add_rounded, size: 18),
+                  SizedBox(width: 4),
                   Text('Aggiungi'),
                 ],
               ),
@@ -465,8 +521,8 @@ class _ActiveSessionScreenState
                           sessionProvider
                               .removeExerciseFromSession(
                                   ex.exerciseKey);
-                          setState(() =>
-                              _rebuildItemsFromProvider());
+                          setState(
+                              () => _rebuildItemsFromProvider());
                         },
                         onEditNote: (note) =>
                             sessionProvider.updateExerciseNote(
@@ -621,8 +677,9 @@ class _CircuitSessionBlock extends StatelessWidget {
                     physics:
                         const NeverScrollableScrollPhysics(),
                     buildDefaultDragHandles: false,
-                    proxyDecorator: (child, index, animation) =>
-                        AnimatedBuilder(
+                    proxyDecorator:
+                        (child, index, animation) =>
+                            AnimatedBuilder(
                       animation: animation,
                       builder: (_, __) => Material(
                         elevation: 6,
@@ -634,7 +691,8 @@ class _CircuitSessionBlock extends StatelessWidget {
                     onReorder: (oldIndex, newIndex) {
                       if (newIndex > oldIndex) newIndex--;
                       final reordered =
-                          List<SessionExercise>.from(exercises);
+                          List<SessionExercise>.from(
+                              exercises);
                       final item =
                           reordered.removeAt(oldIndex);
                       reordered.insert(newIndex, item);
@@ -733,6 +791,317 @@ class _RoundNavBtn extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
+// FIX 5: _AddCircuitSheet — aggiunge circuito temporaneo
+// ─────────────────────────────────────────────────────────────
+
+class _AddCircuitSheet extends StatefulWidget {
+  final Future<void> Function(
+    List<({
+      dynamic exerciseKey,
+      String exerciseName,
+      String muscleGroup,
+    })> exercises,
+    int rounds,
+  ) onConfirm;
+
+  const _AddCircuitSheet({required this.onConfirm});
+
+  @override
+  State<_AddCircuitSheet> createState() =>
+      _AddCircuitSheetState();
+}
+
+class _AddCircuitSheetState extends State<_AddCircuitSheet> {
+  final Set<dynamic> _selected = {};
+  int _rounds = 3;
+  String _search = '';
+  bool _loading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final allExercises =
+        context.watch<ExerciseProvider>().exercises;
+    final sessionProvider = context.read<SessionProvider>();
+    final alreadyFree = sessionProvider.sessionExercises
+        .where((e) => !e.isInCircuit)
+        .map((e) => e.exerciseKey)
+        .toSet();
+
+    final filtered = allExercises.where((e) {
+      return _search.isEmpty ||
+          e.name
+              .toLowerCase()
+              .contains(_search.toLowerCase()) ||
+          e.muscleGroup
+              .toLowerCase()
+              .contains(_search.toLowerCase());
+    }).toList();
+
+    final cs = Theme.of(context).colorScheme;
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF100B22).withOpacity(0.97)
+              : cs.surface,
+          borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(24)),
+          border: Border.all(
+              color: Colors.white.withOpacity(0.12), width: 1),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: cs.tertiary.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.loop_rounded,
+                        color: cs.tertiary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text('Nuovo circuito',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800)),
+                  ),
+                  Text(
+                    '${_selected.length} selezionati',
+                    style: TextStyle(
+                        color: cs.outline, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Selettore rounds
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Text('Cicli:',
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 12),
+                  ...List.generate(5, (i) {
+                    final rounds = i + 1;
+                    final selected = _rounds == rounds;
+                    return GestureDetector(
+                      onTap: () =>
+                          setState(() => _rounds = rounds),
+                      child: AnimatedContainer(
+                        duration:
+                            const Duration(milliseconds: 150),
+                        margin: const EdgeInsets.only(right: 8),
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? cs.tertiary
+                              : cs.tertiary.withOpacity(0.1),
+                          borderRadius:
+                              BorderRadius.circular(10),
+                          border: Border.all(
+                            color: selected
+                                ? cs.tertiary
+                                : cs.tertiary.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '$rounds',
+                            style: TextStyle(
+                              color: selected
+                                  ? cs.onTertiary
+                                  : cs.tertiary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Ricerca
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Cerca esercizio...',
+                  prefixIcon: const Icon(Icons.search),
+                  isDense: true,
+                  hintStyle: TextStyle(
+                      color: Colors.white.withOpacity(0.35)),
+                ),
+                style: const TextStyle(color: Colors.white),
+                onChanged: (v) => setState(() => _search = v),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Lista esercizi
+            Expanded(
+              child: ListView.builder(
+                physics: const BouncingScrollPhysics(),
+                itemCount: filtered.length,
+                itemBuilder: (_, i) {
+                  final ex = filtered[i];
+                  final isSelected =
+                      _selected.contains(ex.key);
+                  final isFree = alreadyFree.contains(ex.key);
+
+                  return ListTile(
+                    leading: isFree
+                        ? Icon(Icons.check,
+                            color: cs.outline, size: 20)
+                        : Checkbox(
+                            value: isSelected,
+                            onChanged: (_) {
+                              setState(() {
+                                if (isSelected) {
+                                  _selected.remove(ex.key);
+                                } else {
+                                  _selected.add(ex.key);
+                                }
+                              });
+                            },
+                          ),
+                    title: Text(ex.name,
+                        style: TextStyle(
+                            color: isFree
+                                ? cs.outline
+                                : Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600)),
+                    subtitle: Text(ex.muscleGroup,
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.45),
+                            fontSize: 12)),
+                    enabled: !isFree,
+                    onTap: isFree
+                        ? null
+                        : () {
+                            setState(() {
+                              if (isSelected) {
+                                _selected.remove(ex.key);
+                              } else {
+                                _selected.add(ex.key);
+                              }
+                            });
+                          },
+                  );
+                },
+              ),
+            ),
+
+            // Conferma
+            if (_selected.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                    20,
+                    8,
+                    20,
+                    MediaQuery.of(context).padding.bottom +
+                        16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _loading
+                        ? null
+                        : () async {
+                            setState(() => _loading = true);
+                            final allEx = context
+                                .read<ExerciseProvider>()
+                                .exercises;
+                            final exercisesList =
+                                <({
+                              dynamic exerciseKey,
+                              String exerciseName,
+                              String muscleGroup,
+                            })>[];
+                            for (final key in _selected) {
+                              try {
+                                final ex = allEx.firstWhere(
+                                    (e) => e.key == key);
+                                exercisesList.add((
+                                  exerciseKey: ex.key,
+                                  exerciseName: ex.name,
+                                  muscleGroup: ex.muscleGroup,
+                                ));
+                              } catch (_) {}
+                            }
+                            await widget.onConfirm(
+                                exercisesList, _rounds);
+                            if (mounted)
+                              Navigator.pop(context);
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: cs.tertiary,
+                      foregroundColor: cs.onTertiary,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(14)),
+                    ),
+                    child: _loading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white))
+                        : Text(
+                            'Crea circuito con ${_selected.length} esercizi · $_rounds cicli',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14)),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // _AddMultipleExercisesSheet
 // ─────────────────────────────────────────────────────────────
 
@@ -815,8 +1184,7 @@ class _AddMultipleExercisesSheetState
                 prefixIcon: Icon(Icons.search),
                 isDense: true,
               ),
-              onChanged: (v) =>
-                  setState(() => _search = v),
+              onChanged: (v) => setState(() => _search = v),
             ),
           ),
           const SizedBox(height: 8),
@@ -1080,7 +1448,6 @@ class _ExerciseSessionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Header: sempre visibile ───────────────
                 GestureDetector(
                   onTap: onToggleExpand,
                   child: Row(
@@ -1161,10 +1528,7 @@ class _ExerciseSessionCard extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                // ── Corpo: visibile solo se espanso ──────
                 if (isExpanded) ...[
-                  // Nota di sessione
                   if (hasNote)
                     GestureDetector(
                       onTap: () => _showNoteDialog(context),
@@ -1192,12 +1556,10 @@ class _ExerciseSessionCard extends StatelessWidget {
                             ),
                             const SizedBox(width: 6),
                             Expanded(
-                              child: Text(
-                                ex.sessionNote!,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: cs.tertiary),
-                              ),
+                              child: Text(ex.sessionNote!,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: cs.tertiary)),
                             ),
                             Icon(Icons.edit,
                                 size: 12,
@@ -1206,10 +1568,7 @@ class _ExerciseSessionCard extends StatelessWidget {
                         ),
                       ),
                     ),
-
                   const SizedBox(height: 10),
-
-                  // Intestazioni colonne
                   Row(
                     children: [
                       const SizedBox(width: 28),
@@ -1234,8 +1593,6 @@ class _ExerciseSessionCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-
-                  // Righe serie
                   ...sets.asMap().entries.map((entry) {
                     final i = entry.key;
                     final set = entry.value;
@@ -1249,10 +1606,7 @@ class _ExerciseSessionCard extends StatelessWidget {
                           onUpdate(i, weight, reps),
                     );
                   }),
-
                   const SizedBox(height: 8),
-
-                  // Pulsanti azione
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
@@ -1321,8 +1675,6 @@ class _ExerciseSessionCard extends StatelessWidget {
                       ),
                     ],
                   ),
-
-                  // Banner recupero
                   Consumer<SessionProvider>(
                     builder: (_, session, __) {
                       final isResting = session.isResting &&
@@ -1349,7 +1701,7 @@ class _ExerciseSessionCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _MiniBtn
+// Mini componenti
 // ─────────────────────────────────────────────────────────────
 
 class _MiniBtn extends StatelessWidget {
@@ -1403,10 +1755,6 @@ class _MiniBtn extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _SetRow — placeholder peso (lastWeight) + rep +/-
-// ─────────────────────────────────────────────────────────────
-
 class _SetRow extends StatefulWidget {
   final int setNumber;
   final ActiveSet set;
@@ -1441,10 +1789,6 @@ class _SetRowState extends State<_SetRow> {
               : widget.set.weight.toString())
           : '',
     );
-    _rCtrl();
-  }
-
-  void _rCtrl() {
     _repsCtrl =
         TextEditingController(text: _currentReps.toString());
   }
@@ -1504,8 +1848,6 @@ class _SetRowState extends State<_SetRow> {
     final cs = Theme.of(context).colorScheme;
     final isDark =
         Theme.of(context).brightness == Brightness.dark;
-
-    // Placeholder: mostra lastWeight se il campo peso è vuoto
     final weightHint = widget.set.lastWeight != null
         ? (widget.set.lastWeight! % 1 == 0
             ? widget.set.lastWeight!.toInt().toString()
@@ -1527,7 +1869,6 @@ class _SetRowState extends State<_SetRow> {
       ),
       child: Row(
         children: [
-          // Numero serie
           SizedBox(
             width: 28,
             child: Text('${widget.setNumber}',
@@ -1540,8 +1881,6 @@ class _SetRowState extends State<_SetRow> {
                         : cs.outline)),
           ),
           const SizedBox(width: 4),
-
-          // Peso con placeholder lastWeight
           Expanded(
             flex: 3,
             child: TextField(
@@ -1571,8 +1910,6 @@ class _SetRowState extends State<_SetRow> {
             ),
           ),
           const SizedBox(width: 4),
-
-          // Reps: [-] campo [+]
           Expanded(
             flex: 4,
             child: Container(
@@ -1639,8 +1976,6 @@ class _SetRowState extends State<_SetRow> {
             ),
           ),
           const SizedBox(width: 4),
-
-          // Pulsante completa
           SizedBox(
             width: 40,
             child: IconButton(
@@ -1660,7 +1995,8 @@ class _SetRowState extends State<_SetRow> {
                 isCompleted
                     ? Icons.check_circle
                     : Icons.check_circle_outline,
-                color: isCompleted ? cs.primary : cs.outline,
+                color:
+                    isCompleted ? cs.primary : cs.outline,
                 size: 26,
               ),
             ),
@@ -1698,10 +2034,6 @@ class _RepsBtn extends StatelessWidget {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// _RestBanner — banner recupero Glass inline
-// ─────────────────────────────────────────────────────────────
 
 class _RestBanner extends StatelessWidget {
   final int elapsed;
@@ -1748,9 +2080,8 @@ class _RestBanner extends StatelessWidget {
               color: bg.withOpacity(isDark ? 0.7 : 0.85),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color:
-                    (isOver ? cs.error : cs.secondary)
-                        .withOpacity(0.3),
+                color: (isOver ? cs.error : cs.secondary)
+                    .withOpacity(0.3),
                 width: 1,
               ),
             ),
