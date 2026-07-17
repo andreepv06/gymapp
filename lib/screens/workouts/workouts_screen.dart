@@ -1,40 +1,19 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import '../../core/navigation/app_router.dart';
 import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
 import '../../providers/workout_provider.dart';
 import '../../widgets/cosmic_background.dart';
-import '../../widgets/glass_action_buttons.dart';
 import '../../widgets/workout_icon.dart';
 import 'workout_detail_screen.dart';
 
 const _teal = Color(0xFF00D4AA);
-const _red = Color(0xFFFF3B30);
-
-// ─────────────────────────────────────────────────────────────
-// Helper per bottom sheet con gestione tastiera
-// ─────────────────────────────────────────────────────────────
-
-Future<T?> _showKeyboardSafeSheet<T>(
-    BuildContext context, Widget child) {
-  return showModalBottomSheet<T>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => child,
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// WorkoutsScreen
-// ─────────────────────────────────────────────────────────────
+const _red  = Color(0xFFFF3B30);
 
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
-
   @override
   State<WorkoutsScreen> createState() => _WorkoutsScreenState();
 }
@@ -47,18 +26,45 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         () => context.read<WorkoutProvider>().loadWorkouts());
   }
 
-  // ── Crea nuova scheda ──────────────────────────────────────
+  // FIX: metodo DENTRO la classe — context è disponibile
+  Future<T?> _showKeyboardSafeSheet<T>(Widget child) {
+    return showModalBottomSheet<T>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => GestureDetector(
+        onTap: () => FocusScope.of(ctx).unfocus(),
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+              ),
+              child: SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: child,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _showCreateSheet() async {
     final ctrl = TextEditingController();
     await _showKeyboardSafeSheet(
-      context,
       _WorkoutCreateSheet(
         nameController: ctrl,
         onConfirm: () {
           final name = ctrl.text.trim();
           if (name.isEmpty) return;
-          // FIX: addWorkout accetta HiveWorkout
           HiveDatabase.instance.addWorkout(HiveWorkout(
             name: name,
             iconId: 'dumbbell',
@@ -74,11 +80,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
   }
 
-  // ── Opzioni scheda ─────────────────────────────────────────
-
   void _showWorkoutOptions(HiveWorkout workout) {
     _showKeyboardSafeSheet(
-      context,
       _WorkoutOptionsSheet(
         workout: workout,
         onRename: () {
@@ -100,13 +103,11 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   Future<void> _showRenameSheet(HiveWorkout workout) async {
     final ctrl = TextEditingController(text: workout.name);
     await _showKeyboardSafeSheet(
-      context,
       _WorkoutRenameSheet(
         nameController: ctrl,
         onConfirm: () {
           final name = ctrl.text.trim();
           if (name.isEmpty) return;
-          // FIX: updateWorkout(key, name) — solo il nome
           HiveDatabase.instance.updateWorkout(workout.key, name);
           if (mounted) {
             context.read<WorkoutProvider>().loadWorkouts();
@@ -119,19 +120,14 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
 
   Future<void> _showIconSheet(HiveWorkout workout) async {
     await _showKeyboardSafeSheet(
-      context,
       _WorkoutIconSheet(
-        // FIX: null safety
         currentIconId: workout.iconId ?? 'dumbbell',
         currentColorIndex: workout.iconColorIndex ?? 0,
         onSelect: (iconId, colorIndex) {
-          // FIX: mutazione diretta + save() sull'oggetto Hive
-          // Funziona perché HiveWorkout estende HiveObject.
           workout.iconId = iconId;
           workout.iconColorIndex = colorIndex;
           workout.save();
           if (mounted) {
-            // Forza il refresh del Provider per aggiornare la UI
             context.read<WorkoutProvider>().loadWorkouts();
             Navigator.pop(context);
           }
@@ -169,8 +165,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: Text('Annulla',
-                style:
-                    TextStyle(color: Colors.white.withOpacity(0.6))),
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.6))),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -181,7 +177,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         ],
       ),
     );
-
     if (confirm == true && mounted) {
       await HiveDatabase.instance.deleteWorkout(workout.key);
       context.read<WorkoutProvider>().loadWorkouts();
@@ -191,7 +186,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   @override
   Widget build(BuildContext context) {
     final workouts = context.watch<WorkoutProvider>().workouts;
-
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: CosmicBackground(
@@ -199,7 +193,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // ── AppBar Glass ──────────────────────────────
               _GlassAppBar(
                 title: 'Le mie schede',
                 onBack: () => Navigator.pop(context),
@@ -219,8 +212,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                   ),
                 ),
               ),
-
-              // ── Lista schede ──────────────────────────────
               Expanded(
                 child: workouts.isEmpty
                     ? _EmptyWorkoutsState(
@@ -232,8 +223,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                         itemCount: workouts.length,
                         itemBuilder: (_, i) {
                           return Padding(
-                            padding: const EdgeInsets.only(
-                                bottom: 12),
+                            padding:
+                                const EdgeInsets.only(bottom: 12),
                             child: _WorkoutGlassCard(
                               workout: workouts[i],
                               onTap: () {
@@ -245,14 +236,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                   context,
                                   WorkoutDetailScreen(
                                     workoutId: workouts[i].key,
-                                    workoutName:
-                                        workouts[i].name,
+                                    workoutName: workouts[i].name,
                                   ),
                                 );
                               },
                               onOptions: () =>
-                                  _showWorkoutOptions(
-                                      workouts[i]),
+                                  _showWorkoutOptions(workouts[i]),
                             ),
                           );
                         },
@@ -262,8 +251,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           ),
         ),
       ),
-
-      // FIX 3: FAB senza doppia icona
       floatingActionButtonLocation:
           FloatingActionButtonLocation.centerFloat,
       floatingActionButton: Padding(
@@ -273,8 +260,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: BackdropFilter(
-              filter:
-                  ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                     vertical: 16, horizontal: 28),
@@ -295,15 +281,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                         spreadRadius: 1)
                   ],
                 ),
-                // FIX 3: rimossa Container con Icons.add_rounded.
-                // Il "+" è solo nell'icona prefix, il testo è solo testo.
-                child: Row(
+                child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.add_rounded,
-                        color: _teal, size: 20),
-                    const SizedBox(width: 10),
-                    const Text(
+                    Icon(Icons.add_rounded, color: _teal, size: 20),
+                    SizedBox(width: 10),
+                    Text(
                       'Nuova scheda',
                       style: TextStyle(
                         color: _teal,
@@ -330,10 +313,8 @@ class _GlassAppBar extends StatelessWidget {
   final String title;
   final VoidCallback onBack;
   final Widget? action;
-
   const _GlassAppBar(
       {required this.title, required this.onBack, this.action});
-
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -345,8 +326,7 @@ class _GlassAppBar extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: BackdropFilter(
-                filter:
-                    ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                 child: Container(
                   width: 38,
                   height: 38,
@@ -387,13 +367,11 @@ class _WorkoutGlassCard extends StatelessWidget {
   final HiveWorkout workout;
   final VoidCallback onTap;
   final VoidCallback onOptions;
-
   const _WorkoutGlassCard({
     required this.workout,
     required this.onTap,
     required this.onOptions,
   });
-
   Map<String, int> _stats() {
     final allEx =
         HiveDatabase.instance.getWorkoutExercises(workout.key);
@@ -405,14 +383,12 @@ class _WorkoutGlassCard extends StatelessWidget {
       'sets': allEx.fold(0, (s, e) => s + e.sets),
     };
   }
-
   @override
   Widget build(BuildContext context) {
     final stats = _stats();
     final freeEx = stats['free'] ?? 0;
     final circuits = stats['circuits'] ?? 0;
     final sets = stats['sets'] ?? 0;
-
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
@@ -431,13 +407,13 @@ class _WorkoutGlassCard extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                  color: Colors.white.withOpacity(0.12), width: 1),
+                  color: Colors.white.withOpacity(0.12),
+                  width: 1),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  // FIX: null safety su iconId e iconColorIndex
                   WorkoutAvatar(
                     iconId: workout.iconId ?? 'dumbbell',
                     iconColorIndex: workout.iconColorIndex ?? 0,
@@ -493,12 +469,12 @@ class _WorkoutGlassCard extends StatelessWidget {
                           width: 32,
                           height: 32,
                           decoration: BoxDecoration(
-                            color:
-                                Colors.white.withOpacity(0.06),
+                            color: Colors.white.withOpacity(0.06),
                             borderRadius:
                                 BorderRadius.circular(8),
                           ),
-                          child: Icon(Icons.more_horiz_rounded,
+                          child: Icon(
+                              Icons.more_horiz_rounded,
                               color:
                                   Colors.white.withOpacity(0.5),
                               size: 18),
@@ -523,9 +499,7 @@ class _WorkoutGlassCard extends StatelessWidget {
 class _CardInfoTag extends StatelessWidget {
   final IconData icon;
   final String label;
-
   const _CardInfoTag({required this.icon, required this.label});
-
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -549,9 +523,7 @@ class _CardInfoTag extends StatelessWidget {
 
 class _EmptyWorkoutsState extends StatelessWidget {
   final VoidCallback onCreateNew;
-
   const _EmptyWorkoutsState({required this.onCreateNew});
-
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -599,7 +571,8 @@ class _EmptyWorkoutsState extends StatelessWidget {
                     _teal.withOpacity(0.15)
                   ]),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: _teal.withOpacity(0.5)),
+                  border: Border.all(
+                      color: _teal.withOpacity(0.5)),
                   boxShadow: [
                     BoxShadow(
                         color: _teal.withOpacity(0.2),
@@ -621,7 +594,7 @@ class _EmptyWorkoutsState extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutOptionsSheet — iOS Glass
+// _WorkoutOptionsSheet
 // ─────────────────────────────────────────────────────────────
 
 class _WorkoutOptionsSheet extends StatelessWidget {
@@ -629,14 +602,12 @@ class _WorkoutOptionsSheet extends StatelessWidget {
   final VoidCallback onRename;
   final VoidCallback onChangeIcon;
   final VoidCallback onDelete;
-
   const _WorkoutOptionsSheet({
     required this.workout,
     required this.onRename,
     required this.onChangeIcon,
     required this.onDelete,
   });
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -689,8 +660,7 @@ class _WorkoutOptionsSheet extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: BackdropFilter(
-              filter:
-                  ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.06),
@@ -724,8 +694,7 @@ class _WorkoutOptionsSheet extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: BackdropFilter(
-              filter:
-                  ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
                 decoration: BoxDecoration(
                   color: _red.withOpacity(0.08),
@@ -753,13 +722,12 @@ class _OptionRow extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final Color? color;
-
-  const _OptionRow(
-      {required this.icon,
-      required this.label,
-      required this.onTap,
-      this.color});
-
+  const _OptionRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+  });
   @override
   Widget build(BuildContext context) {
     final c = color ?? Colors.white;
@@ -783,11 +751,12 @@ class _OptionRow extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-                child: Text(label,
-                    style: TextStyle(
-                        color: c,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500))),
+              child: Text(label,
+                  style: TextStyle(
+                      color: c,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500)),
+            ),
             Icon(Icons.chevron_right_rounded,
                 size: 18, color: c.withOpacity(0.4)),
           ],
@@ -804,10 +773,8 @@ class _OptionRow extends StatelessWidget {
 class _WorkoutCreateSheet extends StatelessWidget {
   final TextEditingController nameController;
   final VoidCallback onConfirm;
-
   const _WorkoutCreateSheet(
       {required this.nameController, required this.onConfirm});
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -818,83 +785,76 @@ class _WorkoutCreateSheet extends StatelessWidget {
         border: Border.all(
             color: Colors.white.withOpacity(0.12), width: 1),
       ),
-      padding: EdgeInsets.fromLTRB(
-        24,
-        24,
-        24,
-        MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(2),
+                  color: _teal.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                child: const Icon(Icons.add_rounded,
+                    color: _teal, size: 20),
               ),
+              const SizedBox(width: 12),
+              const Text('Nuova scheda',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: nameController,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: 'Nome scheda',
+              hintText: 'Es. Push Day, Full Body...',
+              labelStyle: TextStyle(
+                  color: Colors.white.withOpacity(0.5)),
+              hintStyle: TextStyle(
+                  color: Colors.white.withOpacity(0.3)),
             ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _teal.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.add_rounded,
-                      color: _teal, size: 20),
-                ),
-                const SizedBox(width: 12),
-                const Text('Nuova scheda',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800)),
-              ],
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: nameController,
-              autofocus: true,
-              textCapitalization: TextCapitalization.sentences,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Nome scheda',
-                hintText: 'Es. Push Day, Full Body...',
-                labelStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.5)),
-                hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.3)),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: onConfirm,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _teal,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
               ),
+              child: const Text('Crea scheda',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15)),
             ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: onConfirm,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _teal,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                ),
-                child: const Text('Crea scheda',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15)),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -903,10 +863,8 @@ class _WorkoutCreateSheet extends StatelessWidget {
 class _WorkoutRenameSheet extends StatelessWidget {
   final TextEditingController nameController;
   final VoidCallback onConfirm;
-
   const _WorkoutRenameSheet(
       {required this.nameController, required this.onConfirm});
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -917,95 +875,83 @@ class _WorkoutRenameSheet extends StatelessWidget {
         border: Border.all(
             color: Colors.white.withOpacity(0.12), width: 1),
       ),
-      padding: EdgeInsets.fromLTRB(
-        24,
-        24,
-        24,
-        MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 20),
-            const Text('Rinomina scheda',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800)),
-            const SizedBox(height: 20),
-            TextField(
-              controller: nameController,
-              autofocus: true,
-              textCapitalization: TextCapitalization.sentences,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Nuovo nome',
-                labelStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.5)),
-              ),
+          ),
+          const SizedBox(height: 20),
+          const Text('Rinomina scheda',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 20),
+          TextField(
+            controller: nameController,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: 'Nuovo nome',
+              labelStyle: TextStyle(
+                  color: Colors.white.withOpacity(0.5)),
             ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: onConfirm,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _teal,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                ),
-                child: const Text('Salva',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15)),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: onConfirm,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _teal,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
               ),
+              child: const Text('Salva',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15)),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// FIX 1: _WorkoutIconSheet — salvataggio corretto icona+colore
+// _WorkoutIconSheet
 // ─────────────────────────────────────────────────────────────
 
 class _WorkoutIconSheet extends StatefulWidget {
-  // Parametri non-nullable: il chiamante applica già il fallback
   final String currentIconId;
   final int currentColorIndex;
   final void Function(String iconId, int colorIndex) onSelect;
-
   const _WorkoutIconSheet({
     required this.currentIconId,
     required this.currentColorIndex,
     required this.onSelect,
   });
-
   @override
   State<_WorkoutIconSheet> createState() =>
       _WorkoutIconSheetState();
 }
 
 class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
-  // Mapping IDENTICO a quello atteso da WorkoutAvatar.
-  // Le chiavi String sono i valori salvati in HiveWorkout.iconId.
   static const _icons = [
     ('dumbbell', Icons.fitness_center_rounded),
     ('bike', Icons.directions_bike_rounded),
@@ -1020,31 +966,25 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
     ('mountain', Icons.terrain_rounded),
     ('fire', Icons.local_fire_department_rounded),
   ];
-
-  // Palette colori: l'indice (0-7) corrisponde a HiveWorkout.iconColorIndex.
   static const _colors = [
-    Color(0xFF00D4AA), // 0 — teal
-    Color(0xFF6366F1), // 1 — indigo
-    Color(0xFF22C55E), // 2 — green
-    Color(0xFFF59E0B), // 3 — amber
-    Color(0xFFEC4899), // 4 — pink
-    Color(0xFFEF4444), // 5 — red
-    Color(0xFF3B82F6), // 6 — blue
-    Color(0xFF8B5CF6), // 7 — purple
+    Color(0xFF00D4AA),
+    Color(0xFF6366F1),
+    Color(0xFF22C55E),
+    Color(0xFFF59E0B),
+    Color(0xFFEC4899),
+    Color(0xFFEF4444),
+    Color(0xFF3B82F6),
+    Color(0xFF8B5CF6),
   ];
-
   late String _selectedIcon;
   late int _selectedColor;
-
   @override
   void initState() {
     super.initState();
     _selectedIcon = widget.currentIconId;
-    // Clamp per evitare out-of-bounds se iconColorIndex è fuori range
     _selectedColor =
         widget.currentColorIndex.clamp(0, _colors.length - 1);
   }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1072,8 +1012,6 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
               ),
             ),
             const SizedBox(height: 16),
-
-            // Anteprima live
             Center(
               child: Column(
                 children: [
@@ -1093,15 +1031,12 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
               ),
             ),
             const SizedBox(height: 20),
-
             const Text('Icona e colore',
                 style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w800)),
             const SizedBox(height: 16),
-
-            // Selezione colore
             Text('Colore',
                 style: TextStyle(
                     color: Colors.white.withOpacity(0.5),
@@ -1118,8 +1053,7 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
                   onTap: () =>
                       setState(() => _selectedColor = e.key),
                   child: AnimatedContainer(
-                    duration:
-                        const Duration(milliseconds: 150),
+                    duration: const Duration(milliseconds: 150),
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
@@ -1133,9 +1067,9 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
                       boxShadow: selected
                           ? [
                               BoxShadow(
-                                color: e.value.withOpacity(0.6),
-                                blurRadius: 10,
-                              )
+                                  color:
+                                      e.value.withOpacity(0.6),
+                                  blurRadius: 10)
                             ]
                           : null,
                     ),
@@ -1148,8 +1082,6 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
               }).toList(),
             ),
             const SizedBox(height: 18),
-
-            // Selezione icona
             Text('Icona',
                 style: TextStyle(
                     color: Colors.white.withOpacity(0.5),
@@ -1167,8 +1099,7 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
                   onTap: () =>
                       setState(() => _selectedIcon = icon.$1),
                   child: AnimatedContainer(
-                    duration:
-                        const Duration(milliseconds: 150),
+                    duration: const Duration(milliseconds: 150),
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
@@ -1196,13 +1127,13 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () =>
-                    widget.onSelect(_selectedIcon, _selectedColor),
+                onPressed: () => widget.onSelect(
+                    _selectedIcon, _selectedColor),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _colors[_selectedColor],
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                 ),
