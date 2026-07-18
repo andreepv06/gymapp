@@ -113,46 +113,44 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 
 Future<void> _confirmDelete(HiveWorkout workout) async {
-    final confirm = await showGlassDialog<bool>(
-      context: context,
-      accentColor: kRed,
-      icon: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: kRed.withOpacity(0.12),
-          shape: BoxShape.circle,
-          border: Border.all(color: kRed.withOpacity(0.4)),
-          boxShadow: [
-            BoxShadow(
-                color: kRed.withOpacity(0.2), blurRadius: 12)
-          ],
-        ),
-        child: Icon(Icons.delete_outline_rounded,
-            color: kRed.withOpacity(0.9), size: 20),
+  final confirm = await showGlassDialog<bool>(
+    context: context,
+    accentColor: kRed,
+    icon: Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: kRed.withOpacity(0.12),
+        shape: BoxShape.circle,
+        border: Border.all(color: kRed.withOpacity(0.4), width: 1),
+        boxShadow: [
+          BoxShadow(color: kRed.withOpacity(0.2), blurRadius: 12)
+        ],
       ),
-      title: 'Elimina scheda',
-      message:
-          'Eliminare "${workout.name}"?\n'
-          'Questa azione non può essere annullata.',
-      actions: [
-        GlassDialogAction(
-          label: 'Annulla',
-          onTap: () => Navigator.pop(context, false),
-        ),
-        GlassDialogAction(
-          label: 'Elimina',
-          isDestructive: true,
-          onTap: () => Navigator.pop(context, true),
-        ),
-      ],
-    );
-
-    if (confirm == true && mounted) {
-      await HiveDatabase.instance.deleteWorkout(workout.key);
-      context.read<WorkoutProvider>().loadWorkouts();
-    }
+      child: Icon(Icons.delete_outline_rounded,
+          color: kRed.withOpacity(0.9), size: 20),
+    ),
+    title: 'Elimina scheda',
+    message: 'Eliminare "${workout.name}"?\n'
+        'Questa azione non può essere annullata.',
+    actions: [
+      GlassDialogAction(
+        label: 'Annulla',
+        onTap: () => Navigator.pop(context, false),
+      ),
+      GlassDialogAction(
+        label: 'Elimina',
+        isDestructive: true,
+        onTap: () => Navigator.pop(context, true),
+      ),
+    ],
+  );
+  if (confirm == true && mounted) {
+    await HiveDatabase.instance.deleteWorkout(workout.key);
+    context.read<WorkoutProvider>().loadWorkouts();
   }
+}
+  
   @override
   Widget build(BuildContext context) {
     final workouts =

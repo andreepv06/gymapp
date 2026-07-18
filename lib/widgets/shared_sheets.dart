@@ -16,12 +16,16 @@ const kMuscleGroups = [
 
 // ─────────────────────────────────────────────────────────────
 // showKeyboardSafeSheet
-// FIX CRITICO: usa Padding STATICO, non AnimatedPadding.
-// AnimatedPadding genera un'animazione aggiuntiva sul padding
-// quando la tastiera appare, causando il salto al primo click.
-// Il sistema OS gestisce già l'animazione della tastiera;
-// Padding statico si limita a riflettere il valore corrente
-// di viewInsets.bottom senza aggiungere una propria animazione.
+//
+// FIX DEFINITIVO tastiera al primo click:
+//   • Padding STATICO (no AnimatedPadding)
+//   • NO ConstrainedBox — era la causa del salto:
+//       Padding(viewInsets) + ConstrainedBox(85% screen)
+//       sommavano l'altezza del popup oltre il top dello schermo.
+//   • SingleChildScrollView con i figli che usano
+//     mainAxisSize: MainAxisSize.min gestisce l'overflow.
+//   • Identica a _openSheet di workout_detail_screen.dart
+//     che funziona correttamente già al primo click.
 // ─────────────────────────────────────────────────────────────
 
 Future<T?> showKeyboardSafeSheet<T>(
@@ -33,20 +37,14 @@ Future<T?> showKeyboardSafeSheet<T>(
     backgroundColor: Colors.transparent,
     builder: (ctx) => GestureDetector(
       onTap: () => FocusScope.of(ctx).unfocus(),
-      // FIX: Padding STATICO — nessun conflitto con l'animazione OS
       child: Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(ctx).viewInsets.bottom,
         ),
         child: SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(ctx).size.height * 0.85,
-            ),
-            child: SingleChildScrollView(
-              physics: const ClampingScrollPhysics(),
-              child: child,
-            ),
+          child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: child,
           ),
         ),
       ),
@@ -55,9 +53,8 @@ Future<T?> showKeyboardSafeSheet<T>(
 }
 
 // ─────────────────────────────────────────────────────────────
-// showGlassDialog — dialog Glass UI unificato
+// showGlassDialog — dialog Glass UI / Jarvis HUD unificato
 // Sostituisce AlertDialog nativo e CupertinoAlertDialog
-// in tutti i punti dell'app.
 // ─────────────────────────────────────────────────────────────
 
 Future<T?> showGlassDialog<T>({
@@ -73,8 +70,8 @@ Future<T?> showGlassDialog<T>({
     barrierColor: Colors.black.withOpacity(0.65),
     builder: (ctx) => Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(
-          horizontal: 24, vertical: 40),
+      insetPadding:
+          const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: BackdropFilter(
@@ -84,22 +81,16 @@ Future<T?> showGlassDialog<T>({
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF0D1117),
-                  Color(0xFF060B14),
-                ],
+                colors: [Color(0xFF0D1117), Color(0xFF060B14)],
               ),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: accentColor.withOpacity(0.25),
-                width: 1,
-              ),
+                  color: accentColor.withOpacity(0.25), width: 1),
               boxShadow: [
                 BoxShadow(
-                  color: accentColor.withOpacity(0.06),
-                  blurRadius: 28,
-                  spreadRadius: 4,
-                ),
+                    color: accentColor.withOpacity(0.06),
+                    blurRadius: 28,
+                    spreadRadius: 4),
               ],
             ),
             padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
@@ -107,31 +98,20 @@ Future<T?> showGlassDialog<T>({
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Icona opzionale + titolo
-                if (icon != null) ...[
-                  icon,
-                  const SizedBox(height: 16),
-                ],
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
-                  ),
-                ),
+                if (icon != null) ...[icon, const SizedBox(height: 16)],
+                Text(title,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.2)),
                 const SizedBox(height: 10),
-                Text(
-                  message,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontSize: 14,
-                    height: 1.5,
-                  ),
-                ),
+                Text(message,
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontSize: 14,
+                        height: 1.5)),
                 const SizedBox(height: 24),
-                // Divisore sottile
                 Container(
                   height: 0.7,
                   decoration: BoxDecoration(
@@ -143,15 +123,12 @@ Future<T?> showGlassDialog<T>({
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Azioni
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
-                  children: actions.map((action) {
-                    return Padding(
-                      padding: const EdgeInsets.only(left: 10),
-                      child: _GlassDialogBtn(action: action),
-                    );
-                  }).toList(),
+                  children: actions.map((a) => Padding(
+                    padding: const EdgeInsets.only(left: 10),
+                    child: _GlassDialogBtn(action: a),
+                  )).toList(),
                 ),
               ],
             ),
@@ -163,7 +140,7 @@ Future<T?> showGlassDialog<T>({
 }
 
 // ─────────────────────────────────────────────────────────────
-// GlassDialogAction — definisce un pulsante del dialog
+// GlassDialogAction
 // ─────────────────────────────────────────────────────────────
 
 class GlassDialogAction {
@@ -191,7 +168,6 @@ class GlassDialogAction {
 
 class _GlassDialogBtn extends StatelessWidget {
   final GlassDialogAction action;
-
   const _GlassDialogBtn({required this.action});
 
   @override
@@ -200,7 +176,6 @@ class _GlassDialogBtn extends StatelessWidget {
     final isNeutral = !action.isDestructive &&
         !action.isDefault &&
         action.color == null;
-
     return GestureDetector(
       onTap: action.onTap,
       child: Container(
@@ -218,19 +193,13 @@ class _GlassDialogBtn extends StatelessWidget {
             width: 1,
           ),
           boxShadow: !isNeutral
-              ? [
-                  BoxShadow(
-                      color: c.withOpacity(0.15),
-                      blurRadius: 8)
-                ]
+              ? [BoxShadow(color: c.withOpacity(0.15), blurRadius: 8)]
               : null,
         ),
         child: Text(
           action.label,
           style: TextStyle(
-            color: isNeutral
-                ? Colors.white.withOpacity(0.7)
-                : c,
+            color: isNeutral ? Colors.white.withOpacity(0.7) : c,
             fontSize: 14,
             fontWeight: (action.isDefault || action.isDestructive)
                 ? FontWeight.w700
@@ -243,7 +212,7 @@ class _GlassDialogBtn extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GlassSheetWrapper — container base condiviso per i popup
+// GlassSheetWrapper
 // ─────────────────────────────────────────────────────────────
 
 class GlassSheetWrapper extends StatelessWidget {
@@ -273,8 +242,8 @@ class GlassSheetWrapper extends StatelessWidget {
         ),
         borderRadius:
             const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(
-            color: accentColor.withOpacity(0.3), width: 0.8),
+        border:
+            Border.all(color: accentColor.withOpacity(0.3), width: 0.8),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -336,7 +305,7 @@ class GlassSheetWrapper extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GlassTextField — campo testo Glass condiviso
+// GlassTextField
 // ─────────────────────────────────────────────────────────────
 
 class GlassTextField extends StatelessWidget {
@@ -367,8 +336,8 @@ class GlassTextField extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: kCyan.withOpacity(0.2), width: 0.8),
+            border:
+                Border.all(color: kCyan.withOpacity(0.2), width: 0.8),
           ),
           child: TextField(
             controller: controller,
@@ -396,7 +365,7 @@ class GlassTextField extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GlassPrimaryButton — bottone principale condiviso
+// GlassPrimaryButton
 // ─────────────────────────────────────────────────────────────
 
 class GlassPrimaryButton extends StatelessWidget {
@@ -449,9 +418,7 @@ class GlassPrimaryButton extends StatelessWidget {
           label,
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: enabled
-                ? Colors.white
-                : Colors.white.withOpacity(0.3),
+            color: enabled ? Colors.white : Colors.white.withOpacity(0.3),
             fontWeight: FontWeight.w700,
             fontSize: 15,
           ),
@@ -462,7 +429,7 @@ class GlassPrimaryButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ExerciseFormSheet — popup UNIFICATO creazione + modifica
+// ExerciseFormSheet — unificato creazione + modifica
 // ─────────────────────────────────────────────────────────────
 
 class ExerciseFormSheet extends StatefulWidget {
@@ -485,8 +452,7 @@ class ExerciseFormSheet extends StatefulWidget {
   bool get isEditing => initialName != null;
 
   @override
-  State<ExerciseFormSheet> createState() =>
-      _ExerciseFormSheetState();
+  State<ExerciseFormSheet> createState() => _ExerciseFormSheetState();
 }
 
 class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
@@ -568,8 +534,7 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
               alignment: Alignment.centerLeft,
               child: Text(_nameError!,
                   style: TextStyle(
-                      color: kRed.withOpacity(0.85),
-                      fontSize: 11)),
+                      color: kRed.withOpacity(0.85), fontSize: 11)),
             ),
           ],
           const SizedBox(height: 14),
@@ -588,14 +553,12 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: kMuscleGroups.length,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(width: 6),
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
               itemBuilder: (_, i) {
                 final g = kMuscleGroups[i];
                 final sel = _selectedMuscle == g;
                 return GestureDetector(
-                  onTap: () =>
-                      setState(() => _selectedMuscle = g),
+                  onTap: () => setState(() => _selectedMuscle = g),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     padding: const EdgeInsets.symmetric(
@@ -655,12 +618,11 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// WorkoutCreateSheet — popup UNIFICATO creazione scheda
+// WorkoutCreateSheet — unificato creazione scheda
 // ─────────────────────────────────────────────────────────────
 
 class WorkoutCreateSheet extends StatefulWidget {
   final void Function(String name) onConfirm;
-
   const WorkoutCreateSheet({super.key, required this.onConfirm});
 
   @override
