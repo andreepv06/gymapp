@@ -6,22 +6,19 @@ import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
 import '../../providers/workout_provider.dart';
 import '../../widgets/cosmic_background.dart';
+import '../../widgets/shared_sheets.dart';
 import '../../widgets/workout_icon.dart';
 import 'workout_detail_screen.dart';
 
 const _teal = Color(0xFF00D4AA);
-const _cyan  = Color(0xFF00E5FF);
-const _red   = Color(0xFFFF3B30);
-
-// ─────────────────────────────────────────────────────────────
-// WorkoutsScreen
-// ─────────────────────────────────────────────────────────────
+const _red  = Color(0xFFFF3B30);
 
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
 
   @override
-  State<WorkoutsScreen> createState() => _WorkoutsScreenState();
+  State<WorkoutsScreen> createState() =>
+      _WorkoutsScreenState();
 }
 
 class _WorkoutsScreenState extends State<WorkoutsScreen> {
@@ -32,47 +29,13 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         () => context.read<WorkoutProvider>().loadWorkouts());
   }
 
-  // FIX TASTIERA: AnimatedPadding + ConstrainedBox(85%)
-  // Parametro POSIZIONALE — nessun errore "too many positional arguments"
-  Future<T?> _showKeyboardSafeSheet<T>(Widget child) {
-    return showModalBottomSheet<T>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => GestureDetector(
-        onTap: () => FocusScope.of(ctx).unfocus(),
-        child: AnimatedPadding(
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom),
-          child: SafeArea(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(ctx).size.height * 0.85,
-              ),
-              child: SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                child: child,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Crea nuova scheda ──────────────────────────────────────
-
+  // PUNTO 2: usa showKeyboardSafeSheet da shared_sheets
   Future<void> _showCreateSheet() async {
-    final ctrl = TextEditingController();
-    await _showKeyboardSafeSheet(
-      _WorkoutCreateSheet(
-        nameController: ctrl,
-        onConfirm: () {
-          final name = ctrl.text.trim();
-          if (name.isEmpty) return;
+    await showKeyboardSafeSheet(
+      context,
+      // PUNTO 2: WorkoutCreateSheet UNIFICATO — stesso di AllenamentiScreen
+      WorkoutCreateSheet(
+        onConfirm: (name) {
           HiveDatabase.instance.addWorkout(HiveWorkout(
             name: name,
             iconId: 'dumbbell',
@@ -88,10 +51,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
   }
 
-  // ── Opzioni scheda ─────────────────────────────────────────
-
   void _showWorkoutOptions(HiveWorkout workout) {
-    _showKeyboardSafeSheet(
+    showKeyboardSafeSheet(
+      context,
       _WorkoutOptionsSheet(
         workout: workout,
         onRename: () {
@@ -111,14 +73,17 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 
   Future<void> _showRenameSheet(HiveWorkout workout) async {
-    final ctrl = TextEditingController(text: workout.name);
-    await _showKeyboardSafeSheet(
+    final ctrl =
+        TextEditingController(text: workout.name);
+    await showKeyboardSafeSheet(
+      context,
       _WorkoutRenameSheet(
         nameController: ctrl,
         onConfirm: () {
           final name = ctrl.text.trim();
           if (name.isEmpty) return;
-          HiveDatabase.instance.updateWorkout(workout.key, name);
+          HiveDatabase.instance
+              .updateWorkout(workout.key, name);
           if (mounted) {
             context.read<WorkoutProvider>().loadWorkouts();
             Navigator.pop(context);
@@ -129,7 +94,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 
   Future<void> _showIconSheet(HiveWorkout workout) async {
-    await _showKeyboardSafeSheet(
+    await showKeyboardSafeSheet(
+      context,
       _WorkoutIconSheet(
         currentIconId: workout.iconId ?? 'dumbbell',
         currentColorIndex: workout.iconColorIndex ?? 0,
@@ -158,11 +124,13 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           children: [
             Icon(Icons.delete_outline, color: _red, size: 22),
             SizedBox(width: 10),
-            Text('Elimina scheda',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16)),
+            Expanded(
+              child: Text('Elimina scheda',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16)),
+            ),
           ],
         ),
         content: Text(
@@ -183,33 +151,32 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Elimina',
                 style: TextStyle(
-                    color: _red, fontWeight: FontWeight.w700)),
+                    color: _red,
+                    fontWeight: FontWeight.w700)),
           ),
         ],
       ),
     );
     if (confirm == true && mounted) {
-      await HiveDatabase.instance.deleteWorkout(workout.key);
+      await HiveDatabase.instance
+          .deleteWorkout(workout.key);
       context.read<WorkoutProvider>().loadWorkouts();
     }
   }
 
-  // ── Build ─────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
-    final workouts = context.watch<WorkoutProvider>().workouts;
+    final workouts =
+        context.watch<WorkoutProvider>().workouts;
     final hasWorkouts = workouts.isNotEmpty;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      // PARTE 1: nessun FAB — rimosso completamente
       body: CosmicBackground(
         subtle: true,
         child: SafeArea(
           child: Column(
             children: [
-              // PARTE 1 SCENARIO B: "+" solo se ci sono schede
               _GlassAppBar(
                 title: 'Le mie schede',
                 onBack: () => Navigator.pop(context),
@@ -223,13 +190,15 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                             color: _teal.withOpacity(0.15),
                             shape: BoxShape.circle,
                             border: Border.all(
-                                color: _teal.withOpacity(0.35)),
+                                color:
+                                    _teal.withOpacity(0.35)),
                           ),
-                          child: const Icon(Icons.add_rounded,
-                              color: _teal, size: 20),
+                          child: const Icon(
+                              Icons.add_rounded,
+                              color: _teal,
+                              size: 20),
                         ),
                       )
-                    // PARTE 1 SCENARIO A: nessun "+" quando vuoto
                     : null,
               ),
               Expanded(
@@ -237,11 +206,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     ? ListView.builder(
                         padding: const EdgeInsets.fromLTRB(
                             16, 12, 16, 40),
-                        physics: const BouncingScrollPhysics(),
+                        physics:
+                            const BouncingScrollPhysics(),
                         itemCount: workouts.length,
                         itemBuilder: (_, i) => Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.only(
+                              bottom: 12),
                           child: _WorkoutGlassCard(
                             workout: workouts[i],
                             onTap: () {
@@ -252,17 +222,19 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                               pushPage(
                                 context,
                                 WorkoutDetailScreen(
-                                  workoutId: workouts[i].key,
-                                  workoutName: workouts[i].name,
+                                  workoutId:
+                                      workouts[i].key,
+                                  workoutName:
+                                      workouts[i].name,
                                 ),
                               );
                             },
                             onOptions: () =>
-                                _showWorkoutOptions(workouts[i]),
+                                _showWorkoutOptions(
+                                    workouts[i]),
                           ),
                         ),
                       )
-                    // PARTE 1 SCENARIO A: solo card Glass centrale
                     : _EmptyWorkoutsState(
                         onCreateNew: _showCreateSheet),
               ),
@@ -292,7 +264,8 @@ class _GlassAppBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding:
+          const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Row(
         children: [
           GestureDetector(
@@ -300,7 +273,8 @@ class _GlassAppBar extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                filter:
+                    ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                 child: Container(
                   width: 38,
                   height: 38,
@@ -308,7 +282,8 @@ class _GlassAppBar extends StatelessWidget {
                     color: Colors.white.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                        color: Colors.white.withOpacity(0.15)),
+                        color:
+                            Colors.white.withOpacity(0.15)),
                   ),
                   child: const Icon(
                       Icons.arrow_back_ios_new_rounded,
@@ -334,9 +309,7 @@ class _GlassAppBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// PARTE 1 SCENARIO A: _EmptyWorkoutsState — Glass iOS
-// Unico punto di accesso alla creazione quando non ci sono schede.
-// Nessun FAB, nessun pulsante duplicato.
+// _EmptyWorkoutsState
 // ─────────────────────────────────────────────────────────────
 
 class _EmptyWorkoutsState extends StatelessWidget {
@@ -348,13 +321,15 @@ class _EmptyWorkoutsState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 32),
         child: GestureDetector(
           onTap: onCreateNew,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(28),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+              filter:
+                  ImageFilter.blur(sigmaX: 14, sigmaY: 14),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                     vertical: 44, horizontal: 28),
@@ -363,16 +338,18 @@ class _EmptyWorkoutsState extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      _teal.withOpacity(0.1),
+                      kTeal.withOpacity(0.1),
                       Colors.white.withOpacity(0.04),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(28),
+                  borderRadius:
+                      BorderRadius.circular(28),
                   border: Border.all(
-                      color: _cyan.withOpacity(0.35), width: 1.2),
+                      color: kCyan.withOpacity(0.35),
+                      width: 1.2),
                   boxShadow: [
                     BoxShadow(
-                        color: _cyan.withOpacity(0.1),
+                        color: kCyan.withOpacity(0.1),
                         blurRadius: 28,
                         spreadRadius: 2),
                   ],
@@ -384,21 +361,22 @@ class _EmptyWorkoutsState extends StatelessWidget {
                       width: 72,
                       height: 72,
                       decoration: BoxDecoration(
-                        color: _teal.withOpacity(0.12),
+                        color: kTeal.withOpacity(0.12),
                         shape: BoxShape.circle,
                         border: Border.all(
-                            color: _teal.withOpacity(0.35),
+                            color: kTeal.withOpacity(0.35),
                             width: 1.5),
                         boxShadow: [
                           BoxShadow(
-                              color: _teal.withOpacity(0.2),
+                              color:
+                                  kTeal.withOpacity(0.2),
                               blurRadius: 18)
                         ],
                       ),
                       child: const Icon(
                           Icons.fitness_center_rounded,
                           size: 36,
-                          color: _teal),
+                          color: kTeal),
                     ),
                     const SizedBox(height: 22),
                     const Text(
@@ -416,7 +394,8 @@ class _EmptyWorkoutsState extends StatelessWidget {
                       'Tocca qui per iniziare a\nconfigurare il tuo allenamento',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.45),
+                        color:
+                            Colors.white.withOpacity(0.45),
                         fontSize: 13,
                         height: 1.5,
                       ),
@@ -427,16 +406,17 @@ class _EmptyWorkoutsState extends StatelessWidget {
                           horizontal: 24, vertical: 13),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(colors: [
-                          _teal.withOpacity(0.25),
-                          _teal.withOpacity(0.12),
+                          kTeal.withOpacity(0.25),
+                          kTeal.withOpacity(0.12),
                         ]),
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius:
+                            BorderRadius.circular(14),
                         border: Border.all(
-                            color: _teal.withOpacity(0.5),
+                            color: kTeal.withOpacity(0.5),
                             width: 1.2),
                         boxShadow: [
                           BoxShadow(
-                              color: _teal.withOpacity(0.2),
+                              color: kTeal.withOpacity(0.2),
                               blurRadius: 14)
                         ],
                       ),
@@ -447,17 +427,21 @@ class _EmptyWorkoutsState extends StatelessWidget {
                             width: 22,
                             height: 22,
                             decoration: BoxDecoration(
-                              color: _teal.withOpacity(0.2),
+                              color:
+                                  kTeal.withOpacity(0.2),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.add_rounded,
-                                color: _teal, size: 16),
+                            child: const Icon(
+                                Icons.add_rounded,
+                                color: kTeal,
+                                size: 16),
                           ),
                           const SizedBox(width: 10),
                           const Text('Inizia ora',
                               style: TextStyle(
-                                  color: _teal,
-                                  fontWeight: FontWeight.w700,
+                                  color: kTeal,
+                                  fontWeight:
+                                      FontWeight.w700,
                                   fontSize: 15)),
                         ],
                       ),
@@ -534,7 +518,8 @@ class _WorkoutGlassCard extends StatelessWidget {
                 children: [
                   WorkoutAvatar(
                     iconId: workout.iconId ?? 'dumbbell',
-                    iconColorIndex: workout.iconColorIndex ?? 0,
+                    iconColorIndex:
+                        workout.iconColorIndex ?? 0,
                     customImagePath: workout.customImagePath,
                     size: 52,
                     iconSize: 26,
@@ -550,9 +535,11 @@ class _WorkoutGlassCard extends StatelessWidget {
                             style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
-                                fontWeight: FontWeight.w700),
+                                fontWeight:
+                                    FontWeight.w700),
                             maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
+                            overflow:
+                                TextOverflow.ellipsis),
                         const SizedBox(height: 6),
                         Wrap(
                           spacing: 8,
@@ -565,10 +552,12 @@ class _WorkoutGlassCard extends StatelessWidget {
                             if (circuits > 0)
                               _CardInfoTag(
                                   icon: Icons.loop_rounded,
-                                  label: '$circuits circuiti'),
+                                  label:
+                                      '$circuits circuiti'),
                             if (sets > 0)
                               _CardInfoTag(
-                                  icon: Icons.repeat_rounded,
+                                  icon:
+                                      Icons.repeat_rounded,
                                   label: '$sets serie'),
                           ],
                         ),
@@ -587,22 +576,23 @@ class _WorkoutGlassCard extends StatelessWidget {
                           width: 32,
                           height: 32,
                           decoration: BoxDecoration(
-                            color:
-                                Colors.white.withOpacity(0.06),
+                            color: Colors.white
+                                .withOpacity(0.06),
                             borderRadius:
                                 BorderRadius.circular(8),
                           ),
                           child: Icon(
                               Icons.more_horiz_rounded,
-                              color:
-                                  Colors.white.withOpacity(0.5),
+                              color: Colors.white
+                                  .withOpacity(0.5),
                               size: 18),
                         ),
                       ),
                       const SizedBox(height: 10),
                       Icon(Icons.arrow_forward_ios_rounded,
                           size: 13,
-                          color: Colors.white.withOpacity(0.35)),
+                          color:
+                              Colors.white.withOpacity(0.35)),
                     ],
                   ),
                 ],
@@ -619,7 +609,8 @@ class _CardInfoTag extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _CardInfoTag({required this.icon, required this.label});
+  const _CardInfoTag(
+      {required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -639,333 +630,7 @@ class _CardInfoTag extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// PARTE 2+4: Popup unificati con stessa struttura Glass
-// _GlassSheetWrapper — componente base riutilizzabile
-// Elimina 4 implementazioni duplicate del container
-// ─────────────────────────────────────────────────────────────
-
-class _GlassSheetWrapper extends StatelessWidget {
-  final String title;
-  final String? subtitle;
-  final Widget child;
-  final Color accentColor;
-  final Widget? leadingIcon;
-
-  const _GlassSheetWrapper({
-    required this.title,
-    this.subtitle,
-    required this.child,
-    this.accentColor = _teal,
-    this.leadingIcon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF060B14), Color(0xFF03040A)],
-        ),
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(
-            color: accentColor.withOpacity(0.3), width: 0.8),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 14),
-          // Handle pill
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [
-                  accentColor.withOpacity(0.3),
-                  accentColor.withOpacity(0.6),
-                  accentColor.withOpacity(0.3),
-                ]),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                if (leadingIcon != null) ...[
-                  leadingIcon!,
-                  const SizedBox(width: 12),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800)),
-                      if (subtitle != null)
-                        Text(subtitle!,
-                            style: TextStyle(
-                                color:
-                                    accentColor.withOpacity(0.7),
-                                fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: child,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// _GlassTextField — campo testo uniforme nei popup
-// ─────────────────────────────────────────────────────────────
-
-class _GlassTextField extends StatelessWidget {
-  final TextEditingController? controller;
-  final String hintText;
-  final String? labelText;
-  final bool autofocus;
-  final void Function(String)? onChanged;
-  final int maxLines;
-
-  const _GlassTextField({
-    this.controller,
-    required this.hintText,
-    this.labelText,
-    this.autofocus = false,
-    this.onChanged,
-    this.maxLines = 1,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: _cyan.withOpacity(0.2), width: 0.8),
-          ),
-          child: TextField(
-            controller: controller,
-            autofocus: autofocus,
-            maxLines: maxLines,
-            textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: hintText,
-              labelText: labelText,
-              hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.3),
-                  fontSize: 14),
-              labelStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.5)),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 13),
-            ),
-            onChanged: onChanged,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// _GlassPrimaryButton — bottone principale uniforme nei popup
-// ─────────────────────────────────────────────────────────────
-
-class _GlassPrimaryButton extends StatelessWidget {
-  final String label;
-  final Color color;
-  final VoidCallback? onTap;
-
-  const _GlassPrimaryButton({
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onTap != null;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          gradient: enabled
-              ? LinearGradient(colors: [
-                  color,
-                  Color.lerp(color, Colors.black, 0.2) ?? color,
-                ])
-              : LinearGradient(colors: [
-                  Colors.white.withOpacity(0.06),
-                  Colors.white.withOpacity(0.03),
-                ]),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: enabled
-                ? color.withOpacity(0.5)
-                : Colors.white.withOpacity(0.1),
-          ),
-          boxShadow: enabled
-              ? [
-                  BoxShadow(
-                      color: color.withOpacity(0.35),
-                      blurRadius: 14,
-                      offset: const Offset(0, 4))
-                ]
-              : null,
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: enabled
-                ? Colors.white
-                : Colors.white.withOpacity(0.3),
-            fontWeight: FontWeight.w700,
-            fontSize: 15,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// PARTE 2+4: _WorkoutCreateSheet — Glass unificato
-// ─────────────────────────────────────────────────────────────
-
-class _WorkoutCreateSheet extends StatefulWidget {
-  final TextEditingController nameController;
-  final VoidCallback onConfirm;
-
-  const _WorkoutCreateSheet({
-    required this.nameController,
-    required this.onConfirm,
-  });
-
-  @override
-  State<_WorkoutCreateSheet> createState() =>
-      _WorkoutCreateSheetState();
-}
-
-class _WorkoutCreateSheetState extends State<_WorkoutCreateSheet> {
-  @override
-  Widget build(BuildContext context) {
-    final hasName = widget.nameController.text.trim().isNotEmpty;
-
-    return _GlassSheetWrapper(
-      title: 'Nuova scheda',
-      accentColor: _teal,
-      leadingIcon: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: _teal.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: const Icon(Icons.add_rounded, color: _teal, size: 20),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _GlassTextField(
-            controller: widget.nameController,
-            hintText: 'Es. Push Day, Full Body...',
-            labelText: 'Nome scheda',
-            autofocus: true,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 20),
-          _GlassPrimaryButton(
-            label: 'Crea scheda',
-            color: _teal,
-            onTap: hasName ? widget.onConfirm : null,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// PARTE 2+4: _WorkoutRenameSheet — Glass unificato
-// ─────────────────────────────────────────────────────────────
-
-class _WorkoutRenameSheet extends StatefulWidget {
-  final TextEditingController nameController;
-  final VoidCallback onConfirm;
-
-  const _WorkoutRenameSheet({
-    required this.nameController,
-    required this.onConfirm,
-  });
-
-  @override
-  State<_WorkoutRenameSheet> createState() =>
-      _WorkoutRenameSheetState();
-}
-
-class _WorkoutRenameSheetState extends State<_WorkoutRenameSheet> {
-  @override
-  Widget build(BuildContext context) {
-    final hasName = widget.nameController.text.trim().isNotEmpty;
-
-    return _GlassSheetWrapper(
-      title: 'Rinomina scheda',
-      accentColor: _teal,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _GlassTextField(
-            controller: widget.nameController,
-            hintText: 'Nuovo nome...',
-            labelText: 'Nome scheda',
-            autofocus: true,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 20),
-          _GlassPrimaryButton(
-            label: 'Salva',
-            color: _teal,
-            onTap: hasName ? widget.onConfirm : null,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// _WorkoutOptionsSheet
+// _WorkoutOptionsSheet — usa GlassSheetWrapper da shared_sheets
 // ─────────────────────────────────────────────────────────────
 
 class _WorkoutOptionsSheet extends StatelessWidget {
@@ -983,10 +648,10 @@ class _WorkoutOptionsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _GlassSheetWrapper(
+    return GlassSheetWrapper(
       title: workout.name,
       subtitle: 'Opzioni scheda',
-      accentColor: _teal,
+      accentColor: kTeal,
       leadingIcon: WorkoutAvatar(
         iconId: workout.iconId ?? 'dumbbell',
         iconColorIndex: workout.iconColorIndex ?? 0,
@@ -1001,7 +666,8 @@ class _WorkoutOptionsSheet extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              filter:
+                  ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.05),
@@ -1035,7 +701,8 @@ class _WorkoutOptionsSheet extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              filter:
+                  ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
                 decoration: BoxDecoration(
                   color: _red.withOpacity(0.07),
@@ -1110,6 +777,56 @@ class _OptionRow extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
+// _WorkoutRenameSheet — usa GlassSheetWrapper + GlassTextField
+// ─────────────────────────────────────────────────────────────
+
+class _WorkoutRenameSheet extends StatefulWidget {
+  final TextEditingController nameController;
+  final VoidCallback onConfirm;
+
+  const _WorkoutRenameSheet({
+    required this.nameController,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_WorkoutRenameSheet> createState() =>
+      _WorkoutRenameSheetState();
+}
+
+class _WorkoutRenameSheetState
+    extends State<_WorkoutRenameSheet> {
+  @override
+  Widget build(BuildContext context) {
+    final hasName =
+        widget.nameController.text.trim().isNotEmpty;
+
+    return GlassSheetWrapper(
+      title: 'Rinomina scheda',
+      accentColor: kTeal,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GlassTextField(
+            controller: widget.nameController,
+            hintText: 'Nuovo nome...',
+            labelText: 'Nome scheda',
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 20),
+          GlassPrimaryButton(
+            label: 'Salva',
+            color: kTeal,
+            onTap: hasName ? widget.onConfirm : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // _WorkoutIconSheet
 // ─────────────────────────────────────────────────────────────
 
@@ -1129,7 +846,8 @@ class _WorkoutIconSheet extends StatefulWidget {
       _WorkoutIconSheetState();
 }
 
-class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
+class _WorkoutIconSheetState
+    extends State<_WorkoutIconSheet> {
   static const _icons = [
     ('dumbbell', Icons.fitness_center_rounded),
     ('bike', Icons.directions_bike_rounded),
@@ -1162,21 +880,20 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
   void initState() {
     super.initState();
     _selectedIcon = widget.currentIconId;
-    _selectedColor =
-        widget.currentColorIndex.clamp(0, _colors.length - 1);
+    _selectedColor = widget.currentColorIndex
+        .clamp(0, _colors.length - 1);
   }
 
   @override
   Widget build(BuildContext context) {
     final accent = _colors[_selectedColor];
 
-    return _GlassSheetWrapper(
+    return GlassSheetWrapper(
       title: 'Icona e colore',
       accentColor: accent,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Anteprima live
           Center(
             child: Column(
               children: [
@@ -1190,18 +907,22 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
                 const SizedBox(height: 6),
                 Text('Anteprima',
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.35),
+                        color:
+                            Colors.white.withOpacity(0.35),
                         fontSize: 11)),
               ],
             ),
           ),
-          const SizedBox(height: 20),
-          Text('Colore',
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4)),
+          const SizedBox(height: 18),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Colore',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4)),
+          ),
           const SizedBox(height: 10),
           Wrap(
             spacing: 10,
@@ -1212,14 +933,17 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
                 onTap: () =>
                     setState(() => _selectedColor = e.key),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 36, height: 36,
+                  duration:
+                      const Duration(milliseconds: 150),
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     color: e.value,
                     shape: BoxShape.circle,
                     border: sel
                         ? Border.all(
-                            color: Colors.white, width: 2.5)
+                            color: Colors.white,
+                            width: 2.5)
                         : Border.all(
                             color: Colors.transparent),
                     boxShadow: sel
@@ -1240,12 +964,15 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
             }).toList(),
           ),
           const SizedBox(height: 18),
-          Text('Icona',
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4)),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Icona',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4)),
+          ),
           const SizedBox(height: 10),
           Wrap(
             spacing: 10,
@@ -1256,8 +983,10 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
                 onTap: () =>
                     setState(() => _selectedIcon = icon.$1),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 50, height: 50,
+                  duration:
+                      const Duration(milliseconds: 150),
+                  width: 50,
+                  height: 50,
                   decoration: BoxDecoration(
                     color: sel
                         ? accent.withOpacity(0.2)
@@ -1272,7 +1001,8 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
                     boxShadow: sel
                         ? [
                             BoxShadow(
-                                color: accent.withOpacity(0.2),
+                                color:
+                                    accent.withOpacity(0.2),
                                 blurRadius: 8)
                           ]
                         : null,
@@ -1287,7 +1017,7 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
             }).toList(),
           ),
           const SizedBox(height: 24),
-          _GlassPrimaryButton(
+          GlassPrimaryButton(
             label: 'Applica',
             color: accent,
             onTap: () =>

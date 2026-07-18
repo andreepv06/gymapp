@@ -10,48 +10,20 @@ import '../../providers/exercise_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../providers/workout_provider.dart';
 import '../../widgets/cosmic_background.dart';
-import '../../widgets/glass_action_buttons.dart';
+import '../../widgets/shared_sheets.dart';
 import '../../widgets/workout_icon.dart';
 import '../exercises/exercises_screen.dart';
 import '../session/active_session_screen.dart';
 import 'workout_detail_screen.dart';
 import 'workouts_screen.dart';
 
-const _teal      = Color(0xFF00D4AA);
-const _tealDark  = Color(0xFF00A880);
-const _green     = Color(0xFF22C55E);
-const _orange    = Color(0xFFFF8C00);
+const _teal       = Color(0xFF00D4AA);
+const _tealDark   = Color(0xFF00A880);
+const _green      = Color(0xFF22C55E);
+const _orange     = Color(0xFFFF8C00);
 const _orangeWarm = Color(0xFFFF6B00);
-const _red       = Color(0xFFFF3B30);
-const _cyan      = Color(0xFF00E5FF);
-
-// Palette identica a _kWorkoutColors in workout_detail_screen.dart
-// e a WorkoutAvatar — NON riordinare, indici salvati in Hive
-const _kIconColors = [
-  Color(0xFF00D4AA), // 0 teal
-  Color(0xFF6366F1), // 1 indigo
-  Color(0xFF22C55E), // 2 green
-  Color(0xFFF59E0B), // 3 amber
-  Color(0xFFEC4899), // 4 pink
-  Color(0xFFEF4444), // 5 red
-  Color(0xFF3B82F6), // 6 blue
-  Color(0xFF8B5CF6), // 7 purple
-];
-
-const _kIcons = [
-  ('dumbbell', Icons.fitness_center_rounded),
-  ('bike', Icons.directions_bike_rounded),
-  ('run', Icons.directions_run_rounded),
-  ('swim', Icons.pool_rounded),
-  ('yoga', Icons.self_improvement_rounded),
-  ('sports', Icons.sports_rounded),
-  ('heart', Icons.favorite_rounded),
-  ('star', Icons.star_rounded),
-  ('flash', Icons.bolt_rounded),
-  ('target', Icons.track_changes_rounded),
-  ('mountain', Icons.terrain_rounded),
-  ('fire', Icons.local_fire_department_rounded),
-];
+const _red        = Color(0xFFFF3B30);
+const _cyan       = Color(0xFF00E5FF);
 
 class AllenamentiScreen extends StatefulWidget {
   const AllenamentiScreen({super.key});
@@ -61,14 +33,16 @@ class AllenamentiScreen extends StatefulWidget {
       _AllenamentiScreenState();
 }
 
-class _AllenamentiScreenState extends State<AllenamentiScreen> {
+class _AllenamentiScreenState
+    extends State<AllenamentiScreen> {
   late PageController _pageController;
   int _currentPage = 0;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(viewportFraction: 0.88);
+    _pageController =
+        PageController(viewportFraction: 0.88);
     Future.microtask(
         () => context.read<WorkoutProvider>().loadWorkouts());
   }
@@ -79,36 +53,7 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
     super.dispose();
   }
 
-  // FIX: parametro POSIZIONALE — nessun 'child:' richiesto al chiamante
-  Future<T?> _showKeyboardSafeSheet<T>(Widget child) {
-    return showModalBottomSheet<T>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => GestureDetector(
-        onTap: () => FocusScope.of(ctx).unfocus(),
-        child: AnimatedPadding(
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          ),
-          child: SafeArea(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(ctx).size.height * 0.85,
-              ),
-              child: SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                child: child,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  // ── FIX TASTIERA: usa showKeyboardSafeSheet da shared_sheets ──
 
   Future<void> _handlePlayTap(
       BuildContext ctx, HiveWorkout workout) async {
@@ -126,7 +71,8 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
               'Hai una sessione attiva per "${workout.name}".'),
           actions: [
             CupertinoActionSheetAction(
-              onPressed: () => Navigator.pop(c, 'continue'),
+              onPressed: () =>
+                  Navigator.pop(c, 'continue'),
               child: const Text('Continua sessione'),
             ),
             CupertinoActionSheetAction(
@@ -177,7 +123,8 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
       if (!ctx.mounted) return;
       if (result == null || result == 'cancel') return;
       if (result == 'resume' && paused != null) {
-        await sp.resumePausedSession(paused['id'] as String);
+        await sp.resumePausedSession(
+            paused['id'] as String);
         if (!ctx.mounted) return;
       }
       pushPage(ctx, ActiveSessionScreen(workout: workout));
@@ -200,16 +147,16 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
     );
   }
 
-  // FIX 2+3: crea scheda con icon+color picker — chiamata posizionale
+  // PUNTO 2: popup UNIFICATO creazione scheda — stesso di WorkoutsScreen
   Future<void> _showCreateWorkoutSheet() async {
-    await _showKeyboardSafeSheet(
-      _CreateWorkoutSheetWithPicker(
-        onConfirm: (name, iconId, colorIndex) {
-          if (name.trim().isEmpty) return;
+    await showKeyboardSafeSheet(
+      context,
+      WorkoutCreateSheet(
+        onConfirm: (name) {
           HiveDatabase.instance.addWorkout(HiveWorkout(
-            name: name.trim(),
-            iconId: iconId,
-            iconColorIndex: colorIndex,
+            name: name,
+            iconId: 'dumbbell',
+            iconColorIndex: 0,
             createdAt: DateTime.now().toIso8601String(),
           ));
           if (mounted) {
@@ -221,9 +168,16 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
     );
   }
 
+  // PUNTO 1: popup UNIFICATO creazione esercizio — stesso di ExercisesScreen
   Future<void> _showNewExerciseSheet() async {
-    await _showKeyboardSafeSheet(
-      _NewExerciseSheet(
+    final exercises =
+        context.read<ExerciseProvider>().exercises;
+    await showKeyboardSafeSheet(
+      context,
+      ExerciseFormSheet(
+        existingNames: exercises
+            .map((e) => e.name.toLowerCase())
+            .toSet(),
         onConfirm: (name, muscleGroup, notes) {
           HiveDatabase.instance.addExercise(HiveExercise(
             name: name,
@@ -231,7 +185,9 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
             notes: notes.isNotEmpty ? notes : null,
           ));
           if (mounted) {
-            context.read<ExerciseProvider>().loadExercises();
+            context
+                .read<ExerciseProvider>()
+                .loadExercises();
             Navigator.pop(context);
           }
         },
@@ -239,10 +195,74 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
     );
   }
 
+  // PUNTO 4: elimina scheda con conferma
+  Future<void> _deleteWorkout(HiveWorkout workout) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1030),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline_rounded,
+                color: _red, size: 22),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text('Eliminare questa scheda?',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16)),
+            ),
+          ],
+        ),
+        content: Text(
+          'Sei sicuro di voler eliminare definitivamente '
+          '"${workout.name}"?',
+          style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Annulla',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.6))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Elimina',
+                style: TextStyle(
+                    color: _red,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      await HiveDatabase.instance
+          .deleteWorkout(workout.key);
+      context.read<WorkoutProvider>().loadWorkouts();
+      // Resetta il carosello se necessario
+      final workouts =
+          context.read<WorkoutProvider>().workouts;
+      if (_currentPage >= workouts.length &&
+          workouts.isNotEmpty) {
+        setState(
+            () => _currentPage = workouts.length - 1);
+        _pageController.jumpToPage(_currentPage);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sp = context.watch<SessionProvider>();
-    final workouts = context.watch<WorkoutProvider>().workouts;
+    final workouts =
+        context.watch<WorkoutProvider>().workouts;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -250,12 +270,15 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
         child: SafeArea(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+            padding: const EdgeInsets.fromLTRB(
+                20, 24, 20, 40),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Column(
@@ -286,75 +309,90 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                     const SizedBox(width: 12),
                     _GestioneEserciziPill(
                       onLibrary: () => pushPage(
-                          context, const ExercisesScreen()),
-                      onNewExercise: _showNewExerciseSheet,
+                          context,
+                          const ExercisesScreen()),
+                      onNewExercise:
+                          _showNewExerciseSheet,
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 28),
 
+                // Banner sessione attiva
                 if (sp.hasActiveSession) ...[
                   _ActiveRecoveryBanner(sp: sp),
                   const SizedBox(height: 16),
                 ],
 
+                // Sessioni in pausa
                 if (sp.hasPausedSessions) ...[
                   _SectionLabel(
                     label: 'PAUSED SESSION',
                     color: _orange,
-                    icon: Icons.pause_circle_filled_rounded,
+                    icon: Icons
+                        .pause_circle_filled_rounded,
                   ),
                   const SizedBox(height: 10),
-                  ...sp.pausedSessions.map(
-                    (data) => Padding(
-                      padding:
-                          const EdgeInsets.only(bottom: 12),
-                      child: _PausedSessionPanel(
-                        data: data,
-                        sp: sp,
-                        onResume: () async {
-                          final id = data['id'] as String?;
-                          if (id == null) return;
-                          await sp.resumePausedSession(id);
-                          if (!mounted) return;
-                          final wk = data['workoutKey'];
-                          if (wk == null) return;
-                          try {
-                            final workout = HiveDatabase
-                                .instance
-                                .getWorkouts()
-                                .firstWhere(
-                                    (w) => w.key == wk);
-                            pushPage(
-                              context,
-                              ActiveSessionScreen(
-                                  workout: workout),
-                            );
-                          } catch (_) {}
-                        },
-                        onDelete: () async {
-                          final id = data['id'] as String?;
-                          if (id != null) {
-                            await sp.deletePausedSession(id);
-                          }
-                        },
-                      ),
-                    ),
-                  ),
+                  ...sp.pausedSessions.map((data) =>
+                      Padding(
+                        padding: const EdgeInsets.only(
+                            bottom: 12),
+                        child: _PausedSessionPanel(
+                          data: data,
+                          sp: sp,
+                          onResume: () async {
+                            final id =
+                                data['id'] as String?;
+                            if (id == null) return;
+                            await sp.resumePausedSession(
+                                id);
+                            if (!mounted) return;
+                            final wk =
+                                data['workoutKey'];
+                            if (wk == null) return;
+                            try {
+                              final workout =
+                                  HiveDatabase
+                                      .instance
+                                      .getWorkouts()
+                                      .firstWhere(
+                                          (w) =>
+                                              w.key ==
+                                              wk);
+                              pushPage(
+                                context,
+                                ActiveSessionScreen(
+                                    workout: workout),
+                              );
+                            } catch (_) {}
+                          },
+                          onDelete: () async {
+                            final id =
+                                data['id'] as String?;
+                            if (id != null) {
+                              await sp
+                                  .deletePausedSession(
+                                      id);
+                            }
+                          },
+                        ),
+                      )),
                   const SizedBox(height: 8),
                 ],
 
+                // Nuova sessione panel
                 _NuovaSessionePanel(
                   workouts: workouts,
                   currentPage: _currentPage,
                   pageController: _pageController,
                   onPageChanged: (i) =>
                       setState(() => _currentPage = i),
-                  onPlay: (w) => _handlePlayTap(context, w),
+                  onPlay: (w) =>
+                      _handlePlayTap(context, w),
                   onEdit: _handleEditTap,
-                  onViewAll: () =>
-                      pushPage(context, const WorkoutsScreen()),
+                  onDelete: _deleteWorkout,
+                  onViewAll: () => pushPage(
+                      context, const WorkoutsScreen()),
                   onCreateNew: _showCreateWorkoutSheet,
                   sp: sp,
                 ),
@@ -459,7 +497,8 @@ class _PillButtonState extends State<_PillButton> {
           setState(() => _pressed = false);
           widget.onTap();
         },
-        onTapCancel: () => setState(() => _pressed = false),
+        onTapCancel: () =>
+            setState(() => _pressed = false),
         child: AnimatedScale(
           scale: _pressed ? 0.85 : 1.0,
           duration: const Duration(milliseconds: 120),
@@ -549,8 +588,7 @@ class _ActiveRecoveryBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name =
-        sp.currentWorkout?.name ?? 'Sessione attiva';
+    final name = sp.currentWorkout?.name ?? 'Sessione attiva';
     final elapsed = sp.elapsedSeconds;
     final completed = sp.completedSetsCount;
     final total = sp.totalSetsCount;
@@ -609,8 +647,7 @@ class _ActiveRecoveryBanner extends StatelessWidget {
                     Text(
                       'Sessione interrotta',
                       style: TextStyle(
-                        color:
-                            Colors.white.withOpacity(0.6),
+                        color: Colors.white.withOpacity(0.6),
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.5,
@@ -759,7 +796,8 @@ class _PausedSessionPanel extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-                color: _orange.withOpacity(0.45), width: 1.3),
+                color: _orange.withOpacity(0.45),
+                width: 1.3),
             boxShadow: [
               BoxShadow(
                   color: _orange.withOpacity(0.2),
@@ -775,28 +813,26 @@ class _PausedSessionPanel extends StatelessWidget {
                 Row(
                   children: [
                     Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: _orange,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                              color: _orange.withOpacity(0.7),
-                              blurRadius: 6)
-                        ],
-                      ),
-                    ),
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: _orange,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                                color:
+                                    _orange.withOpacity(0.7),
+                                blurRadius: 6)
+                          ],
+                        )),
                     const SizedBox(width: 8),
-                    Text(
-                      'PAUSED SESSION',
-                      style: TextStyle(
-                        color: _orange,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
+                    Text('PAUSED SESSION',
+                        style: TextStyle(
+                          color: _orange,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.1,
+                        )),
                     const Spacer(),
                     GestureDetector(
                       onTap: onDelete,
@@ -808,13 +844,15 @@ class _PausedSessionPanel extends StatelessWidget {
                           borderRadius:
                               BorderRadius.circular(8),
                           border: Border.all(
-                              color: _red.withOpacity(0.35)),
+                              color:
+                                  _red.withOpacity(0.35)),
                         ),
                         child: const Text('Elimina',
                             style: TextStyle(
                                 color: _red,
                                 fontSize: 11,
-                                fontWeight: FontWeight.w600)),
+                                fontWeight:
+                                    FontWeight.w600)),
                       ),
                     ),
                   ],
@@ -841,8 +879,8 @@ class _PausedSessionPanel extends StatelessWidget {
                         label: _age(),
                         color: _orange),
                     _StatChip(
-                        icon:
-                            Icons.check_circle_outline_rounded,
+                        icon: Icons
+                            .check_circle_outline_rounded,
                         label: '$completed/$total serie',
                         color: _orange),
                   ],
@@ -857,7 +895,8 @@ class _PausedSessionPanel extends StatelessWidget {
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                           colors: [_orange, _orangeWarm]),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius:
+                          BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
                             color: _orange.withOpacity(0.4),
@@ -901,6 +940,7 @@ class _NuovaSessionePanel extends StatelessWidget {
   final void Function(int) onPageChanged;
   final void Function(HiveWorkout) onPlay;
   final void Function(HiveWorkout) onEdit;
+  final void Function(HiveWorkout) onDelete;
   final VoidCallback onViewAll;
   final VoidCallback onCreateNew;
   final SessionProvider sp;
@@ -912,6 +952,7 @@ class _NuovaSessionePanel extends StatelessWidget {
     required this.onPageChanged,
     required this.onPlay,
     required this.onEdit,
+    required this.onDelete,
     required this.onViewAll,
     required this.onCreateNew,
     required this.sp,
@@ -944,10 +985,12 @@ class _NuovaSessionePanel extends StatelessWidget {
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
+            padding: const EdgeInsets.fromLTRB(
+                20, 22, 20, 22),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header panel
                 Row(
                   children: [
                     Container(
@@ -968,7 +1011,8 @@ class _NuovaSessionePanel extends StatelessWidget {
                             style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 20,
-                                fontWeight: FontWeight.w800)),
+                                fontWeight:
+                                    FontWeight.w800)),
                         Text('Scegli come iniziare',
                             style: TextStyle(
                                 color: Colors.white
@@ -979,6 +1023,8 @@ class _NuovaSessionePanel extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 22),
+
+                // "Le tue schede" + Vedi tutte
                 Row(
                   children: [
                     Text('Le tue schede',
@@ -1037,9 +1083,14 @@ class _NuovaSessionePanel extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
+
+                // Carosello schede o empty state
                 if (workouts.isEmpty)
-                  // FIX 1: solo card centrale — nessun FAB duplicato
-                  _EmptyCarouselCard(onCreateNew: onCreateNew)
+                  // PUNTO 5: centering fix — Center esplicito
+                  Center(
+                    child: _EmptyCarouselCard(
+                        onCreateNew: onCreateNew),
+                  )
                 else ...[
                   SizedBox(
                     height: 196,
@@ -1055,14 +1106,15 @@ class _NuovaSessionePanel extends StatelessWidget {
                                   horizontal: 6),
                           child: _WorkoutCarouselCard(
                             workout: w,
-                            hasPaused:
-                                sp.hasPausedSessionForWorkout(
+                            hasPaused: sp
+                                .hasPausedSessionForWorkout(
                                     w.key),
                             hasActive: sp.hasActiveSession &&
                                 sp.currentWorkout?.key ==
                                     w.key,
                             onPlay: () => onPlay(w),
                             onEdit: () => onEdit(w),
+                            onDelete: () => onDelete(w),
                           ),
                         );
                       },
@@ -1073,8 +1125,9 @@ class _NuovaSessionePanel extends StatelessWidget {
                     Center(
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: List.generate(
-                            workouts.length, (i) {
+                        children:
+                            List.generate(workouts.length,
+                                (i) {
                           final active = i == currentPage;
                           return AnimatedContainer(
                             duration: const Duration(
@@ -1110,7 +1163,8 @@ class _NuovaSessionePanel extends StatelessWidget {
                     color: Colors.white.withOpacity(0.1),
                     height: 1),
                 const SizedBox(height: 20),
-                // "Crea nuova scheda" appare sempre
+
+                // Crea nuova scheda
                 GestureDetector(
                   onTap: onCreateNew,
                   child: Container(
@@ -1122,7 +1176,8 @@ class _NuovaSessionePanel extends StatelessWidget {
                         _teal.withOpacity(0.25),
                         _tealDark.withOpacity(0.15),
                       ]),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius:
+                          BorderRadius.circular(16),
                       border: Border.all(
                           color: _teal.withOpacity(0.5),
                           width: 1.3),
@@ -1144,8 +1199,10 @@ class _NuovaSessionePanel extends StatelessWidget {
                             color: _teal.withOpacity(0.2),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.add_rounded,
-                              color: _teal, size: 16),
+                          child: const Icon(
+                              Icons.add_rounded,
+                              color: _teal,
+                              size: 16),
                         ),
                         const SizedBox(width: 10),
                         const Text('Crea nuova scheda',
@@ -1167,7 +1224,7 @@ class _NuovaSessionePanel extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutCarouselCard
+// PUNTO 4: _WorkoutCarouselCard con pulsante cestino
 // ─────────────────────────────────────────────────────────────
 
 class _WorkoutCarouselCard extends StatelessWidget {
@@ -1176,6 +1233,7 @@ class _WorkoutCarouselCard extends StatelessWidget {
   final bool hasActive;
   final VoidCallback onPlay;
   final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _WorkoutCarouselCard({
     required this.workout,
@@ -1183,6 +1241,7 @@ class _WorkoutCarouselCard extends StatelessWidget {
     required this.hasActive,
     required this.onPlay,
     required this.onEdit,
+    required this.onDelete,
   });
 
   Map<String, int> _stats() {
@@ -1241,6 +1300,7 @@ class _WorkoutCarouselCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Indicatore stato
                 if (indicator != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -1272,6 +1332,8 @@ class _WorkoutCarouselCard extends StatelessWidget {
                       ],
                     ),
                   ),
+
+                // Info scheda
                 Row(
                   children: [
                     WorkoutAvatar(
@@ -1302,7 +1364,8 @@ class _WorkoutCarouselCard extends StatelessWidget {
                             children: [
                               if (freeEx > 0)
                                 _TinyChip(
-                                    label: '$freeEx eserc.'),
+                                    label:
+                                        '$freeEx eserc.'),
                               if (circuits > 0)
                                 _TinyChip(
                                     label:
@@ -1318,8 +1381,11 @@ class _WorkoutCarouselCard extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
+
+                // Azioni
                 Row(
                   children: [
+                    // Modifica
                     GestureDetector(
                       onTap: onEdit,
                       child: Row(
@@ -1334,11 +1400,34 @@ class _WorkoutCarouselCard extends StatelessWidget {
                                   color: Colors.white
                                       .withOpacity(0.5),
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w500)),
+                                  fontWeight:
+                                      FontWeight.w500)),
                         ],
                       ),
                     ),
+                    const SizedBox(width: 12),
+                    // PUNTO 4: cestino con conferma
+                    GestureDetector(
+                      onTap: onDelete,
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: _red.withOpacity(0.1),
+                          borderRadius:
+                              BorderRadius.circular(8),
+                          border: Border.all(
+                              color: _red.withOpacity(0.3),
+                              width: 0.8),
+                        ),
+                        child: Icon(
+                            Icons.delete_outline_rounded,
+                            size: 15,
+                            color: _red.withOpacity(0.8)),
+                      ),
+                    ),
                     const Spacer(),
+                    // Play
                     GestureDetector(
                       onTap: onPlay,
                       child: Container(
@@ -1385,7 +1474,7 @@ class _WorkoutCarouselCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// FIX 1: _EmptyCarouselCard — unico bottone, nessun FAB duplicato
+// PUNTO 5: _EmptyCarouselCard — perfettamente centrato
 // ─────────────────────────────────────────────────────────────
 
 class _EmptyCarouselCard extends StatelessWidget {
@@ -1402,6 +1491,7 @@ class _EmptyCarouselCard extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
+            width: double.infinity,
             height: 196,
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -1422,7 +1512,9 @@ class _EmptyCarouselCard extends StatelessWidget {
               ],
             ),
             child: Column(
+              // PUNTO 5: centramento esplicito su entrambi gli assi
               mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
                   width: 52,
@@ -1437,16 +1529,22 @@ class _EmptyCarouselCard extends StatelessWidget {
                       color: _teal, size: 28),
                 ),
                 const SizedBox(height: 14),
-                const Text('Crea la tua prima scheda',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700)),
+                const Text(
+                  'Crea la tua prima scheda',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700),
+                ),
                 const SizedBox(height: 4),
-                Text('Inizia il tuo percorso fitness',
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.45),
-                        fontSize: 12)),
+                Text(
+                  'Inizia il tuo percorso fitness',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.45),
+                      fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -1508,415 +1606,6 @@ class _StatChip extends StatelessWidget {
                 color: color.withOpacity(0.7),
                 fontWeight: FontWeight.w500)),
       ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// FIX 2+3: _CreateWorkoutSheetWithPicker
-// Tastiera: AnimatedPadding + ConstrainedBox (gestiti in _openSheet)
-// Icona/colore: stato locale + setState → anteprima live
-// ─────────────────────────────────────────────────────────────
-
-class _CreateWorkoutSheetWithPicker extends StatefulWidget {
-  final void Function(String name, String iconId, int colorIndex)
-      onConfirm;
-
-  const _CreateWorkoutSheetWithPicker(
-      {required this.onConfirm});
-
-  @override
-  State<_CreateWorkoutSheetWithPicker> createState() =>
-      _CreateWorkoutSheetWithPickerState();
-}
-
-class _CreateWorkoutSheetWithPickerState
-    extends State<_CreateWorkoutSheetWithPicker> {
-  final _nameCtrl = TextEditingController();
-  String _selectedIconId = 'dumbbell';
-  int _selectedColorIndex = 0;
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = _kIconColors[_selectedColorIndex];
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF060B14), Color(0xFF03040A)],
-        ),
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(
-            color: accent.withOpacity(0.35), width: 0.8),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [
-                  accent.withOpacity(0.3),
-                  accent.withOpacity(0.6),
-                  accent.withOpacity(0.3),
-                ]),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Anteprima live + nome sulla stessa riga
-          Row(
-            children: [
-              WorkoutAvatar(
-                iconId: _selectedIconId,
-                iconColorIndex: _selectedColorIndex,
-                size: 58,
-                iconSize: 29,
-                borderRadius: 15,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: TextField(
-                  controller: _nameCtrl,
-                  autofocus: true,
-                  textCapitalization:
-                      TextCapitalization.sentences,
-                  style: const TextStyle(
-                      color: Colors.white, fontSize: 15),
-                  decoration: InputDecoration(
-                    labelText: 'Nome scheda',
-                    hintText: 'Es. Push Day, Full Body...',
-                    labelStyle: TextStyle(
-                        color: Colors.white.withOpacity(0.5)),
-                    hintStyle: TextStyle(
-                        color: Colors.white.withOpacity(0.3)),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Colori
-          Text('Colore',
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4)),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: _kIconColors.asMap().entries.map((e) {
-              final sel = e.key == _selectedColorIndex;
-              return GestureDetector(
-                // FIX 3: setState aggiorna _selectedColorIndex
-                // → WorkoutAvatar anteprima si ricostruisce
-                onTap: () =>
-                    setState(() => _selectedColorIndex = e.key),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: e.value,
-                    shape: BoxShape.circle,
-                    border: sel
-                        ? Border.all(
-                            color: Colors.white, width: 2.5)
-                        : Border.all(
-                            color: Colors.transparent),
-                    boxShadow: sel
-                        ? [
-                            BoxShadow(
-                                color:
-                                    e.value.withOpacity(0.6),
-                                blurRadius: 10)
-                          ]
-                        : null,
-                  ),
-                  child: sel
-                      ? const Icon(Icons.check_rounded,
-                          color: Colors.white, size: 16)
-                      : null,
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 16),
-
-          // Icone
-          Text('Icona',
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4)),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _kIcons.map((icon) {
-              final sel = icon.$1 == _selectedIconId;
-              return GestureDetector(
-                // FIX 3: setState aggiorna _selectedIconId
-                onTap: () =>
-                    setState(() => _selectedIconId = icon.$1),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: sel
-                        ? accent.withOpacity(0.2)
-                        : Colors.white.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: sel
-                          ? accent.withOpacity(0.6)
-                          : Colors.white.withOpacity(0.1),
-                      width: sel ? 1.5 : 1,
-                    ),
-                    boxShadow: sel
-                        ? [
-                            BoxShadow(
-                                color: accent.withOpacity(0.2),
-                                blurRadius: 8)
-                          ]
-                        : null,
-                  ),
-                  child: Icon(icon.$2,
-                      color: sel
-                          ? accent
-                          : Colors.white.withOpacity(0.45),
-                      size: 22),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 22),
-
-          // Crea scheda — disabilitato se nome vuoto
-          GestureDetector(
-            onTap: _nameCtrl.text.trim().isEmpty
-                ? null
-                : () => widget.onConfirm(
-                      _nameCtrl.text.trim(),
-                      _selectedIconId,
-                      _selectedColorIndex,
-                    ),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                gradient: _nameCtrl.text.trim().isEmpty
-                    ? LinearGradient(colors: [
-                        Colors.white.withOpacity(0.06),
-                        Colors.white.withOpacity(0.03),
-                      ])
-                    : LinearGradient(colors: [
-                        accent,
-                        Color.lerp(accent, Colors.black, 0.2) ??
-                            accent,
-                      ]),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: _nameCtrl.text.trim().isEmpty
-                      ? Colors.white.withOpacity(0.1)
-                      : accent.withOpacity(0.5),
-                ),
-                boxShadow: _nameCtrl.text.trim().isEmpty
-                    ? null
-                    : [
-                        BoxShadow(
-                            color: accent.withOpacity(0.35),
-                            blurRadius: 14,
-                            offset: const Offset(0, 4))
-                      ],
-              ),
-              child: Text(
-                'Crea scheda',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _nameCtrl.text.trim().isEmpty
-                      ? Colors.white.withOpacity(0.3)
-                      : Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// _NewExerciseSheet
-// ─────────────────────────────────────────────────────────────
-
-class _NewExerciseSheet extends StatelessWidget {
-  final void Function(String name, String muscleGroup,
-      String notes) onConfirm;
-
-  const _NewExerciseSheet({required this.onConfirm});
-
-  @override
-  Widget build(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final muscleCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF060B14), Color(0xFF03040A)],
-        ),
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(
-            color: _teal.withOpacity(0.3), width: 0.8),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [
-                  _teal.withOpacity(0.3),
-                  _teal.withOpacity(0.6),
-                  _teal.withOpacity(0.3),
-                ]),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _teal.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                    Icons.fitness_center_rounded,
-                    color: _teal,
-                    size: 20),
-              ),
-              const SizedBox(width: 12),
-              const Text('Nuovo esercizio',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800)),
-            ],
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: nameCtrl,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: 'Nome esercizio',
-              hintText: 'Es. Panca piana, Squat...',
-              labelStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.5)),
-              hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.3)),
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: muscleCtrl,
-            textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: 'Gruppo muscolare',
-              hintText: 'Es. Petto, Gambe...',
-              labelStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.5)),
-              hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.3)),
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: notesCtrl,
-            textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(color: Colors.white),
-            maxLines: 2,
-            decoration: InputDecoration(
-              labelText: 'Note (opzionale)',
-              hintText: 'Indicazioni tecniche, varianti...',
-              labelStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.5)),
-              hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.3)),
-            ),
-          ),
-          const SizedBox(height: 24),
-          GestureDetector(
-            onTap: () => onConfirm(
-              nameCtrl.text.trim(),
-              muscleCtrl.text.trim(),
-              notesCtrl.text.trim(),
-            ),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [
-                  _teal,
-                  Color.lerp(_teal, Colors.black, 0.2) ?? _teal,
-                ]),
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                      color: _teal.withOpacity(0.35),
-                      blurRadius: 14,
-                      offset: const Offset(0, 4))
-                ],
-              ),
-              child: const Text('Aggiungi esercizio',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15)),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
