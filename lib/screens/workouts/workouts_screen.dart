@@ -112,58 +112,47 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
   }
 
-  Future<void> _confirmDelete(HiveWorkout workout) async {
-    final confirm = await showDialog<bool>(
+Future<void> _confirmDelete(HiveWorkout workout) async {
+    final confirm = await showGlassDialog<bool>(
       context: context,
-      barrierColor: Colors.black54,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1030),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18)),
-        title: const Row(
-          children: [
-            Icon(Icons.delete_outline, color: _red, size: 22),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text('Elimina scheda',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16)),
-            ),
+      accentColor: kRed,
+      icon: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: kRed.withOpacity(0.12),
+          shape: BoxShape.circle,
+          border: Border.all(color: kRed.withOpacity(0.4)),
+          boxShadow: [
+            BoxShadow(
+                color: kRed.withOpacity(0.2), blurRadius: 12)
           ],
         ),
-        content: Text(
+        child: Icon(Icons.delete_outline_rounded,
+            color: kRed.withOpacity(0.9), size: 20),
+      ),
+      title: 'Elimina scheda',
+      message:
           'Eliminare "${workout.name}"?\n'
           'Questa azione non può essere annullata.',
-          style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
-              fontSize: 14),
+      actions: [
+        GlassDialogAction(
+          label: 'Annulla',
+          onTap: () => Navigator.pop(context, false),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Annulla',
-                style: TextStyle(
-                    color: Colors.white.withOpacity(0.6))),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Elimina',
-                style: TextStyle(
-                    color: _red,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+        GlassDialogAction(
+          label: 'Elimina',
+          isDestructive: true,
+          onTap: () => Navigator.pop(context, true),
+        ),
+      ],
     );
+
     if (confirm == true && mounted) {
-      await HiveDatabase.instance
-          .deleteWorkout(workout.key);
+      await HiveDatabase.instance.deleteWorkout(workout.key);
       context.read<WorkoutProvider>().loadWorkouts();
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final workouts =

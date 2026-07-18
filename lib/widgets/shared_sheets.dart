@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 // ─────────────────────────────────────────────────────────────
 
 const kTeal = Color(0xFF00D4AA);
-const kCyan  = Color(0xFF00E5FF);
-const kRed   = Color(0xFFFF3B30);
+const kCyan = Color(0xFF00E5FF);
+const kRed  = Color(0xFFFF3B30);
 
 const kMuscleGroups = [
   'Petto', 'Schiena', 'Spalle', 'Bicipiti',
@@ -15,9 +15,13 @@ const kMuscleGroups = [
 ];
 
 // ─────────────────────────────────────────────────────────────
-// showKeyboardSafeSheet — funzione helper condivisa
-// AnimatedPadding + ConstrainedBox(85%) evita salti tastiera
-// Parametro POSIZIONALE per compatibilità con tutte le chiamate
+// showKeyboardSafeSheet
+// FIX CRITICO: usa Padding STATICO, non AnimatedPadding.
+// AnimatedPadding genera un'animazione aggiuntiva sul padding
+// quando la tastiera appare, causando il salto al primo click.
+// Il sistema OS gestisce già l'animazione della tastiera;
+// Padding statico si limita a riflettere il valore corrente
+// di viewInsets.bottom senza aggiungere una propria animazione.
 // ─────────────────────────────────────────────────────────────
 
 Future<T?> showKeyboardSafeSheet<T>(
@@ -29,11 +33,11 @@ Future<T?> showKeyboardSafeSheet<T>(
     backgroundColor: Colors.transparent,
     builder: (ctx) => GestureDetector(
       onTap: () => FocusScope.of(ctx).unfocus(),
-      child: AnimatedPadding(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
+      // FIX: Padding STATICO — nessun conflitto con l'animazione OS
+      child: Padding(
         padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+        ),
         child: SafeArea(
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -51,7 +55,195 @@ Future<T?> showKeyboardSafeSheet<T>(
 }
 
 // ─────────────────────────────────────────────────────────────
-// GlassSheetWrapper — container base condiviso per tutti i popup
+// showGlassDialog — dialog Glass UI unificato
+// Sostituisce AlertDialog nativo e CupertinoAlertDialog
+// in tutti i punti dell'app.
+// ─────────────────────────────────────────────────────────────
+
+Future<T?> showGlassDialog<T>({
+  required BuildContext context,
+  Widget? icon,
+  required String title,
+  required String message,
+  required List<GlassDialogAction> actions,
+  Color accentColor = kCyan,
+}) {
+  return showDialog<T>(
+    context: context,
+    barrierColor: Colors.black.withOpacity(0.65),
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(
+          horizontal: 24, vertical: 40),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF0D1117),
+                  Color(0xFF060B14),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: accentColor.withOpacity(0.25),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: accentColor.withOpacity(0.06),
+                  blurRadius: 28,
+                  spreadRadius: 4,
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Icona opzionale + titolo
+                if (icon != null) ...[
+                  icon,
+                  const SizedBox(height: 16),
+                ],
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  message,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Divisore sottile
+                Container(
+                  height: 0.7,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [
+                      Colors.transparent,
+                      accentColor.withOpacity(0.25),
+                      Colors.transparent,
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Azioni
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: actions.map((action) {
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: _GlassDialogBtn(action: action),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// GlassDialogAction — definisce un pulsante del dialog
+// ─────────────────────────────────────────────────────────────
+
+class GlassDialogAction {
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+  final bool isDestructive;
+  final bool isDefault;
+
+  const GlassDialogAction({
+    required this.label,
+    required this.onTap,
+    this.color,
+    this.isDestructive = false,
+    this.isDefault = false,
+  });
+
+  Color get resolvedColor {
+    if (color != null) return color!;
+    if (isDestructive) return kRed;
+    if (isDefault) return kTeal;
+    return Colors.white;
+  }
+}
+
+class _GlassDialogBtn extends StatelessWidget {
+  final GlassDialogAction action;
+
+  const _GlassDialogBtn({required this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = action.resolvedColor;
+    final isNeutral = !action.isDestructive &&
+        !action.isDefault &&
+        action.color == null;
+
+    return GestureDetector(
+      onTap: action.onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: 18, vertical: 11),
+        decoration: BoxDecoration(
+          color: isNeutral
+              ? Colors.white.withOpacity(0.07)
+              : c.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isNeutral
+                ? Colors.white.withOpacity(0.15)
+                : c.withOpacity(0.4),
+            width: 1,
+          ),
+          boxShadow: !isNeutral
+              ? [
+                  BoxShadow(
+                      color: c.withOpacity(0.15),
+                      blurRadius: 8)
+                ]
+              : null,
+        ),
+        child: Text(
+          action.label,
+          style: TextStyle(
+            color: isNeutral
+                ? Colors.white.withOpacity(0.7)
+                : c,
+            fontSize: 14,
+            fontWeight: (action.isDefault || action.isDestructive)
+                ? FontWeight.w700
+                : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// GlassSheetWrapper — container base condiviso per i popup
 // ─────────────────────────────────────────────────────────────
 
 class GlassSheetWrapper extends StatelessWidget {
@@ -81,8 +273,8 @@ class GlassSheetWrapper extends StatelessWidget {
         ),
         borderRadius:
             const BorderRadius.vertical(top: Radius.circular(24)),
-        border:
-            Border.all(color: accentColor.withOpacity(0.3), width: 0.8),
+        border: Border.all(
+            color: accentColor.withOpacity(0.3), width: 0.8),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -205,7 +397,6 @@ class GlassTextField extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────
 // GlassPrimaryButton — bottone principale condiviso
-// Disabilitato automaticamente se onTap == null
 // ─────────────────────────────────────────────────────────────
 
 class GlassPrimaryButton extends StatelessWidget {
@@ -271,8 +462,7 @@ class GlassPrimaryButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ExerciseFormSheet — popup UNIFICATO creazione + modifica esercizio
-// Usato identicamente da AllenamentiScreen ed ExercisesScreen
+// ExerciseFormSheet — popup UNIFICATO creazione + modifica
 // ─────────────────────────────────────────────────────────────
 
 class ExerciseFormSheet extends StatefulWidget {
@@ -358,7 +548,6 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Nome
           GlassTextField(
             controller: _nameCtrl,
             hintText: 'Es. Panca piana, Squat...',
@@ -366,10 +555,10 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
             autofocus: true,
             onChanged: (v) {
               setState(() {
-                _nameError =
-                    widget.existingNames.contains(v.trim().toLowerCase())
-                        ? 'Esercizio già esistente'
-                        : null;
+                _nameError = widget.existingNames
+                        .contains(v.trim().toLowerCase())
+                    ? 'Esercizio già esistente'
+                    : null;
               });
             },
           ),
@@ -379,12 +568,11 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
               alignment: Alignment.centerLeft,
               child: Text(_nameError!,
                   style: TextStyle(
-                      color: kRed.withOpacity(0.85), fontSize: 11)),
+                      color: kRed.withOpacity(0.85),
+                      fontSize: 11)),
             ),
           ],
           const SizedBox(height: 14),
-
-          // Gruppo muscolare
           Align(
             alignment: Alignment.centerLeft,
             child: Text('Gruppo muscolare',
@@ -400,12 +588,14 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: kMuscleGroups.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: 6),
               itemBuilder: (_, i) {
                 final g = kMuscleGroups[i];
                 final sel = _selectedMuscle == g;
                 return GestureDetector(
-                  onTap: () => setState(() => _selectedMuscle = g),
+                  onTap: () =>
+                      setState(() => _selectedMuscle = g),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     padding: const EdgeInsets.symmetric(
@@ -444,17 +634,13 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
             ),
           ),
           const SizedBox(height: 14),
-
-          // Note opzionali
           GlassTextField(
             controller: _notesCtrl,
-            hintText:
-                'Es. Grip neutro, 3 secondi in discesa...',
+            hintText: 'Es. Grip neutro, 3 secondi in discesa...',
             labelText: 'Note (opzionale)',
             maxLines: 2,
           ),
           const SizedBox(height: 20),
-
           GlassPrimaryButton(
             label: widget.isEditing
                 ? 'Salva modifiche'
@@ -470,7 +656,6 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
 
 // ─────────────────────────────────────────────────────────────
 // WorkoutCreateSheet — popup UNIFICATO creazione scheda
-// Usato identicamente da AllenamentiScreen e WorkoutsScreen
 // ─────────────────────────────────────────────────────────────
 
 class WorkoutCreateSheet extends StatefulWidget {
@@ -522,8 +707,7 @@ class _WorkoutCreateSheetState extends State<WorkoutCreateSheet> {
             label: 'Crea scheda',
             color: kTeal,
             onTap: hasName
-                ? () =>
-                    widget.onConfirm(_nameCtrl.text.trim())
+                ? () => widget.onConfirm(_nameCtrl.text.trim())
                 : null,
           ),
         ],
