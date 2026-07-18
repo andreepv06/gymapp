@@ -10,10 +10,16 @@ import '../../widgets/workout_icon.dart';
 import 'workout_detail_screen.dart';
 
 const _teal = Color(0xFF00D4AA);
-const _red  = Color(0xFFFF3B30);
+const _cyan  = Color(0xFF00E5FF);
+const _red   = Color(0xFFFF3B30);
+
+// ─────────────────────────────────────────────────────────────
+// WorkoutsScreen
+// ─────────────────────────────────────────────────────────────
 
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
+
   @override
   State<WorkoutsScreen> createState() => _WorkoutsScreenState();
 }
@@ -26,7 +32,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         () => context.read<WorkoutProvider>().loadWorkouts());
   }
 
-  // FIX: metodo DENTRO la classe — context è disponibile
+  // FIX TASTIERA: AnimatedPadding + ConstrainedBox(85%)
+  // Parametro POSIZIONALE — nessun errore "too many positional arguments"
   Future<T?> _showKeyboardSafeSheet<T>(Widget child) {
     return showModalBottomSheet<T>(
       context: context,
@@ -39,8 +46,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOut,
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          ),
+              bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: SafeArea(
             child: ConstrainedBox(
               constraints: BoxConstraints(
@@ -56,6 +62,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       ),
     );
   }
+
+  // ── Crea nuova scheda ──────────────────────────────────────
 
   Future<void> _showCreateSheet() async {
     final ctrl = TextEditingController();
@@ -79,6 +87,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       ),
     );
   }
+
+  // ── Opzioni scheda ─────────────────────────────────────────
 
   void _showWorkoutOptions(HiveWorkout workout) {
     _showKeyboardSafeSheet(
@@ -144,11 +154,11 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         backgroundColor: const Color(0xFF1A1030),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18)),
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.delete_outline, color: _red, size: 22),
-            const SizedBox(width: 10),
-            const Text('Elimina scheda',
+            Icon(Icons.delete_outline, color: _red, size: 22),
+            SizedBox(width: 10),
+            Text('Elimina scheda',
                 style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -156,10 +166,11 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           ],
         ),
         content: Text(
-          'Eliminare "${workout.name}"? '
+          'Eliminare "${workout.name}"?\n'
           'Questa azione non può essere annullata.',
           style: TextStyle(
-              color: Colors.white.withOpacity(0.7), fontSize: 14),
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 14),
         ),
         actions: [
           TextButton(
@@ -183,121 +194,79 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     }
   }
 
+  // ── Build ─────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final workouts = context.watch<WorkoutProvider>().workouts;
+    final hasWorkouts = workouts.isNotEmpty;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
+      // PARTE 1: nessun FAB — rimosso completamente
       body: CosmicBackground(
         subtle: true,
         child: SafeArea(
           child: Column(
             children: [
+              // PARTE 1 SCENARIO B: "+" solo se ci sono schede
               _GlassAppBar(
                 title: 'Le mie schede',
                 onBack: () => Navigator.pop(context),
-                action: GestureDetector(
-                  onTap: _showCreateSheet,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: _teal.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                          color: _teal.withOpacity(0.35)),
-                    ),
-                    child: const Icon(Icons.add_rounded,
-                        color: _teal, size: 20),
-                  ),
-                ),
+                action: hasWorkouts
+                    ? GestureDetector(
+                        onTap: _showCreateSheet,
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: _teal.withOpacity(0.15),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: _teal.withOpacity(0.35)),
+                          ),
+                          child: const Icon(Icons.add_rounded,
+                              color: _teal, size: 20),
+                        ),
+                      )
+                    // PARTE 1 SCENARIO A: nessun "+" quando vuoto
+                    : null,
               ),
               Expanded(
-                child: workouts.isEmpty
-                    ? _EmptyWorkoutsState(
-                        onCreateNew: _showCreateSheet)
-                    : ListView.builder(
+                child: hasWorkouts
+                    ? ListView.builder(
                         padding: const EdgeInsets.fromLTRB(
-                            16, 12, 16, 100),
+                            16, 12, 16, 40),
                         physics: const BouncingScrollPhysics(),
                         itemCount: workouts.length,
-                        itemBuilder: (_, i) {
-                          return Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: 12),
-                            child: _WorkoutGlassCard(
-                              workout: workouts[i],
-                              onTap: () {
-                                context
-                                    .read<WorkoutProvider>()
-                                    .loadWorkoutExercises(
-                                        workouts[i].key);
-                                pushPage(
-                                  context,
-                                  WorkoutDetailScreen(
-                                    workoutId: workouts[i].key,
-                                    workoutName: workouts[i].name,
-                                  ),
-                                );
-                              },
-                              onOptions: () =>
-                                  _showWorkoutOptions(workouts[i]),
-                            ),
-                          );
-                        },
-                      ),
+                        itemBuilder: (_, i) => Padding(
+                          padding:
+                              const EdgeInsets.only(bottom: 12),
+                          child: _WorkoutGlassCard(
+                            workout: workouts[i],
+                            onTap: () {
+                              context
+                                  .read<WorkoutProvider>()
+                                  .loadWorkoutExercises(
+                                      workouts[i].key);
+                              pushPage(
+                                context,
+                                WorkoutDetailScreen(
+                                  workoutId: workouts[i].key,
+                                  workoutName: workouts[i].name,
+                                ),
+                              );
+                            },
+                            onOptions: () =>
+                                _showWorkoutOptions(workouts[i]),
+                          ),
+                        ),
+                      )
+                    // PARTE 1 SCENARIO A: solo card Glass centrale
+                    : _EmptyWorkoutsState(
+                        onCreateNew: _showCreateSheet),
               ),
             ],
-          ),
-        ),
-      ),
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: GestureDetector(
-          onTap: _showCreateSheet,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 16, horizontal: 28),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      _teal.withOpacity(0.28),
-                      const Color(0xFF00A880).withOpacity(0.18),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                      color: _teal.withOpacity(0.55), width: 1.3),
-                  boxShadow: [
-                    BoxShadow(
-                        color: _teal.withOpacity(0.25),
-                        blurRadius: 20,
-                        spreadRadius: 1)
-                  ],
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add_rounded, color: _teal, size: 20),
-                    SizedBox(width: 10),
-                    Text(
-                      'Nuova scheda',
-                      style: TextStyle(
-                        color: _teal,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ),
         ),
       ),
@@ -313,12 +282,17 @@ class _GlassAppBar extends StatelessWidget {
   final String title;
   final VoidCallback onBack;
   final Widget? action;
-  const _GlassAppBar(
-      {required this.title, required this.onBack, this.action});
+
+  const _GlassAppBar({
+    required this.title,
+    required this.onBack,
+    this.action,
+  });
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Row(
         children: [
           GestureDetector(
@@ -360,6 +334,146 @@ class _GlassAppBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
+// PARTE 1 SCENARIO A: _EmptyWorkoutsState — Glass iOS
+// Unico punto di accesso alla creazione quando non ci sono schede.
+// Nessun FAB, nessun pulsante duplicato.
+// ─────────────────────────────────────────────────────────────
+
+class _EmptyWorkoutsState extends StatelessWidget {
+  final VoidCallback onCreateNew;
+
+  const _EmptyWorkoutsState({required this.onCreateNew});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: GestureDetector(
+          onTap: onCreateNew,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 44, horizontal: 28),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      _teal.withOpacity(0.1),
+                      Colors.white.withOpacity(0.04),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                      color: _cyan.withOpacity(0.35), width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                        color: _cyan.withOpacity(0.1),
+                        blurRadius: 28,
+                        spreadRadius: 2),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: _teal.withOpacity(0.12),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: _teal.withOpacity(0.35),
+                            width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                              color: _teal.withOpacity(0.2),
+                              blurRadius: 18)
+                        ],
+                      ),
+                      child: const Icon(
+                          Icons.fitness_center_rounded,
+                          size: 36,
+                          color: _teal),
+                    ),
+                    const SizedBox(height: 22),
+                    const Text(
+                      'Crea la tua prima scheda',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tocca qui per iniziare a\nconfigurare il tuo allenamento',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.45),
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 13),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [
+                          _teal.withOpacity(0.25),
+                          _teal.withOpacity(0.12),
+                        ]),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: _teal.withOpacity(0.5),
+                            width: 1.2),
+                        boxShadow: [
+                          BoxShadow(
+                              color: _teal.withOpacity(0.2),
+                              blurRadius: 14)
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: _teal.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.add_rounded,
+                                color: _teal, size: 16),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text('Inizia ora',
+                              style: TextStyle(
+                                  color: _teal,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // _WorkoutGlassCard
 // ─────────────────────────────────────────────────────────────
 
@@ -367,11 +481,13 @@ class _WorkoutGlassCard extends StatelessWidget {
   final HiveWorkout workout;
   final VoidCallback onTap;
   final VoidCallback onOptions;
+
   const _WorkoutGlassCard({
     required this.workout,
     required this.onTap,
     required this.onOptions,
   });
+
   Map<String, int> _stats() {
     final allEx =
         HiveDatabase.instance.getWorkoutExercises(workout.key);
@@ -383,12 +499,14 @@ class _WorkoutGlassCard extends StatelessWidget {
       'sets': allEx.fold(0, (s, e) => s + e.sets),
     };
   }
+
   @override
   Widget build(BuildContext context) {
     final stats = _stats();
     final freeEx = stats['free'] ?? 0;
     final circuits = stats['circuits'] ?? 0;
     final sets = stats['sets'] ?? 0;
+
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
@@ -469,7 +587,8 @@ class _WorkoutGlassCard extends StatelessWidget {
                           width: 32,
                           height: 32,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.06),
+                            color:
+                                Colors.white.withOpacity(0.06),
                             borderRadius:
                                 BorderRadius.circular(8),
                           ),
@@ -499,7 +618,9 @@ class _WorkoutGlassCard extends StatelessWidget {
 class _CardInfoTag extends StatelessWidget {
   final IconData icon;
   final String label;
+
   const _CardInfoTag({required this.icon, required this.label});
+
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -518,76 +639,326 @@ class _CardInfoTag extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _EmptyWorkoutsState
+// PARTE 2+4: Popup unificati con stessa struttura Glass
+// _GlassSheetWrapper — componente base riutilizzabile
+// Elimina 4 implementazioni duplicate del container
 // ─────────────────────────────────────────────────────────────
 
-class _EmptyWorkoutsState extends StatelessWidget {
-  final VoidCallback onCreateNew;
-  const _EmptyWorkoutsState({required this.onCreateNew});
+class _GlassSheetWrapper extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final Widget child;
+  final Color accentColor;
+  final Widget? leadingIcon;
+
+  const _GlassSheetWrapper({
+    required this.title,
+    this.subtitle,
+    required this.child,
+    this.accentColor = _teal,
+    this.leadingIcon,
+  });
+
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: _teal.withOpacity(0.1),
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: _teal.withOpacity(0.25), width: 1.5),
-              ),
-              child: const Icon(Icons.fitness_center_outlined,
-                  size: 38, color: _teal),
-            ),
-            const SizedBox(height: 20),
-            const Text('Nessuna scheda',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            Text(
-              'Crea la tua prima scheda\ne inizia ad allenarti',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.45),
-                  fontSize: 14,
-                  height: 1.5),
-            ),
-            const SizedBox(height: 28),
-            GestureDetector(
-              onTap: onCreateNew,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 28, vertical: 14),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [
-                    _teal.withOpacity(0.3),
-                    _teal.withOpacity(0.15)
-                  ]),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: _teal.withOpacity(0.5)),
-                  boxShadow: [
-                    BoxShadow(
-                        color: _teal.withOpacity(0.2),
-                        blurRadius: 16)
-                  ],
-                ),
-                child: const Text('Crea nuova scheda',
-                    style: TextStyle(
-                        color: _teal,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14)),
-              ),
-            ),
-          ],
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF060B14), Color(0xFF03040A)],
         ),
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(
+            color: accentColor.withOpacity(0.3), width: 0.8),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 14),
+          // Handle pill
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [
+                  accentColor.withOpacity(0.3),
+                  accentColor.withOpacity(0.6),
+                  accentColor.withOpacity(0.3),
+                ]),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                if (leadingIcon != null) ...[
+                  leadingIcon!,
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800)),
+                      if (subtitle != null)
+                        Text(subtitle!,
+                            style: TextStyle(
+                                color:
+                                    accentColor.withOpacity(0.7),
+                                fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: child,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _GlassTextField — campo testo uniforme nei popup
+// ─────────────────────────────────────────────────────────────
+
+class _GlassTextField extends StatelessWidget {
+  final TextEditingController? controller;
+  final String hintText;
+  final String? labelText;
+  final bool autofocus;
+  final void Function(String)? onChanged;
+  final int maxLines;
+
+  const _GlassTextField({
+    this.controller,
+    required this.hintText,
+    this.labelText,
+    this.autofocus = false,
+    this.onChanged,
+    this.maxLines = 1,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: _cyan.withOpacity(0.2), width: 0.8),
+          ),
+          child: TextField(
+            controller: controller,
+            autofocus: autofocus,
+            maxLines: maxLines,
+            textCapitalization: TextCapitalization.sentences,
+            style: const TextStyle(
+                color: Colors.white, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: hintText,
+              labelText: labelText,
+              hintStyle: TextStyle(
+                  color: Colors.white.withOpacity(0.3),
+                  fontSize: 14),
+              labelStyle: TextStyle(
+                  color: Colors.white.withOpacity(0.5)),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 13),
+            ),
+            onChanged: onChanged,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _GlassPrimaryButton — bottone principale uniforme nei popup
+// ─────────────────────────────────────────────────────────────
+
+class _GlassPrimaryButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const _GlassPrimaryButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          gradient: enabled
+              ? LinearGradient(colors: [
+                  color,
+                  Color.lerp(color, Colors.black, 0.2) ?? color,
+                ])
+              : LinearGradient(colors: [
+                  Colors.white.withOpacity(0.06),
+                  Colors.white.withOpacity(0.03),
+                ]),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: enabled
+                ? color.withOpacity(0.5)
+                : Colors.white.withOpacity(0.1),
+          ),
+          boxShadow: enabled
+              ? [
+                  BoxShadow(
+                      color: color.withOpacity(0.35),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4))
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: enabled
+                ? Colors.white
+                : Colors.white.withOpacity(0.3),
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PARTE 2+4: _WorkoutCreateSheet — Glass unificato
+// ─────────────────────────────────────────────────────────────
+
+class _WorkoutCreateSheet extends StatefulWidget {
+  final TextEditingController nameController;
+  final VoidCallback onConfirm;
+
+  const _WorkoutCreateSheet({
+    required this.nameController,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_WorkoutCreateSheet> createState() =>
+      _WorkoutCreateSheetState();
+}
+
+class _WorkoutCreateSheetState extends State<_WorkoutCreateSheet> {
+  @override
+  Widget build(BuildContext context) {
+    final hasName = widget.nameController.text.trim().isNotEmpty;
+
+    return _GlassSheetWrapper(
+      title: 'Nuova scheda',
+      accentColor: _teal,
+      leadingIcon: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: _teal.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Icon(Icons.add_rounded, color: _teal, size: 20),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _GlassTextField(
+            controller: widget.nameController,
+            hintText: 'Es. Push Day, Full Body...',
+            labelText: 'Nome scheda',
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 20),
+          _GlassPrimaryButton(
+            label: 'Crea scheda',
+            color: _teal,
+            onTap: hasName ? widget.onConfirm : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PARTE 2+4: _WorkoutRenameSheet — Glass unificato
+// ─────────────────────────────────────────────────────────────
+
+class _WorkoutRenameSheet extends StatefulWidget {
+  final TextEditingController nameController;
+  final VoidCallback onConfirm;
+
+  const _WorkoutRenameSheet({
+    required this.nameController,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_WorkoutRenameSheet> createState() =>
+      _WorkoutRenameSheetState();
+}
+
+class _WorkoutRenameSheetState extends State<_WorkoutRenameSheet> {
+  @override
+  Widget build(BuildContext context) {
+    final hasName = widget.nameController.text.trim().isNotEmpty;
+
+    return _GlassSheetWrapper(
+      title: 'Rinomina scheda',
+      accentColor: _teal,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _GlassTextField(
+            controller: widget.nameController,
+            hintText: 'Nuovo nome...',
+            labelText: 'Nome scheda',
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 20),
+          _GlassPrimaryButton(
+            label: 'Salva',
+            color: _teal,
+            onTap: hasName ? widget.onConfirm : null,
+          ),
+        ],
       ),
     );
   }
@@ -602,69 +973,39 @@ class _WorkoutOptionsSheet extends StatelessWidget {
   final VoidCallback onRename;
   final VoidCallback onChangeIcon;
   final VoidCallback onDelete;
+
   const _WorkoutOptionsSheet({
     required this.workout,
     required this.onRename,
     required this.onChangeIcon,
     required this.onDelete,
   });
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF100B22).withOpacity(0.97),
-        borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(24)),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.12), width: 1),
+    return _GlassSheetWrapper(
+      title: workout.name,
+      subtitle: 'Opzioni scheda',
+      accentColor: _teal,
+      leadingIcon: WorkoutAvatar(
+        iconId: workout.iconId ?? 'dumbbell',
+        iconColorIndex: workout.iconColorIndex ?? 0,
+        customImagePath: workout.customImagePath,
+        size: 36,
+        iconSize: 18,
+        borderRadius: 9,
       ),
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              WorkoutAvatar(
-                iconId: workout.iconId ?? 'dumbbell',
-                iconColorIndex: workout.iconColorIndex ?? 0,
-                customImagePath: workout.customImagePath,
-                size: 36,
-                iconSize: 18,
-                borderRadius: 9,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(workout.name,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
           ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.06),
-                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(
                       color: Colors.white.withOpacity(0.1)),
                 ),
@@ -682,7 +1023,7 @@ class _WorkoutOptionsSheet extends StatelessWidget {
                         indent: 52),
                     _OptionRow(
                       icon: Icons.image_outlined,
-                      label: 'Cambia icona / immagine',
+                      label: 'Cambia icona / colore',
                       onTap: onChangeIcon,
                     ),
                   ],
@@ -692,13 +1033,13 @@ class _WorkoutOptionsSheet extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
                 decoration: BoxDecoration(
-                  color: _red.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(16),
+                  color: _red.withOpacity(0.07),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(
                       color: _red.withOpacity(0.2)),
                 ),
@@ -722,12 +1063,14 @@ class _OptionRow extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final Color? color;
+
   const _OptionRow({
     required this.icon,
     required this.label,
     required this.onTap,
     this.color,
   });
+
   @override
   Widget build(BuildContext context) {
     final c = color ?? Colors.white;
@@ -767,173 +1110,6 @@ class _OptionRow extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutCreateSheet / _WorkoutRenameSheet
-// ─────────────────────────────────────────────────────────────
-
-class _WorkoutCreateSheet extends StatelessWidget {
-  final TextEditingController nameController;
-  final VoidCallback onConfirm;
-  const _WorkoutCreateSheet(
-      {required this.nameController, required this.onConfirm});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF100B22).withOpacity(0.97),
-        borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(24)),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.12), width: 1),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _teal.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.add_rounded,
-                    color: _teal, size: 20),
-              ),
-              const SizedBox(width: 12),
-              const Text('Nuova scheda',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800)),
-            ],
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: nameController,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: 'Nome scheda',
-              hintText: 'Es. Push Day, Full Body...',
-              labelStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.5)),
-              hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.3)),
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: onConfirm,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _teal,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-              ),
-              child: const Text('Crea scheda',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WorkoutRenameSheet extends StatelessWidget {
-  final TextEditingController nameController;
-  final VoidCallback onConfirm;
-  const _WorkoutRenameSheet(
-      {required this.nameController, required this.onConfirm});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF100B22).withOpacity(0.97),
-        borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(24)),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.12), width: 1),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          const Text('Rinomina scheda',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800)),
-          const SizedBox(height: 20),
-          TextField(
-            controller: nameController,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: 'Nuovo nome',
-              labelStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.5)),
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: onConfirm,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _teal,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-              ),
-              child: const Text('Salva',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
 // _WorkoutIconSheet
 // ─────────────────────────────────────────────────────────────
 
@@ -941,11 +1117,13 @@ class _WorkoutIconSheet extends StatefulWidget {
   final String currentIconId;
   final int currentColorIndex;
   final void Function(String iconId, int colorIndex) onSelect;
+
   const _WorkoutIconSheet({
     required this.currentIconId,
     required this.currentColorIndex,
     required this.onSelect,
   });
+
   @override
   State<_WorkoutIconSheet> createState() =>
       _WorkoutIconSheetState();
@@ -976,8 +1154,10 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
     Color(0xFF3B82F6),
     Color(0xFF8B5CF6),
   ];
+
   late String _selectedIcon;
   late int _selectedColor;
+
   @override
   void initState() {
     super.initState();
@@ -985,166 +1165,135 @@ class _WorkoutIconSheetState extends State<_WorkoutIconSheet> {
     _selectedColor =
         widget.currentColorIndex.clamp(0, _colors.length - 1);
   }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF100B22).withOpacity(0.97),
-        borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(24)),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.12), width: 1),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(2),
+    final accent = _colors[_selectedColor];
+
+    return _GlassSheetWrapper(
+      title: 'Icona e colore',
+      accentColor: accent,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Anteprima live
+          Center(
+            child: Column(
+              children: [
+                WorkoutAvatar(
+                  iconId: _selectedIcon,
+                  iconColorIndex: _selectedColor,
+                  size: 72,
+                  iconSize: 36,
+                  borderRadius: 18,
                 ),
-              ),
+                const SizedBox(height: 6),
+                Text('Anteprima',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.35),
+                        fontSize: 11)),
+              ],
             ),
-            const SizedBox(height: 16),
-            Center(
-              child: Column(
-                children: [
-                  WorkoutAvatar(
-                    iconId: _selectedIcon,
-                    iconColorIndex: _selectedColor,
-                    size: 72,
-                    iconSize: 36,
-                    borderRadius: 18,
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Anteprima',
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.4),
-                          fontSize: 11)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text('Icona e colore',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800)),
-            const SizedBox(height: 16),
-            Text('Colore',
-                style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5)),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: _colors.asMap().entries.map((e) {
-                final selected = e.key == _selectedColor;
-                return GestureDetector(
-                  onTap: () =>
-                      setState(() => _selectedColor = e.key),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: e.value,
-                      shape: BoxShape.circle,
-                      border: selected
-                          ? Border.all(
-                              color: Colors.white, width: 2.5)
-                          : Border.all(
-                              color: Colors.transparent),
-                      boxShadow: selected
-                          ? [
-                              BoxShadow(
-                                  color:
-                                      e.value.withOpacity(0.6),
-                                  blurRadius: 10)
-                            ]
-                          : null,
-                    ),
-                    child: selected
-                        ? const Icon(Icons.check_rounded,
-                            color: Colors.white, size: 18)
+          ),
+          const SizedBox(height: 20),
+          Text('Colore',
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.4)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: _colors.asMap().entries.map((e) {
+              final sel = e.key == _selectedColor;
+              return GestureDetector(
+                onTap: () =>
+                    setState(() => _selectedColor = e.key),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(
+                    color: e.value,
+                    shape: BoxShape.circle,
+                    border: sel
+                        ? Border.all(
+                            color: Colors.white, width: 2.5)
+                        : Border.all(
+                            color: Colors.transparent),
+                    boxShadow: sel
+                        ? [
+                            BoxShadow(
+                                color:
+                                    e.value.withOpacity(0.6),
+                                blurRadius: 10)
+                          ]
                         : null,
                   ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 18),
-            Text('Icona',
-                style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5)),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: _icons.map((icon) {
-                final selected = icon.$1 == _selectedIcon;
-                final accentColor = _colors[_selectedColor];
-                return GestureDetector(
-                  onTap: () =>
-                      setState(() => _selectedIcon = icon.$1),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? accentColor.withOpacity(0.2)
-                          : Colors.white.withOpacity(0.06),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: selected
-                            ? accentColor.withOpacity(0.6)
-                            : Colors.white.withOpacity(0.1),
-                        width: selected ? 1.5 : 1,
-                      ),
-                    ),
-                    child: Icon(icon.$2,
-                        color: selected
-                            ? accentColor
-                            : Colors.white.withOpacity(0.5),
-                        size: 24),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => widget.onSelect(
-                    _selectedIcon, _selectedColor),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _colors[_selectedColor],
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                  child: sel
+                      ? const Icon(Icons.check_rounded,
+                          color: Colors.white, size: 18)
+                      : null,
                 ),
-                child: const Text('Applica',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15)),
-              ),
-            ),
-          ],
-        ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 18),
+          Text('Icona',
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.4)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: _icons.map((icon) {
+              final sel = icon.$1 == _selectedIcon;
+              return GestureDetector(
+                onTap: () =>
+                    setState(() => _selectedIcon = icon.$1),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 50, height: 50,
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? accent.withOpacity(0.2)
+                        : Colors.white.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: sel
+                          ? accent.withOpacity(0.6)
+                          : Colors.white.withOpacity(0.1),
+                      width: sel ? 1.5 : 1,
+                    ),
+                    boxShadow: sel
+                        ? [
+                            BoxShadow(
+                                color: accent.withOpacity(0.2),
+                                blurRadius: 8)
+                          ]
+                        : null,
+                  ),
+                  child: Icon(icon.$2,
+                      color: sel
+                          ? accent
+                          : Colors.white.withOpacity(0.5),
+                      size: 24),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 24),
+          _GlassPrimaryButton(
+            label: 'Applica',
+            color: accent,
+            onTap: () =>
+                widget.onSelect(_selectedIcon, _selectedColor),
+          ),
+        ],
       ),
     );
   }
