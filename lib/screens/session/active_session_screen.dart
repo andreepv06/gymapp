@@ -1,37 +1,28 @@
+import 'dart:async';
 import 'dart:ui';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
+import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
 import '../../providers/session_provider.dart';
-import '../../providers/exercise_provider.dart';
-import '../../providers/workout_provider.dart';
-import '../../widgets/glass_action_buttons.dart';
-import '../../widgets/glass_bottom_sheet.dart';
-import '../../widgets/workout_icon.dart';
-import '../../db/hive_database.dart';
+import '../../widgets/cosmic_background.dart';
+import '../../widgets/shared_sheets.dart';
 
-enum _SessionItemType { exercise, circuit }
+const _cyan   = Color(0xFF00E5FF);
+const _teal   = Color(0xFF00D4AA);
+const _indigo = Color(0xFF6366F1);
+const _orange = Color(0xFFFF8C00);
+const _red    = Color(0xFFFF1744);
+const _green  = Color(0xFF22C55E);
 
-class _SessionItem {
-  final _SessionItemType type;
-  final dynamic data;
-
-  _SessionItem({required this.type, required this.data});
-
-  String get stableId {
-    if (type == _SessionItemType.exercise) {
-      final ex = data as SessionExercise;
-      return 'ex_${ex.exerciseKey}';
-    } else {
-      return 'circuit_${data as String}';
-    }
-  }
-}
+// ─────────────────────────────────────────────────────────────
+// ActiveSessionScreen
+// ─────────────────────────────────────────────────────────────
 
 class ActiveSessionScreen extends StatefulWidget {
   final HiveWorkout workout;
-
   const ActiveSessionScreen({super.key, required this.workout});
 
   @override
@@ -41,1060 +32,574 @@ class ActiveSessionScreen extends StatefulWidget {
 
 class _ActiveSessionScreenState
     extends State<ActiveSessionScreen> {
-  bool _started = false;
-  List<_SessionItem> _items = [];
-  List<String> _lastItemIds = [];
-
-  final Map<String, bool> _expanded = {};
-
-  bool _isExpanded(String id) => _expanded[id] ?? false;
-
-  void _toggleExpanded(String id) =>
-      setState(() => _expanded[id] = !(_expanded[id] ?? false));
-
-  String _freeExerciseId(dynamic exerciseKey) =>
-      'ex_$exerciseKey';
-
-  String _circuitExerciseId(
-          String circuitId, dynamic exerciseKey) =>
-      'circ_${circuitId}_$exerciseKey';
+  Timer? _uiTimer;
 
   @override
   void initState() {
     super.initState();
-    _startSession();
+    _uiTimer = Timer.periodic(
+        const Duration(seconds: 1), (_) { if (mounted) setState(() {}); });
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _initSession());
   }
 
-  Future<void> _startSession() async {
+  @override
+  void dispose() {
+    _uiTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initSession() async {
+    final sp = context.read<SessionProvider>();
+    if (sp.hasActiveSession &&
+        sp.currentWorkout?.key == widget.workout.key) return;
+    if (sp.hasActiveSession) return;
     final exercises =
-        context.read<WorkoutProvider>().currentExercises;
+        HiveDatabase.instance.getWorkoutExercises(widget.workout.key);
     final circuits =
         HiveDatabase.instance.getCircuits(widget.workout.key);
-    await context.read<SessionProvider>().startSession(
-          exercises,
-          widget.workout.key,
-          widget.workout.name,
-          widget.workout,
-          circuits: circuits,
-        );
-    if (mounted) {
-      setState(() {
-        _rebuildItemsFromProvider();
-        _started = true;
-      });
-    }
+    await sp.startSession(
+      exercises,
+      widget.workout.key,
+      widget.workout.name,
+      widget.workout,
+      circuits: circuits,
+    );
   }
 
-  void _rebuildItemsFromProvider() {
-    final session = context.read<SessionProvider>();
-    final exercises = session.sessionExercises;
-    final seenCircuits = <String>{};
-    final items = <_SessionItem>[];
-    for (final ex in exercises) {
-      if (ex.circuitId != null) {
-        final cid = ex.circuitId!;
-        if (!seenCircuits.contains(cid)) {
-          seenCircuits.add(cid);
-          items.add(_SessionItem(
-              type: _SessionItemType.circuit, data: cid));
-        }
-      } else {
-        items.add(_SessionItem(
-            type: _SessionItemType.exercise, data: ex));
-      }
-    }
-    _items = items;
-    _lastItemIds = _items.map((i) => i.stableId).toList();
+  String _fmt(int s) {
+    final h   = s ~/ 3600;
+    final m   = (s % 3600) ~/ 60;
+    final sec = s % 60;
+    final mm  = m.toString().padLeft(2, '0');
+    final ss  = sec.toString().padLeft(2, '0');
+    return h > 0 ? '${h.toString().padLeft(2, '0')}:$mm:$ss' : '$mm:$ss';
   }
 
-  void _syncWithProvider(SessionProvider session) {
-    final exercises = session.sessionExercises;
-    final seenCircuits = <String>{};
-    final validIds = <String>[];
-    for (final ex in exercises) {
-      if (ex.circuitId != null) {
-        final cid = ex.circuitId!;
-        if (!seenCircuits.contains(cid)) {
-          seenCircuits.add(cid);
-          validIds.add('circuit_$cid');
-        }
-      } else {
-        validIds.add('ex_${ex.exerciseKey}');
-      }
-    }
-    final validSet = validIds.toSet();
-    final localIds = _items.map((i) => i.stableId).toSet();
-    if (validSet.length == localIds.length &&
-        validSet.containsAll(localIds)) return;
-    final items = <_SessionItem>[];
-    final seen2 = <String>{};
-    for (final ex in exercises) {
-      if (ex.circuitId != null) {
-        final cid = ex.circuitId!;
-        if (!seen2.contains(cid)) {
-          seen2.add(cid);
-          items.add(_SessionItem(
-              type: _SessionItemType.circuit, data: cid));
-        }
-      } else {
-        items.add(_SessionItem(
-            type: _SessionItemType.exercise, data: ex));
-      }
-    }
-    _items = items;
-    _lastItemIds = _items.map((i) => i.stableId).toList();
+  // Stessa architettura di _openSheet in workout_detail_screen.dart
+  Future<T?> _openSheet<T>(Widget child) {
+    return showModalBottomSheet<T>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => GestureDetector(
+        onTap: () => FocusScope.of(ctx).unfocus(),
+        child: Padding(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
-  void _onReorder(int oldIndex, int newIndex) {
-    if (newIndex > oldIndex) newIndex--;
-    if (oldIndex == newIndex) return;
-    setState(() {
-      final item = _items.removeAt(oldIndex);
-      _items.insert(newIndex, item);
-      _lastItemIds = _items.map((i) => i.stableId).toList();
-    });
-    final session = context.read<SessionProvider>();
-    final exercises = session.sessionExercises;
-    final newOrder = <SessionExercise>[];
-    for (final item in _items) {
-      if (item.type == _SessionItemType.exercise) {
-        newOrder.add(item.data as SessionExercise);
-      } else {
-        final cid = item.data as String;
-        newOrder.addAll(
-            exercises.where((e) => e.circuitId == cid));
+  Future<void> _onBack() async {
+    final sp = context.read<SessionProvider>();
+    if (!sp.hasAnyData) {
+      final ok = await showGlassDialog<bool>(
+        context: context,
+        accentColor: _red,
+        title: 'Abbandonare la sessione?',
+        message: 'Non hai ancora completato nessuna serie. '
+            'La sessione verrà eliminata.',
+        actions: [
+          GlassDialogAction(
+              label: 'Continua',
+              onTap: () => Navigator.pop(context, false)),
+          GlassDialogAction(
+              label: 'Abbandona',
+              isDestructive: true,
+              onTap: () => Navigator.pop(context, true)),
+        ],
+      );
+      if (ok == true && mounted) {
+        await sp.abandonSession();
+        if (mounted) Navigator.of(context).pop();
       }
-    }
-    session.reorderSessionExercisesFlat(newOrder);
-  }
-
-  Future<bool> _onWillPop() async {
-    final session = context.read<SessionProvider>();
-    if (!session.hasAnyData) {
-      await session.abandonSession();
-      return true;
+      return;
     }
     final result = await showGlassDialog<String>(
       context: context,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.pause_circle_outline,
-                    color:
-                        Theme.of(context).colorScheme.primary,
-                    size: 22),
-                const SizedBox(width: 10),
-                Text('Sessione in corso',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(
-                            fontWeight: FontWeight.w700)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text('Cosa vuoi fare con la sessione?'),
-            const SizedBox(height: 24),
-            Column(
-              children: [
-                GlassFilledButton(
-                  onPressed: () =>
-                      Navigator.pop(context, 'pause'),
-                  child: const Text('Metti in pausa'),
-                ),
-                const SizedBox(height: 10),
-                GlassFilledButton(
-                  onPressed: () =>
-                      Navigator.pop(context, 'finish'),
-                  backgroundColor: Colors.green,
-                  child: const Text('Termina e salva'),
-                ),
-                const SizedBox(height: 10),
-                GlassOutlinedButton(
-                  onPressed: () =>
-                      Navigator.pop(context, 'abandon'),
-                  foregroundColor: Colors.red,
-                  child:
-                      const Text('Abbandona senza salvare'),
-                ),
-              ],
-            ),
+      accentColor: _orange,
+      icon: Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          color: _orange.withOpacity(0.12),
+          shape: BoxShape.circle,
+          border: Border.all(color: _orange.withOpacity(0.4)),
+          boxShadow: [
+            BoxShadow(
+                color: _orange.withOpacity(0.2), blurRadius: 12)
           ],
         ),
+        child: const Icon(Icons.pause_circle_outline_rounded,
+            color: _orange, size: 22),
       ),
+      title: 'Sessione in corso',
+      message: 'Vuoi mettere in pausa o abbandonare '
+          'definitivamente la sessione?',
+      actions: [
+        GlassDialogAction(
+            label: 'Annulla',
+            onTap: () => Navigator.pop(context, 'cancel')),
+        GlassDialogAction(
+            label: 'Pausa',
+            color: _orange,
+            onTap: () => Navigator.pop(context, 'pause')),
+        GlassDialogAction(
+            label: 'Abbandona',
+            isDestructive: true,
+            onTap: () => Navigator.pop(context, 'abandon')),
+      ],
     );
-    if (result == null) return false;
+    if (!mounted) return;
     if (result == 'pause') {
-      await session.pauseSession();
-      return true;
-    } else if (result == 'finish') {
-      await session.finishSession();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sessione salvata!')),
-        );
-      }
-      return true;
+      await sp.pauseSession();
+      if (mounted) Navigator.of(context).pop();
     } else if (result == 'abandon') {
-      await session.abandonSession();
-      return true;
+      await sp.abandonSession();
+      if (mounted) Navigator.of(context).pop();
     }
-    return false;
   }
 
   Future<void> _finishSession() async {
-    final confirm = await showGlassDialog<bool>(
+    final sp = context.read<SessionProvider>();
+    final ok = await showGlassDialog<bool>(
       context: context,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.check_circle_outline,
-                    color:
-                        Theme.of(context).colorScheme.primary,
-                    size: 22),
-                const SizedBox(width: 10),
-                Text('Termina sessione',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(
-                            fontWeight: FontWeight.w700)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text('Vuoi salvare e terminare la sessione?',
-                style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: 24),
-            GlassDialogActions(
-              cancelLabel: 'Annulla',
-              confirmLabel: 'Termina',
-              onCancel: () => Navigator.pop(context, false),
-              onConfirm: () => Navigator.pop(context, true),
-            ),
+      accentColor: _teal,
+      icon: Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          color: _teal.withOpacity(0.12),
+          shape: BoxShape.circle,
+          border: Border.all(color: _teal.withOpacity(0.4)),
+          boxShadow: [
+            BoxShadow(color: _teal.withOpacity(0.2), blurRadius: 12)
           ],
         ),
+        child: const Icon(Icons.check_circle_outline_rounded,
+            color: _teal, size: 22),
       ),
+      title: 'Termina sessione',
+      message: 'Tutte le serie completate verranno salvate '
+          'nello storico degli allenamenti.',
+      actions: [
+        GlassDialogAction(
+            label: 'Annulla',
+            onTap: () => Navigator.pop(context, false)),
+        GlassDialogAction(
+            label: 'Termina',
+            isDefault: true,
+            color: _teal,
+            onTap: () => Navigator.pop(context, true)),
+      ],
     );
-    if (confirm != true) return;
-    await context.read<SessionProvider>().finishSession();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sessione salvata!')),
-      );
-      Navigator.pop(context);
+    if (ok == true && mounted) {
+      await sp.finishSession();
+      if (mounted) Navigator.of(context).pop();
     }
   }
 
-  // ── FIX 5: mostra scelta tra esercizio singolo e circuito ──
-
-  void _showAddMenu() {
-    showCupertinoModalPopup<String>(
-      context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: const Text('Aggiungi alla sessione'),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showAddExerciseSheet();
-            },
-            child: const Text('Aggiungi esercizio'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showAddCircuitSheet();
-            },
-            child: const Text('Aggiungi circuito (super-set)'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Annulla'),
-        ),
-      ),
-    );
+  Future<void> _showAddMenu() async {
+    await _openSheet(_AddToSessionSheet(
+      onAddExercise: () {
+        Navigator.pop(context);
+        _showAddExerciseSheet();
+      },
+      onAddCircuit: () {
+        Navigator.pop(context);
+        _showAddCircuitSheet();
+      },
+    ));
   }
 
-  void _showAddExerciseSheet() {
-    final sessionProvider = context.read<SessionProvider>();
-    final exerciseProvider = context.read<ExerciseProvider>();
-    showGlassBottomSheet(
-      context: context,
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider.value(value: exerciseProvider),
-          ChangeNotifierProvider.value(value: sessionProvider),
-        ],
-        child: const _AddMultipleExercisesSheet(),
-      ),
-    ).then((_) {
-      if (mounted) setState(() => _rebuildItemsFromProvider());
-    });
-  }
-
-  // ── FIX 5: aggiunta circuito in sessione ──────────────────
-
-  void _showAddCircuitSheet() {
-    final sessionProvider = context.read<SessionProvider>();
-    final exerciseProvider = context.read<ExerciseProvider>();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => MultiProvider(
-        providers: [
-          ChangeNotifierProvider.value(value: exerciseProvider),
-          ChangeNotifierProvider.value(value: sessionProvider),
-        ],
-        child: _AddCircuitSheet(
-          onConfirm: (exercises, rounds) async {
-            await sessionProvider.addCircuitToSession(
-              exercises: exercises,
-              rounds: rounds,
+  Future<void> _showAddExerciseSheet() async {
+    final sp = context.read<SessionProvider>();
+    final all = HiveDatabase.instance.getExercises();
+    final alreadyIn = sp.sessionExercises
+        .where((e) => e.circuitId == null)
+        .map((e) => e.exerciseKey)
+        .toSet();
+    await _openSheet(_AddExerciseToSessionSheet(
+      allExercises: all,
+      alreadyIn: alreadyIn,
+      onConfirm: (keys) async {
+        for (final k in keys) {
+          try {
+            final ex = all.firstWhere((e) => e.key == k);
+            await sp.addExerciseToSession(
+              exerciseKey: ex.key,
+              exerciseName: ex.name,
+              muscleGroup: ex.muscleGroup,
             );
-            if (mounted) {
-              setState(() => _rebuildItemsFromProvider());
-            }
-          },
-        ),
-      ),
-    );
+          } catch (_) {}
+        }
+        if (mounted) Navigator.pop(context);
+      },
+    ));
+  }
+
+  Future<void> _showAddCircuitSheet() async {
+    final sp = context.read<SessionProvider>();
+    final all = HiveDatabase.instance.getExercises();
+    await _openSheet(_AddCircuitToSessionSheet(
+      allExercises: all,
+      onConfirm: (keys, rounds, name) async {
+        final exList =
+            <({dynamic exerciseKey, String exerciseName, String muscleGroup})>[];
+        for (final k in keys) {
+          try {
+            final ex = all.firstWhere((e) => e.key == k);
+            exList.add((
+              exerciseKey: ex.key,
+              exerciseName: ex.name,
+              muscleGroup: ex.muscleGroup,
+            ));
+          } catch (_) {}
+        }
+        await sp.addCircuitToSession(
+            exercises: exList, rounds: rounds, name: name);
+        if (mounted) Navigator.pop(context);
+      },
+    ));
+  }
+
+  Future<void> _showModifyCircuitSheet(String circuitId) async {
+    final sp = context.read<SessionProvider>();
+    final all = HiveDatabase.instance.getExercises();
+    await _openSheet(_ModifyCircuitInSessionSheet(
+      circuitId: circuitId,
+      circuitName: sp.getCircuitName(circuitId),
+      allExercises: all,
+      currentExercises: sp.sessionExercises
+          .where((e) => e.circuitId == circuitId)
+          .toList(),
+      currentRounds: sp.getTotalRounds(circuitId),
+      onAddExercise: (exKey) {
+        try {
+          final ex = all.firstWhere((e) => e.key == exKey);
+          sp.addExerciseToCircuitInSession(
+            circuitId: circuitId,
+            exerciseKey: ex.key,
+            exerciseName: ex.name,
+            muscleGroup: ex.muscleGroup,
+          );
+        } catch (_) {}
+      },
+      onRemoveExercise: (exKey) => sp.removeExerciseFromCircuitInSession(
+          circuitId: circuitId, exerciseKey: exKey),
+      onChangeRounds: (r) => sp.setCircuitRoundsInSession(circuitId, r),
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_started) {
-      return const Scaffold(
-          body: Center(child: CircularProgressIndicator()));
-    }
-
-    final sessionProvider = context.watch<SessionProvider>();
-    _syncWithProvider(sessionProvider);
-
-    final exercises = sessionProvider.sessionExercises;
-    final exerciseSets = sessionProvider.exerciseSets;
-    final allSets =
-        exerciseSets.values.expand((s) => s).toList();
-    final completedSets =
-        allSets.where((s) => s.completed).length;
-    final totalSets = allSets.length;
-
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        final canPop = await _onWillPop();
-        if (canPop && mounted) Navigator.of(context).pop();
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _onBack();
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              WorkoutAvatar(
-                iconId: widget.workout.iconId ?? 'dumbbell',
-                iconColorIndex:
-                    widget.workout.iconColorIndex ?? 0,
-                customImagePath: widget.workout.customImagePath,
-                size: 28,
-                iconSize: 14,
-                borderRadius: 7,
-              ),
-              const SizedBox(width: 8),
-              Text(widget.workout.name),
-            ],
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios),
-            onPressed: () async {
-              final canPop = await _onWillPop();
-              if (canPop && mounted)
-                Navigator.of(context).pop();
-            },
-          ),
-          actions: [
-            // FIX 5: "Aggiungi" ora mostra menu con esercizio o circuito
-            GlassTextButton(
-              onPressed: _showAddMenu,
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add_rounded, size: 18),
-                  SizedBox(width: 4),
-                  Text('Aggiungi'),
-                ],
-              ),
-            ),
-            GlassTextButton(
-              onPressed: _finishSession,
-              child: const Text('Termina'),
-            ),
-            const SizedBox(width: 4),
-          ],
-        ),
-        body: Column(
-          children: [
-            Padding(
-              padding:
-                  const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: LinearProgressIndicator(
-                      value: totalSets > 0
-                          ? completedSets / totalSets
-                          : 0,
-                      minHeight: 8,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    '$completedSets / $totalSets serie',
-                    style:
-                        Theme.of(context).textTheme.labelMedium,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ReorderableListView(
-                padding: const EdgeInsets.fromLTRB(
-                    16, 0, 16, 24),
-                buildDefaultDragHandles: false,
-                proxyDecorator: (child, index, animation) =>
-                    AnimatedBuilder(
-                  animation: animation,
-                  builder: (_, __) => Material(
-                    elevation: 8,
-                    borderRadius: BorderRadius.circular(16),
-                    shadowColor: Colors.black38,
-                    child: child,
-                  ),
-                ),
-                onReorder: _onReorder,
-                children: _items.asMap().entries.map((e) {
-                  final index = e.key;
-                  final item = e.value;
-                  if (item.type ==
-                      _SessionItemType.exercise) {
-                    final ex =
-                        item.data as SessionExercise;
-                    final sets =
-                        exerciseSets[ex.exerciseKey] ?? [];
-                    final id =
-                        _freeExerciseId(ex.exerciseKey);
-                    return ReorderableDelayedDragStartListener(
-                      key: ValueKey(item.stableId),
-                      index: index,
-                      child: _ExerciseSessionCard(
-                        sessionExercise: ex,
-                        sets: sets,
-                        isExpanded: _isExpanded(id),
-                        onToggleExpand: () =>
-                            _toggleExpanded(id),
-                        onToggle: (i) => sessionProvider
-                            .toggleSet(ex.exerciseKey, i),
-                        onUpdate: (i, w, r) =>
-                            sessionProvider.updateSet(
-                                ex.exerciseKey, i, w, r),
-                        onAddSet: () =>
-                            sessionProvider.addSetToExercise(
-                                ex.exerciseKey),
-                        onRemoveSet: () =>
-                            sessionProvider
-                                .removeSetFromExercise(
-                                    ex.exerciseKey),
-                        onRemoveExercise: () {
-                          sessionProvider
-                              .removeExerciseFromSession(
-                                  ex.exerciseKey);
-                          setState(
-                              () => _rebuildItemsFromProvider());
-                        },
-                        onEditNote: (note) =>
-                            sessionProvider.updateExerciseNote(
-                                ex.exerciseKey, note),
-                      ),
-                    );
-                  } else {
-                    final circuitId =
-                        item.data as String;
-                    final circuitExercises = exercises
-                        .where((ex) =>
-                            ex.circuitId == circuitId)
-                        .toList();
-                    return ReorderableDelayedDragStartListener(
-                      key: ValueKey(item.stableId),
-                      index: index,
-                      child: _CircuitSessionBlock(
-                        circuitId: circuitId,
-                        exercises: circuitExercises,
-                        isExpanded: (exKey) =>
-                            _isExpanded(_circuitExerciseId(
-                                circuitId, exKey)),
-                        onToggleExpand: (exKey) =>
-                            _toggleExpanded(
-                                _circuitExerciseId(
-                                    circuitId, exKey)),
-                        onReorderExercises: (reordered) {
-                          sessionProvider
-                              .reorderCircuitExercises(
-                                  circuitId, reordered);
-                        },
-                      ),
-                    );
-                  }
-                }).toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// _CircuitSessionBlock
-// ─────────────────────────────────────────────────────────────
-
-class _CircuitSessionBlock extends StatelessWidget {
-  final String circuitId;
-  final List<SessionExercise> exercises;
-  final bool Function(dynamic exerciseKey) isExpanded;
-  final void Function(dynamic exerciseKey) onToggleExpand;
-  final void Function(List<SessionExercise>)
-      onReorderExercises;
-
-  const _CircuitSessionBlock({
-    super.key,
-    required this.circuitId,
-    required this.exercises,
-    required this.isExpanded,
-    required this.onToggleExpand,
-    required this.onReorderExercises,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final session = context.watch<SessionProvider>();
-    final cs = Theme.of(context).colorScheme;
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
-    final currentRound = session.getCurrentRound(circuitId);
-    final totalRounds = session.getTotalRounds(circuitId);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isDark
-            ? cs.tertiaryContainer.withOpacity(0.12)
-            : cs.tertiaryContainer.withOpacity(0.25),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: cs.tertiary.withOpacity(0.35),
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: cs.tertiary.withOpacity(0.15),
-              borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(18)),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.loop_rounded,
-                    color: cs.tertiary, size: 18),
-                const SizedBox(width: 8),
-                Text('Circuito',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: cs.tertiary,
-                        fontSize: 14)),
-                const Spacer(),
-                _RoundNavBtn(
-                  icon: Icons.chevron_left,
-                  enabled: currentRound > 0,
-                  color: cs.tertiary,
-                  onTap: () => session.prevRound(circuitId),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: cs.tertiary,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Ciclo ${currentRound + 1} di $totalRounds',
-                    style: TextStyle(
-                        color: cs.onTertiary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _RoundNavBtn(
-                  icon: Icons.chevron_right,
-                  enabled: currentRound < totalRounds - 1,
-                  color: cs.tertiary,
-                  onTap: () => session.nextRound(circuitId),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: exercises.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text('Nessun esercizio',
-                        style: TextStyle(
-                            color: cs.outline,
-                            fontStyle: FontStyle.italic)),
-                  )
-                : ReorderableListView(
-                    shrinkWrap: true,
-                    physics:
-                        const NeverScrollableScrollPhysics(),
-                    buildDefaultDragHandles: false,
-                    proxyDecorator:
-                        (child, index, animation) =>
-                            AnimatedBuilder(
-                      animation: animation,
-                      builder: (_, __) => Material(
-                        elevation: 6,
-                        borderRadius:
-                            BorderRadius.circular(14),
-                        child: child,
-                      ),
-                    ),
-                    onReorder: (oldIndex, newIndex) {
-                      if (newIndex > oldIndex) newIndex--;
-                      final reordered =
-                          List<SessionExercise>.from(
-                              exercises);
-                      final item =
-                          reordered.removeAt(oldIndex);
-                      reordered.insert(newIndex, item);
-                      onReorderExercises(reordered);
-                    },
-                    children: exercises.asMap().entries.map(
-                      (e) {
-                        final ex = e.value;
-                        final sets = session.getCircuitSets(
-                            circuitId, ex.exerciseKey);
-                        return ReorderableDelayedDragStartListener(
-                          key: ValueKey(
-                              '${ex.exerciseKey}_$circuitId'),
-                          index: e.key,
-                          child: _ExerciseSessionCard(
-                            key: ValueKey(
-                                '${ex.exerciseKey}_${circuitId}_$currentRound'),
-                            sessionExercise: ex,
-                            sets: sets,
-                            isInCircuit: true,
-                            isExpanded:
-                                isExpanded(ex.exerciseKey),
-                            onToggleExpand: () =>
-                                onToggleExpand(ex.exerciseKey),
-                            onToggle: (i) => session.toggleSet(
-                                ex.exerciseKey, i,
-                                circuitId: circuitId),
-                            onUpdate: (i, w, r) =>
-                                session.updateSet(
-                                    ex.exerciseKey, i, w, r,
-                                    circuitId: circuitId),
-                            onAddSet: () =>
-                                session.addSetToExercise(
-                                    ex.exerciseKey,
-                                    circuitId: circuitId),
-                            onRemoveSet: () =>
-                                session.removeSetFromExercise(
-                                    ex.exerciseKey,
-                                    circuitId: circuitId),
-                            onRemoveExercise: () =>
-                                session
-                                    .removeExerciseFromSession(
-                                        ex.exerciseKey),
-                            onEditNote: (note) =>
-                                session.updateExerciseNote(
-                                    ex.exerciseKey, note),
-                          ),
-                        );
-                      },
-                    ).toList(),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RoundNavBtn extends StatelessWidget {
-  final IconData icon;
-  final bool enabled;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _RoundNavBtn({
-    required this.icon,
-    required this.enabled,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: enabled
-              ? color.withOpacity(0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-              color: enabled
-                  ? color.withOpacity(0.4)
-                  : color.withOpacity(0.15)),
-        ),
-        child: Icon(icon,
-            color:
-                enabled ? color : color.withOpacity(0.3),
-            size: 20),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// FIX 5: _AddCircuitSheet — aggiunge circuito temporaneo
-// ─────────────────────────────────────────────────────────────
-
-class _AddCircuitSheet extends StatefulWidget {
-  final Future<void> Function(
-    List<({
-      dynamic exerciseKey,
-      String exerciseName,
-      String muscleGroup,
-    })> exercises,
-    int rounds,
-  ) onConfirm;
-
-  const _AddCircuitSheet({required this.onConfirm});
-
-  @override
-  State<_AddCircuitSheet> createState() =>
-      _AddCircuitSheetState();
-}
-
-class _AddCircuitSheetState extends State<_AddCircuitSheet> {
-  final Set<dynamic> _selected = {};
-  int _rounds = 3;
-  String _search = '';
-  bool _loading = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final allExercises =
-        context.watch<ExerciseProvider>().exercises;
-    final sessionProvider = context.read<SessionProvider>();
-    final alreadyFree = sessionProvider.sessionExercises
-        .where((e) => !e.isInCircuit)
-        .map((e) => e.exerciseKey)
-        .toSet();
-
-    final filtered = allExercises.where((e) {
-      return _search.isEmpty ||
-          e.name
-              .toLowerCase()
-              .contains(_search.toLowerCase()) ||
-          e.muscleGroup
-              .toLowerCase()
-              .contains(_search.toLowerCase());
-    }).toList();
-
-    final cs = Theme.of(context).colorScheme;
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
-
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Container(
-        height: MediaQuery.of(context).size.height * 0.85,
-        decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF100B22).withOpacity(0.97)
-              : cs.surface,
-          borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(24)),
-          border: Border.all(
-              color: Colors.white.withOpacity(0.12), width: 1),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: cs.tertiary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.loop_rounded,
-                        color: cs.tertiary, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text('Nuovo circuito',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800)),
-                  ),
-                  Text(
-                    '${_selected.length} selezionati',
-                    style: TextStyle(
-                        color: cs.outline, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Selettore rounds
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Text('Cicli:',
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(width: 12),
-                  ...List.generate(5, (i) {
-                    final rounds = i + 1;
-                    final selected = _rounds == rounds;
-                    return GestureDetector(
-                      onTap: () =>
-                          setState(() => _rounds = rounds),
-                      child: AnimatedContainer(
-                        duration:
-                            const Duration(milliseconds: 150),
-                        margin: const EdgeInsets.only(right: 8),
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? cs.tertiary
-                              : cs.tertiary.withOpacity(0.1),
-                          borderRadius:
-                              BorderRadius.circular(10),
-                          border: Border.all(
-                            color: selected
-                                ? cs.tertiary
-                                : cs.tertiary.withOpacity(0.3),
-                          ),
+        backgroundColor: const Color(0xFF03040A),
+        body: CosmicBackground(
+          subtle: true,
+          child: SafeArea(
+            child: Consumer<SessionProvider>(
+              builder: (context, sp, _) {
+                if (!sp.hasActiveSession) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 32, height: 32,
+                          child: CircularProgressIndicator(
+                              color: _teal, strokeWidth: 2),
                         ),
-                        child: Center(
-                          child: Text(
-                            '$rounds',
+                        const SizedBox(height: 16),
+                        Text('Avvio sessione...',
                             style: TextStyle(
-                              color: selected
-                                  ? cs.onTertiary
-                                  : cs.tertiary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
+                                color: Colors.white.withOpacity(0.45),
+                                fontSize: 14)),
+                      ],
+                    ),
+                  );
+                }
+
+                final freeExs = sp.sessionExercises
+                    .where((e) => e.circuitId == null)
+                    .toList();
+                final circuitIds = <String>[];
+                final seen = <String>{};
+                for (final ex in sp.sessionExercises) {
+                  if (ex.circuitId != null &&
+                      seen.add(ex.circuitId!)) {
+                    circuitIds.add(ex.circuitId!);
+                  }
+                }
+
+                return Column(
+                  children: [
+                    _SessionHeader(
+                      workoutName: widget.workout.name,
+                      elapsed: sp.elapsedSeconds,
+                      completed: sp.completedSetsCount,
+                      total: sp.totalSetsCount,
+                      formatTime: _fmt,
+                      onBack: _onBack,
+                    ),
+                    if (sp.isResting)
+                      _RestTimerBanner(
+                        elapsed: sp.restElapsed,
+                        onStop: sp.stopRestTimer,
                       ),
-                    );
-                  }),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(
+                            16, 8, 16, 20),
+                        physics: const BouncingScrollPhysics(),
+                        children: [
+                          ...freeExs.map((ex) => Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: 12),
+                            child: _SessionExerciseCard(
+                              key: ValueKey('ex_${ex.exerciseKey}'),
+                              exercise: ex,
+                              sets: sp.exerciseSets[ex.exerciseKey] ??
+                                  [],
+                              isRestingHere: sp.isResting &&
+                                  sp.restingExerciseId ==
+                                      ex.exerciseKey,
+                              onToggle: (i) =>
+                                  sp.toggleSet(ex.exerciseKey, i),
+                              onUpdate: (i, w, r) => sp.updateSet(
+                                  ex.exerciseKey, i, w, r),
+                              onAddSet: () =>
+                                  sp.addSetToExercise(ex.exerciseKey),
+                              onRemoveSet: () => sp
+                                  .removeSetFromExercise(ex.exerciseKey),
+                              onRemove: () => sp
+                                  .removeExerciseFromSession(
+                                      ex.exerciseKey),
+                              onUpdateNote: (note) => sp
+                                  .updateExerciseNote(
+                                      ex.exerciseKey, note),
+                              currentNote: ex.sessionNote ?? '',
+                            ),
+                          )),
+                          ...circuitIds.map((cid) {
+                            final circExs = sp.sessionExercises
+                                .where((e) => e.circuitId == cid)
+                                .toList();
+                            return Padding(
+                              padding:
+                                  const EdgeInsets.only(bottom: 12),
+                              child: _SessionCircuitCard(
+                                key: ValueKey('circ_$cid'),
+                                circuitId: cid,
+                                circuitName:
+                                    sp.getCircuitName(cid),
+                                exercises: circExs,
+                                currentRound:
+                                    sp.getCurrentRound(cid),
+                                totalRounds:
+                                    sp.getTotalRounds(cid),
+                                getSets: (exKey) =>
+                                    sp.getCircuitSets(cid, exKey),
+                                onNextRound: () =>
+                                    sp.nextRound(cid),
+                                onPrevRound: () =>
+                                    sp.prevRound(cid),
+                                onToggle: (exKey, i) => sp.toggleSet(
+                                    exKey, i,
+                                    circuitId: cid),
+                                onUpdate: (exKey, i, w, r) =>
+                                    sp.updateSet(exKey, i, w, r,
+                                        circuitId: cid),
+                                onAddSet: (exKey) =>
+                                    sp.addSetToExercise(exKey,
+                                        circuitId: cid),
+                                onRemoveSet: (exKey) =>
+                                    sp.removeSetFromExercise(exKey,
+                                        circuitId: cid),
+                                onModify: () =>
+                                    _showModifyCircuitSheet(cid),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                    _SessionActionsBar(
+                      onAdd: _showAddMenu,
+                      onFinish: _finishSession,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _SessionHeader
+// ─────────────────────────────────────────────────────────────
+
+class _SessionHeader extends StatelessWidget {
+  final String workoutName;
+  final int elapsed;
+  final int completed;
+  final int total;
+  final String Function(int) formatTime;
+  final VoidCallback onBack;
+
+  const _SessionHeader({
+    required this.workoutName,
+    required this.elapsed,
+    required this.completed,
+    required this.total,
+    required this.formatTime,
+    required this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = total > 0 ? completed / total : 0.0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withOpacity(0.08),
+                  Colors.white.withOpacity(0.03),
                 ],
               ),
+              borderRadius: BorderRadius.circular(20),
+              border:
+                  Border.all(color: _cyan.withOpacity(0.2), width: 0.8),
             ),
-            const SizedBox(height: 12),
-
-            // Ricerca
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20),
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: 'Cerca esercizio...',
-                  prefixIcon: const Icon(Icons.search),
-                  isDense: true,
-                  hintStyle: TextStyle(
-                      color: Colors.white.withOpacity(0.35)),
-                ),
-                style: const TextStyle(color: Colors.white),
-                onChanged: (v) => setState(() => _search = v),
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Lista esercizi
-            Expanded(
-              child: ListView.builder(
-                physics: const BouncingScrollPhysics(),
-                itemCount: filtered.length,
-                itemBuilder: (_, i) {
-                  final ex = filtered[i];
-                  final isSelected =
-                      _selected.contains(ex.key);
-                  final isFree = alreadyFree.contains(ex.key);
-
-                  return ListTile(
-                    leading: isFree
-                        ? Icon(Icons.check,
-                            color: cs.outline, size: 20)
-                        : Checkbox(
-                            value: isSelected,
-                            onChanged: (_) {
-                              setState(() {
-                                if (isSelected) {
-                                  _selected.remove(ex.key);
-                                } else {
-                                  _selected.add(ex.key);
-                                }
-                              });
-                            },
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: onBack,
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: Colors.white.withOpacity(0.12)),
+                        ),
+                        child: const Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            color: Colors.white, size: 15),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(workoutName,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          Row(
+                            children: [
+                              Container(
+                                width: 6, height: 6,
+                                decoration: const BoxDecoration(
+                                    color: _green,
+                                    shape: BoxShape.circle),
+                              ),
+                              const SizedBox(width: 5),
+                              Text('Sessione in corso',
+                                  style: TextStyle(
+                                      color: _green.withOpacity(0.8),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600)),
+                            ],
                           ),
-                    title: Text(ex.name,
-                        style: TextStyle(
-                            color: isFree
-                                ? cs.outline
-                                : Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600)),
-                    subtitle: Text(ex.muscleGroup,
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: _teal.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: _teal.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.timer_rounded,
+                              color: _teal, size: 13),
+                          const SizedBox(width: 5),
+                          Text(formatTime(elapsed),
+                              style: const TextStyle(
+                                  color: _teal,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text('$completed/$total serie',
                         style: TextStyle(
                             color: Colors.white.withOpacity(0.45),
-                            fontSize: 12)),
-                    enabled: !isFree,
-                    onTap: isFree
-                        ? null
-                        : () {
-                            setState(() {
-                              if (isSelected) {
-                                _selected.remove(ex.key);
-                              } else {
-                                _selected.add(ex.key);
-                              }
-                            });
-                          },
-                  );
-                },
-              ),
-            ),
-
-            // Conferma
-            if (_selected.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                    20,
-                    8,
-                    20,
-                    MediaQuery.of(context).padding.bottom +
-                        16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _loading
-                        ? null
-                        : () async {
-                            setState(() => _loading = true);
-                            final allEx = context
-                                .read<ExerciseProvider>()
-                                .exercises;
-                            final exercisesList =
-                                <({
-                              dynamic exerciseKey,
-                              String exerciseName,
-                              String muscleGroup,
-                            })>[];
-                            for (final key in _selected) {
-                              try {
-                                final ex = allEx.firstWhere(
-                                    (e) => e.key == key);
-                                exercisesList.add((
-                                  exerciseKey: ex.key,
-                                  exerciseName: ex.name,
-                                  muscleGroup: ex.muscleGroup,
-                                ));
-                              } catch (_) {}
-                            }
-                            await widget.onConfirm(
-                                exercisesList, _rounds);
-                            if (mounted)
-                              Navigator.pop(context);
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: cs.tertiary,
-                      foregroundColor: cs.onTertiary,
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(14)),
-                    ),
-                    child: _loading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white))
-                        : Text(
-                            'Crea circuito con ${_selected.length} esercizi · $_rounds cicli',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14)),
+                            fontSize: 11)),
+                    const Spacer(),
+                    Text(
+                        '${total > 0 ? (progress * 100).round() : 0}%',
+                        style: TextStyle(
+                            color: _teal.withOpacity(0.8),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.white.withOpacity(0.08),
+                    valueColor:const AlwaysStoppedAnimation<Color>(_teal),
+                    minHeight: 4,
                   ),
                 ),
-              ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1102,206 +607,196 @@ class _AddCircuitSheetState extends State<_AddCircuitSheet> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _AddMultipleExercisesSheet
+// _RestTimerBanner
 // ─────────────────────────────────────────────────────────────
 
-class _AddMultipleExercisesSheet extends StatefulWidget {
-  const _AddMultipleExercisesSheet();
+class _RestTimerBanner extends StatelessWidget {
+  final int elapsed;
+  final VoidCallback onStop;
 
-  @override
-  State<_AddMultipleExercisesSheet> createState() =>
-      _AddMultipleExercisesSheetState();
-}
-
-class _AddMultipleExercisesSheetState
-    extends State<_AddMultipleExercisesSheet> {
-  String _search = '';
-  String _muscleFilter = 'Tutti';
-  final Set<dynamic> _selected = {};
-  bool _loading = false;
+  const _RestTimerBanner(
+      {required this.elapsed, required this.onStop});
 
   @override
   Widget build(BuildContext context) {
-    final allExercises =
-        context.watch<ExerciseProvider>().exercises;
-    final sessionProvider = context.read<SessionProvider>();
-    final alreadyIn = sessionProvider.sessionExercises
-        .map((e) => e.exerciseKey)
-        .toSet();
-    final muscleGroups =
-        ({...allExercises.map((e) => e.muscleGroup)}.toList()
-          ..sort());
-    final groups = ['Tutti', ...muscleGroups];
-    final filtered = allExercises.where((e) {
-      final matchMuscle = _muscleFilter == 'Tutti' ||
-          e.muscleGroup == _muscleFilter;
-      final matchSearch = _search.isEmpty ||
-          e.name
-              .toLowerCase()
-              .contains(_search.toLowerCase());
-      return matchMuscle && matchSearch;
-    }).toList();
-
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.85,
-      child: Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: GlassSheetHandle(),
-          ),
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  _indigo.withOpacity(0.2),
+                  _indigo.withOpacity(0.08),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: _indigo.withOpacity(0.4), width: 1),
+              boxShadow: [
+                BoxShadow(
+                    color: _indigo.withOpacity(0.15),
+                    blurRadius: 12)
+              ],
+            ),
             child: Row(
               children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: _indigo.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.timer_rounded,
+                      color: _indigo, size: 16),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    _selected.isEmpty
-                        ? 'Aggiungi esercizi'
-                        : '${_selected.length} selezionati',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Recupero in corso',
+                          style: TextStyle(
+                              color: _indigo.withOpacity(0.8),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3)),
+                      Text(
+                        '${elapsed}s',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800),
+                      ),
+                    ],
                   ),
                 ),
-                if (_selected.isNotEmpty)
-                  GlassTextButton(
-                    onPressed: () =>
-                        setState(() => _selected.clear()),
-                    child: const Text('Deseleziona tutto'),
+                GestureDetector(
+                  onTap: onStop,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: _indigo.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                          color: _indigo.withOpacity(0.4)),
+                    ),
+                    child: const Text('Stop',
+                        style: TextStyle(
+                            color: _indigo,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700)),
                   ),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              decoration: const InputDecoration(
-                hintText: 'Cerca esercizio...',
-                prefixIcon: Icon(Icons.search),
-                isDense: true,
-              ),
-              onChanged: (v) => setState(() => _search = v),
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16),
-              itemCount: groups.length,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(width: 8),
-              itemBuilder: (_, i) {
-                final g = groups[i];
-                return ChoiceChip(
-                  label: Text(g),
-                  selected: _muscleFilter == g,
-                  onSelected: (_) =>
-                      setState(() => _muscleFilter = g),
-                  visualDensity: VisualDensity.compact,
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _SessionActionsBar
+// ─────────────────────────────────────────────────────────────
+
+class _SessionActionsBar extends StatelessWidget {
+  final VoidCallback onAdd;
+  final VoidCallback onFinish;
+
+  const _SessionActionsBar(
+      {required this.onAdd, required this.onFinish});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Row(
+        children: [
+          // Aggiungi
           Expanded(
-            child: ListView.builder(
-              itemCount: filtered.length,
-              itemBuilder: (_, i) {
-                final ex = filtered[i];
-                final isAlreadyIn =
-                    alreadyIn.contains(ex.key);
-                final isSelected = _selected.contains(ex.key);
-                return ListTile(
-                  leading: isAlreadyIn
-                      ? Icon(Icons.check_circle,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primary)
-                      : Checkbox(
-                          value: isSelected,
-                          onChanged: (_) {
-                            setState(() {
-                              if (isSelected) {
-                                _selected.remove(ex.key);
-                              } else {
-                                _selected.add(ex.key);
-                              }
-                            });
-                          },
-                        ),
-                  title: Text(ex.name,
-                      style: TextStyle(
-                          color: isAlreadyIn
-                              ? Theme.of(context)
-                                  .colorScheme
-                                  .outline
-                              : null)),
-                  subtitle: Text(ex.muscleGroup),
-                  enabled: !isAlreadyIn,
-                  onTap: isAlreadyIn
-                      ? null
-                      : () {
-                          setState(() {
-                            if (isSelected) {
-                              _selected.remove(ex.key);
-                            } else {
-                              _selected.add(ex.key);
-                            }
-                          });
-                        },
-                );
-              },
-            ),
-          ),
-          if (_selected.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                  16,
-                  8,
-                  16,
-                  MediaQuery.of(context).padding.bottom + 16),
-              child: GlassFilledButton(
-                onPressed: _loading
-                    ? null
-                    : () async {
-                        setState(() => _loading = true);
-                        final allEx = context
-                            .read<ExerciseProvider>()
-                            .exercises;
-                        for (final key in _selected) {
-                          try {
-                            final ex = allEx.firstWhere(
-                                (e) => e.key == key);
-                            await context
-                                .read<SessionProvider>()
-                                .addExerciseToSession(
-                                  exerciseKey: ex.key,
-                                  exerciseName: ex.name,
-                                  muscleGroup: ex.muscleGroup,
-                                  notes: ex.notes,
-                                );
-                          } catch (_) {}
-                        }
-                        if (mounted) Navigator.pop(context);
-                      },
-                child: _loading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white))
-                    : Text(
-                        'Aggiungi ${_selected.length} esercizi'),
+            child: GestureDetector(
+              onTap: onAdd,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: BackdropFilter(
+                  filter:
+                      ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.15),
+                          width: 1),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_rounded,
+                            color:
+                                Colors.white.withOpacity(0.7),
+                            size: 18),
+                        const SizedBox(width: 6),
+                        Text('Aggiungi',
+                            style: TextStyle(
+                                color:
+                                    Colors.white.withOpacity(0.7),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
+          ),
+          const SizedBox(width: 10),
+          // Termina
+          Expanded(
+            child: GestureDetector(
+              onTap: onFinish,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [
+                    _teal,
+                    Color.lerp(_teal, Colors.black, 0.2) ?? _teal,
+                  ]),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                        color: _teal.withOpacity(0.4),
+                        blurRadius: 14,
+                        offset: const Offset(0, 3))
+                  ],
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_rounded,
+                        color: Colors.white, size: 18),
+                    SizedBox(width: 6),
+                    Text('Termina',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1309,390 +804,214 @@ class _AddMultipleExercisesSheetState
 }
 
 // ─────────────────────────────────────────────────────────────
-// _ExerciseSessionCard
+// _SessionExerciseCard
 // ─────────────────────────────────────────────────────────────
 
-class _ExerciseSessionCard extends StatelessWidget {
-  final SessionExercise sessionExercise;
+class _SessionExerciseCard extends StatefulWidget {
+  final SessionExercise exercise;
   final List<ActiveSet> sets;
-  final bool isExpanded;
-  final VoidCallback onToggleExpand;
-  final void Function(int) onToggle;
-  final void Function(int, double, int) onUpdate;
+  final bool isRestingHere;
+  final void Function(int index) onToggle;
+  final void Function(int index, double weight, int reps) onUpdate;
   final VoidCallback onAddSet;
   final VoidCallback onRemoveSet;
-  final VoidCallback onRemoveExercise;
-  final void Function(String) onEditNote;
-  final bool isInCircuit;
+  final VoidCallback onRemove;
+  final Future<void> Function(String) onUpdateNote;
+  final String currentNote;
 
-  const _ExerciseSessionCard({
+  const _SessionExerciseCard({
     super.key,
-    required this.sessionExercise,
+    required this.exercise,
     required this.sets,
-    required this.isExpanded,
-    required this.onToggleExpand,
+    required this.isRestingHere,
     required this.onToggle,
     required this.onUpdate,
     required this.onAddSet,
     required this.onRemoveSet,
-    required this.onRemoveExercise,
-    required this.onEditNote,
-    this.isInCircuit = false,
+    required this.onRemove,
+    required this.onUpdateNote,
+    required this.currentNote,
   });
 
-  void _showNoteDialog(BuildContext context) {
-    final ctrl = TextEditingController(
-        text: sessionExercise.sessionNote ?? '');
-    showGlassDialog(
-      context: context,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.sticky_note_2_outlined,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .tertiary,
-                    size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Nota — ${sessionExercise.exerciseName}',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall
-                        ?.copyWith(
-                            fontWeight: FontWeight.w700),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: ctrl,
-              maxLines: 3,
-              autofocus: true,
-              decoration: const InputDecoration(
-                hintText:
-                    'Es. grip più stretto, ROM completo...',
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (sessionExercise.sessionNote != null &&
-                sessionExercise.sessionNote!.isNotEmpty)
-              GlassTextButton(
-                onPressed: () {
-                  onEditNote('');
-                  Navigator.pop(context);
-                },
-                foregroundColor: Colors.red,
-                child: const Text('Elimina nota'),
-              ),
-            const SizedBox(height: 8),
-            GlassDialogActions(
-              cancelLabel: 'Annulla',
-              confirmLabel: 'Salva',
-              onCancel: () => Navigator.pop(context),
-              onConfirm: () {
-                onEditNote(ctrl.text.trim());
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  @override
+  State<_SessionExerciseCard> createState() =>
+      _SessionExerciseCardState();
+}
+
+class _SessionExerciseCardState
+    extends State<_SessionExerciseCard> {
+  bool _expanded = true;
 
   @override
   Widget build(BuildContext context) {
-    final ex = sessionExercise;
-    final cs = Theme.of(context).colorScheme;
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
     final completedCount =
-        sets.where((s) => s.completed).length;
-    final allDone =
-        completedCount == sets.length && sets.isNotEmpty;
-    final hasNote =
-        ex.sessionNote != null && ex.sessionNote!.isNotEmpty;
-    final hasExerciseNote =
-        ex.notes != null && ex.notes!.isNotEmpty;
+        widget.sets.where((s) => s.completed).length;
+    final totalCount = widget.sets.length;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
-          margin: EdgeInsets.only(
-              bottom: isInCircuit ? 8 : 12),
           decoration: BoxDecoration(
-            color: isDark
-                ? cs.surface.withOpacity(0.7)
-                : cs.surface.withOpacity(0.9),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withOpacity(0.08)
-                  : cs.outlineVariant.withOpacity(0.8),
-              width: 1,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.08),
+                Colors.white.withOpacity(0.03),
+              ],
             ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: widget.isRestingHere
+                  ? _indigo.withOpacity(0.5)
+                  : _cyan.withOpacity(0.15),
+              width: widget.isRestingHere ? 1.2 : 0.8,
+            ),
+            boxShadow: widget.isRestingHere
+                ? [
+                    BoxShadow(
+                        color: _indigo.withOpacity(0.12),
+                        blurRadius: 16)
+                  ]
+                : null,
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  onTap: onToggleExpand,
+          child: Column(
+            children: [
+              // Header
+              GestureDetector(
+                onTap: () =>
+                    setState(() => _expanded = !_expanded),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      14, 12, 14, 12),
                   child: Row(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.drag_handle_rounded,
-                          color: cs.outline.withOpacity(0.4),
-                          size: 18),
-                      const SizedBox(width: 8),
+                      Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: _teal.withOpacity(0.12),
+                          borderRadius:
+                              BorderRadius.circular(10),
+                          border: Border.all(
+                              color: _teal.withOpacity(0.2)),
+                        ),
+                        child: const Icon(
+                            Icons.fitness_center_rounded,
+                            color: _teal, size: 18),
+                      ),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment:
                               CrossAxisAlignment.start,
                           children: [
-                            Text(ex.exerciseName,
+                            Text(widget.exercise.exerciseName,
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15),
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight:
+                                        FontWeight.w700),
+                                maxLines: 1,
                                 overflow:
                                     TextOverflow.ellipsis),
-                            Text(ex.muscleGroup,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: cs.outline)),
-                            if (!isExpanded)
-                              Padding(
-                                padding:
-                                    const EdgeInsets.only(
-                                        top: 2),
-                                child: Text(
-                                    '${sets.length} serie',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight:
-                                            FontWeight.w600,
-                                        color: cs.primary)),
-                              ),
-                            if (isExpanded && hasExerciseNote)
-                              Text(ex.notes!,
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontStyle:
-                                          FontStyle.italic,
-                                      color: cs.outline),
-                                  overflow:
-                                      TextOverflow.ellipsis),
+                            Text(
+                              '$completedCount/$totalCount serie',
+                              style: TextStyle(
+                                  color: completedCount ==
+                                          totalCount &&
+                                          totalCount > 0
+                                      ? _teal
+                                      : Colors.white
+                                          .withOpacity(0.4),
+                                  fontSize: 11),
+                            ),
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: allDone
-                              ? cs.primaryContainer
-                              : cs.surfaceContainerHighest,
-                          borderRadius:
-                              BorderRadius.circular(20),
+                      // Rimuovi
+                      GestureDetector(
+                        onTap: widget.onRemove,
+                        child: Container(
+                          width: 28, height: 28,
+                          decoration: BoxDecoration(
+                            color: _red.withOpacity(0.08),
+                            borderRadius:
+                                BorderRadius.circular(7),
+                          ),
+                          child: Icon(
+                              Icons.delete_outline_rounded,
+                              size: 13,
+                              color: _red.withOpacity(0.7)),
                         ),
-                        child: Text(
-                            '$completedCount/${sets.length}',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: allDone
-                                    ? cs.onPrimaryContainer
-                                    : cs.onSurface)),
                       ),
                       const SizedBox(width: 6),
                       Icon(
-                        isExpanded
-                            ? Icons.expand_less_rounded
-                            : Icons.expand_more_rounded,
-                        size: 20,
-                        color: cs.outline,
+                        _expanded
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: Colors.white.withOpacity(0.35),
+                        size: 18,
                       ),
                     ],
                   ),
                 ),
-                if (isExpanded) ...[
-                  if (hasNote)
-                    GestureDetector(
-                      onTap: () => _showNoteDialog(context),
-                      child: Container(
-                        margin: const EdgeInsets.only(top: 8),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: cs.tertiaryContainer
-                              .withOpacity(0.5),
-                          borderRadius:
-                              BorderRadius.circular(8),
-                          border: Border.all(
-                            color:
-                                cs.tertiary.withOpacity(0.2),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.sticky_note_2_outlined,
-                              size: 14,
-                              color: cs.tertiary,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(ex.sessionNote!,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: cs.tertiary)),
-                            ),
-                            Icon(Icons.edit,
-                                size: 12,
-                                color: cs.tertiary),
-                          ],
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const SizedBox(width: 28),
-                      Expanded(
-                        flex: 3,
-                        child: Text('Peso (kg)',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: cs.outline)),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        flex: 4,
-                        child: Text('Reps',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: cs.outline)),
-                      ),
-                      const SizedBox(width: 40),
-                    ],
+              ),
+              if (_expanded) ...[
+                Container(
+                  height: 0.6,
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 14),
+                  color: Colors.white.withOpacity(0.06),
+                ),
+                // Serie
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      14, 8, 14, 4),
+                  child: Column(
+                    children: widget.sets
+                        .asMap()
+                        .entries
+                        .map((e) => _SetRow(
+                              index: e.key,
+                              set: e.value,
+                              onToggle: () =>
+                                  widget.onToggle(e.key),
+                              onUpdate: (w, r) =>
+                                  widget.onUpdate(e.key, w, r),
+                            ))
+                        .toList(),
                   ),
-                  const SizedBox(height: 4),
-                  ...sets.asMap().entries.map((entry) {
-                    final i = entry.key;
-                    final set = entry.value;
-                    return _SetRow(
-                      key: ValueKey(
-                          '${ex.exerciseKey}_$i'),
-                      setNumber: set.setNumber,
-                      set: set,
-                      onToggle: () => onToggle(i),
-                      onUpdate: (weight, reps) =>
-                          onUpdate(i, weight, reps),
-                    );
-                  }),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                ),
+                // +/- serie
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      14, 0, 14, 10),
+                  child: Row(
                     children: [
-                      _MiniBtn(
-                        label: '− Serie',
-                        color: Colors.red,
-                        onTap: sets.length > 1
-                            ? onRemoveSet
-                            : null,
+                      _SmallBtn(
+                        icon: Icons.remove_rounded,
+                        color: Colors.white.withOpacity(0.35),
+                        onTap: widget.onRemoveSet,
                       ),
-                      _MiniBtn(
-                        label: '+ Serie',
-                        color: cs.primary,
-                        onTap: onAddSet,
+                      const SizedBox(width: 8),
+                      _SmallBtn(
+                        icon: Icons.add_rounded,
+                        color: _teal,
+                        onTap: widget.onAddSet,
                       ),
-                      _MiniBtn(
-                        label: hasNote
-                            ? 'Modifica nota'
-                            : 'Nota',
-                        color: cs.tertiary,
-                        onTap: () =>
-                            _showNoteDialog(context),
-                      ),
-                      _MiniBtn(
-                        label: 'Rimuovi',
-                        color: Colors.red,
-                        onTap: () {
-                          showGlassDialog(
-                            context: context,
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.all(24),
-                              child: Column(
-                                mainAxisSize:
-                                    MainAxisSize.min,
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Rimuovere ${ex.exerciseName}?',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleSmall
-                                        ?.copyWith(
-                                            fontWeight:
-                                                FontWeight.w700),
-                                  ),
-                                  const SizedBox(height: 20),
-                                  GlassDialogActions(
-                                    cancelLabel: 'Annulla',
-                                    confirmLabel: 'Rimuovi',
-                                    confirmColor: Colors.red,
-                                    onCancel: () =>
-                                        Navigator.pop(context),
-                                    onConfirm: () {
-                                      Navigator.pop(context);
-                                      onRemoveExercise();
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
+                      const Spacer(),
+                      // Nota
+                      _NoteChip(
+                        note: widget.currentNote,
+                        onSave: widget.onUpdateNote,
                       ),
                     ],
                   ),
-                  Consumer<SessionProvider>(
-                    builder: (_, session, __) {
-                      final isResting = session.isResting &&
-                          session.restingExerciseId ==
-                              ex.exerciseKey;
-                      if (!isResting)
-                        return const SizedBox.shrink();
-                      return _RestBanner(
-                        elapsed: session.restElapsed,
-                        targetRest: ex.restSeconds,
-                        onStop: () =>
-                            session.stopRestTimer(),
-                      );
-                    },
-                  ),
-                ],
+                ),
               ],
-            ),
+            ],
           ),
         ),
       ),
@@ -1701,72 +1020,375 @@ class _ExerciseSessionCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Mini componenti
+// _SessionCircuitCard
 // ─────────────────────────────────────────────────────────────
 
-class _MiniBtn extends StatelessWidget {
-  final String label;
-  final Color color;
-  final VoidCallback? onTap;
+class _SessionCircuitCard extends StatefulWidget {
+  final String circuitId;
+  final String circuitName;
+  final List<SessionExercise> exercises;
+  final int currentRound;
+  final int totalRounds;
+  final List<ActiveSet> Function(dynamic exKey) getSets;
+  final VoidCallback onNextRound;
+  final VoidCallback onPrevRound;
+  final void Function(dynamic exKey, int index) onToggle;
+  final void Function(dynamic exKey, int index, double weight,
+      int reps) onUpdate;
+  final void Function(dynamic exKey) onAddSet;
+  final void Function(dynamic exKey) onRemoveSet;
+  final VoidCallback onModify;
 
-  const _MiniBtn({
-    required this.label,
-    required this.color,
-    this.onTap,
+  const _SessionCircuitCard({
+    super.key,
+    required this.circuitId,
+    required this.circuitName,
+    required this.exercises,
+    required this.currentRound,
+    required this.totalRounds,
+    required this.getSets,
+    required this.onNextRound,
+    required this.onPrevRound,
+    required this.onToggle,
+    required this.onUpdate,
+    required this.onAddSet,
+    required this.onRemoveSet,
+    required this.onModify,
+  });
+
+  @override
+  State<_SessionCircuitCard> createState() =>
+      _SessionCircuitCardState();
+}
+
+class _SessionCircuitCardState
+    extends State<_SessionCircuitCard> {
+  bool _expanded = true;
+
+  @override
+  Widget build(BuildContext context) {
+    int completedCount = 0;
+    int totalCount = 0;
+    for (final ex in widget.exercises) {
+      final sets = widget.getSets(ex.exerciseKey);
+      completedCount += sets.where((s) => s.completed).length;
+      totalCount += sets.length;
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                _indigo.withOpacity(0.12),
+                _indigo.withOpacity(0.05),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+                color: _indigo.withOpacity(0.4), width: 1),
+            boxShadow: [
+              BoxShadow(
+                  color: _indigo.withOpacity(0.1),
+                  blurRadius: 16)
+            ],
+          ),
+          child: Column(
+            children: [
+              // Header circuito
+              GestureDetector(
+                onTap: () =>
+                    setState(() => _expanded = !_expanded),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      14, 12, 14, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: _indigo.withOpacity(0.15),
+                          borderRadius:
+                              BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.loop_rounded,
+                            color: _indigo, size: 16),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(widget.circuitName,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight:
+                                        FontWeight.w700),
+                                maxLines: 1,
+                                overflow:
+                                    TextOverflow.ellipsis),
+                            Text(
+                              '$completedCount/$totalCount serie',
+                              style: TextStyle(
+                                  color: _indigo.withOpacity(0.8),
+                                  fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Modifica circuito in sessione
+                      GestureDetector(
+                        onTap: widget.onModify,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: _indigo.withOpacity(0.12),
+                            borderRadius:
+                                BorderRadius.circular(8),
+                            border: Border.all(
+                                color:
+                                    _indigo.withOpacity(0.3)),
+                          ),
+                          child: const Text('Modifica',
+                              style: TextStyle(
+                                  color: _indigo,
+                                  fontSize: 11,
+                                  fontWeight:
+                                      FontWeight.w600)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        _expanded
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons
+                                .keyboard_arrow_down_rounded,
+                        color: Colors.white.withOpacity(0.35),
+                        size: 18,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_expanded) ...[
+                // Navigazione round
+                Container(
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 14),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _indigo.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: _indigo.withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: widget.currentRound > 0
+                            ? widget.onPrevRound
+                            : null,
+                        child: Container(
+                          width: 28, height: 28,
+                          decoration: BoxDecoration(
+                            color: widget.currentRound > 0
+                                ? _indigo.withOpacity(0.15)
+                                : Colors.transparent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                              Icons.chevron_left_rounded,
+                              color: widget.currentRound > 0
+                                  ? _indigo
+                                  : Colors.white
+                                      .withOpacity(0.2),
+                              size: 18),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'Ciclo ${widget.currentRound + 1} di ${widget.totalRounds}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap:
+                            widget.currentRound < widget.totalRounds - 1
+                                ? widget.onNextRound
+                                : null,
+                        child: Container(
+                          width: 28, height: 28,
+                          decoration: BoxDecoration(
+                            color: widget.currentRound < widget.totalRounds - 1
+                                ? _indigo.withOpacity(0.15)
+                                : Colors.transparent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                              Icons.chevron_right_rounded,
+                              color: widget.currentRound < widget.totalRounds - 1
+                                  ? _indigo
+                                  : Colors.white
+                                      .withOpacity(0.2),
+                              size: 18),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Esercizi del circuito
+                ...widget.exercises.map((ex) {
+                  final sets =
+                      widget.getSets(ex.exerciseKey);
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        10, 0, 10, 8),
+                    child: _CircuitExerciseBlock(
+                      exercise: ex,
+                      sets: sets,
+                      onToggle: (i) =>
+                          widget.onToggle(ex.exerciseKey, i),
+                      onUpdate: (i, w, r) => widget.onUpdate(
+                          ex.exerciseKey, i, w, r),
+                      onAddSet: () =>
+                          widget.onAddSet(ex.exerciseKey),
+                      onRemoveSet: () =>
+                          widget.onRemoveSet(ex.exerciseKey),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 4),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _CircuitExerciseBlock
+// ─────────────────────────────────────────────────────────────
+
+class _CircuitExerciseBlock extends StatelessWidget {
+  final SessionExercise exercise;
+  final List<ActiveSet> sets;
+  final void Function(int) onToggle;
+  final void Function(int, double, int) onUpdate;
+  final VoidCallback onAddSet;
+  final VoidCallback onRemoveSet;
+
+  const _CircuitExerciseBlock({
+    required this.exercise,
+    required this.sets,
+    required this.onToggle,
+    required this.onUpdate,
+    required this.onAddSet,
+    required this.onRemoveSet,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
-    final isDisabled = onTap == null;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isDisabled
-              ? Colors.transparent
-              : color.withOpacity(isDark ? 0.15 : 0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isDisabled
-                ? Theme.of(context)
-                    .colorScheme
-                    .outlineVariant
-                    .withOpacity(0.4)
-                : color.withOpacity(0.5),
-            width: 1,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: _indigo.withOpacity(0.15), width: 0.7),
+          ),
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 6, height: 6,
+                    decoration: BoxDecoration(
+                        color: _indigo,
+                        shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(exercise.exerciseName,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ...sets.asMap().entries.map((e) => _SetRow(
+                    index: e.key,
+                    set: e.value,
+                    onToggle: () => onToggle(e.key),
+                    onUpdate: (w, r) =>
+                        onUpdate(e.key, w, r),
+                    compact: true,
+                  )),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  _SmallBtn(
+                    icon: Icons.remove_rounded,
+                    color: Colors.white.withOpacity(0.35),
+                    onTap: onRemoveSet,
+                  ),
+                  const SizedBox(width: 6),
+                  _SmallBtn(
+                    icon: Icons.add_rounded,
+                    color: _indigo,
+                    onTap: onAddSet,
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: isDisabled
-                    ? Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withOpacity(0.3)
-                    : color)),
       ),
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// _SetRow
+// ─────────────────────────────────────────────────────────────
+
 class _SetRow extends StatefulWidget {
-  final int setNumber;
+  final int index;
   final ActiveSet set;
   final VoidCallback onToggle;
-  final void Function(double, int) onUpdate;
+  final void Function(double weight, int reps) onUpdate;
+  final bool compact;
 
   const _SetRow({
-    super.key,
-    required this.setNumber,
+    required this.index,
     required this.set,
     required this.onToggle,
     required this.onUpdate,
+    this.compact = false,
   });
 
   @override
@@ -1776,42 +1398,16 @@ class _SetRow extends StatefulWidget {
 class _SetRowState extends State<_SetRow> {
   late TextEditingController _weightCtrl;
   late TextEditingController _repsCtrl;
-  late int _currentReps;
 
   @override
   void initState() {
     super.initState();
-    _currentReps = widget.set.lastReps ?? widget.set.reps;
     _weightCtrl = TextEditingController(
-      text: widget.set.weight > 0
-          ? (widget.set.weight % 1 == 0
-              ? widget.set.weight.toInt().toString()
-              : widget.set.weight.toString())
-          : '',
-    );
-    _repsCtrl =
-        TextEditingController(text: _currentReps.toString());
-  }
-
-  @override
-  void didUpdateWidget(_SetRow oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.set != widget.set) {
-      _currentReps =
-          widget.set.lastReps ?? widget.set.reps;
-      final newWeight = widget.set.weight > 0
-          ? (widget.set.weight % 1 == 0
-              ? widget.set.weight.toInt().toString()
-              : widget.set.weight.toString())
-          : '';
-      if (_weightCtrl.text != newWeight) {
-        _weightCtrl.text = newWeight;
-      }
-      final newReps = _currentReps.toString();
-      if (_repsCtrl.text != newReps) {
-        _repsCtrl.text = newReps;
-      }
-    }
+        text: widget.set.weight > 0
+            ? widget.set.weight.toString()
+            : '');
+    _repsCtrl = TextEditingController(
+        text: widget.set.reps.toString());
   }
 
   @override
@@ -1821,183 +1417,184 @@ class _SetRowState extends State<_SetRow> {
     super.dispose();
   }
 
-  void _notifyUpdate() {
-    final weight = double.tryParse(_weightCtrl.text) ??
-        widget.set.lastWeight ??
-        widget.set.weight;
-    final reps =
-        int.tryParse(_repsCtrl.text) ?? _currentReps;
-    widget.onUpdate(weight, reps);
-  }
-
-  void _changeReps(int delta) {
-    if (widget.set.completed) return;
-    final current =
-        int.tryParse(_repsCtrl.text) ?? _currentReps;
-    final newVal = (current + delta).clamp(0, 999);
-    setState(() {
-      _currentReps = newVal;
-      _repsCtrl.text = newVal.toString();
-    });
-    _notifyUpdate();
+  @override
+  void didUpdateWidget(_SetRow old) {
+    super.didUpdateWidget(old);
+    if (old.set.weight != widget.set.weight &&
+        !_weightCtrl.text.contains(
+            widget.set.weight.toString().replaceAll('.0', ''))) {
+      _weightCtrl.text = widget.set.weight > 0
+          ? widget.set.weight.toString()
+          : '';
+    }
+    if (old.set.reps != widget.set.reps) {
+      _repsCtrl.text = widget.set.reps.toString();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isCompleted = widget.set.completed;
-    final cs = Theme.of(context).colorScheme;
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
-    final weightHint = widget.set.lastWeight != null
-        ? (widget.set.lastWeight! % 1 == 0
-            ? widget.set.lastWeight!.toInt().toString()
-            : widget.set.lastWeight.toString())
-        : (widget.set.weight > 0
-            ? widget.set.weight.toString()
-            : '-');
+    final completed = widget.set.completed;
+    final accentColor = completed ? _teal : Colors.white;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      padding: const EdgeInsets.symmetric(
-          horizontal: 2, vertical: 5),
-      decoration: BoxDecoration(
-        color: isCompleted
-            ? cs.primaryContainer.withOpacity(0.4)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
+          // Numero serie
           SizedBox(
-            width: 28,
-            child: Text('${widget.setNumber}',
-                textAlign: TextAlign.center,
+            width: 24,
+            child: Text('${widget.index + 1}',
                 style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                    color: accentColor.withOpacity(0.5),
                     fontSize: 12,
-                    color: isCompleted
-                        ? cs.primary
-                        : cs.outline)),
+                    fontWeight: FontWeight.w700)),
           ),
-          const SizedBox(width: 4),
+          // Peso
           Expanded(
-            flex: 3,
-            child: TextField(
-              controller: _weightCtrl,
-              enabled: !isCompleted,
-              textAlign: TextAlign.center,
-              keyboardType:
-                  const TextInputType.numberWithOptions(
-                      decimal: true),
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: weightHint,
-                hintStyle: TextStyle(
-                  fontSize: 12,
-                  color: cs.outline.withOpacity(0.6),
-                ),
-                contentPadding:
-                    const EdgeInsets.symmetric(
-                        vertical: 7, horizontal: 6),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8)),
-                filled: isCompleted,
-                fillColor: cs.surfaceContainerHighest
-                    .withOpacity(0.3),
-              ),
-              onChanged: (_) => _notifyUpdate(),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            flex: 4,
             child: Container(
+              height: widget.compact ? 30 : 34,
+              margin: const EdgeInsets.only(right: 6),
               decoration: BoxDecoration(
-                color: isCompleted
-                    ? cs.surfaceContainerHighest
-                        .withOpacity(0.3)
-                    : isDark
-                        ? Colors.white.withOpacity(0.05)
-                        : cs.surfaceContainerHighest
-                            .withOpacity(0.4),
+                color: Colors.white.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: isCompleted
-                      ? cs.outlineVariant.withOpacity(0.3)
-                      : cs.outlineVariant,
-                  width: 1,
+                  color: completed
+                      ? _teal.withOpacity(0.3)
+                      : Colors.white.withOpacity(0.1),
+                  width: 0.8,
                 ),
               ),
               child: Row(
                 children: [
-                  _RepsBtn(
-                    icon: Icons.remove,
-                    onTap: isCompleted
-                        ? null
-                        : () => _changeReps(-1),
-                    color: cs.outline,
-                  ),
                   Expanded(
                     child: TextField(
-                      controller: _repsCtrl,
-                      enabled: !isCompleted,
+                      controller: _weightCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(
+                              decimal: true),
                       textAlign: TextAlign.center,
-                      keyboardType: TextInputType.number,
                       style: TextStyle(
+                          color: Colors.white.withOpacity(0.85),
                           fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isCompleted
-                              ? cs.outline
-                              : cs.onSurface),
-                      decoration: const InputDecoration(
-                        isDense: true,
+                          fontWeight: FontWeight.w600),
+                      decoration: InputDecoration(
+                        hintText: widget.set.lastWeight != null
+                            ? '${widget.set.lastWeight}'
+                            : 'kg',
+                        hintStyle: TextStyle(
+                            color: Colors.white.withOpacity(0.2),
+                            fontSize: 12),
                         border: InputBorder.none,
                         contentPadding:
-                            EdgeInsets.symmetric(
-                                vertical: 7),
+                            const EdgeInsets.symmetric(
+                                horizontal: 6),
                       ),
                       onChanged: (v) {
-                        _currentReps =
-                            int.tryParse(v) ?? _currentReps;
-                        _notifyUpdate();
+                        final w = double.tryParse(v) ?? 0;
+                        final r = int.tryParse(
+                                _repsCtrl.text) ??
+                            widget.set.reps;
+                        widget.onUpdate(w, r);
                       },
                     ),
                   ),
-                  _RepsBtn(
-                    icon: Icons.add,
-                    onTap: isCompleted
-                        ? null
-                        : () => _changeReps(1),
-                    color: cs.primary,
+                  Text('kg',
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.25),
+                          fontSize: 10)),
+                  const SizedBox(width: 4),
+                ],
+              ),
+            ),
+          ),
+          // Ripetizioni
+          SizedBox(
+            width: widget.compact ? 52 : 60,
+            height: widget.compact ? 30 : 34,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: completed
+                      ? _teal.withOpacity(0.3)
+                      : Colors.white.withOpacity(0.1),
+                  width: 0.8,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _repsCtrl,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.85),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
+                      decoration: InputDecoration(
+                        hintText: widget.set.lastReps != null
+                            ? '${widget.set.lastReps}'
+                            : 'rip',
+                        hintStyle: TextStyle(
+                            color: Colors.white.withOpacity(0.2),
+                            fontSize: 12),
+                        border: InputBorder.none,
+                        contentPadding:
+                            const EdgeInsets.symmetric(
+                                horizontal: 4),
+                      ),
+                      onChanged: (v) {
+                        final r = int.tryParse(v) ?? widget.set.reps;
+                        final w = double.tryParse(
+                                _weightCtrl.text) ??
+                            widget.set.weight;
+                        widget.onUpdate(w, r);
+                      },
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(width: 4),
-          SizedBox(
-            width: 40,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              onPressed: () {
-                final weight =
-                    double.tryParse(_weightCtrl.text) ??
-                        widget.set.lastWeight ??
-                        widget.set.weight;
-                final reps =
-                    int.tryParse(_repsCtrl.text) ??
-                        _currentReps;
-                widget.onUpdate(weight, reps);
-                widget.onToggle();
-              },
-              icon: Icon(
-                isCompleted
-                    ? Icons.check_circle
-                    : Icons.check_circle_outline,
-                color:
-                    isCompleted ? cs.primary : cs.outline,
-                size: 26,
+          const SizedBox(width: 6),
+          // Check
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              widget.onToggle();
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: widget.compact ? 28 : 32,
+              height: widget.compact ? 28 : 32,
+              decoration: BoxDecoration(
+                color: completed
+                    ? _teal
+                    : Colors.white.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: completed
+                      ? _teal
+                      : Colors.white.withOpacity(0.2),
+                  width: 1.2,
+                ),
+                boxShadow: completed
+                    ? [
+                        BoxShadow(
+                            color: _teal.withOpacity(0.4),
+                            blurRadius: 8)
+                      ]
+                    : null,
+              ),
+              child: Icon(
+                Icons.check_rounded,
+                color: completed
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.2),
+                size: widget.compact ? 14 : 16,
               ),
             ),
           ),
@@ -2007,128 +1604,851 @@ class _SetRowState extends State<_SetRow> {
   }
 }
 
-class _RepsBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onTap;
-  final Color color;
+// ─────────────────────────────────────────────────────────────
+// _SmallBtn
+// ─────────────────────────────────────────────────────────────
 
-  const _RepsBtn({
+class _SmallBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _SmallBtn(
+      {required this.icon,
+      required this.color,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 28, height: 28,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(
+              color: color.withOpacity(0.25), width: 0.8),
+        ),
+        child: Icon(icon, size: 14, color: color),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _NoteChip
+// ─────────────────────────────────────────────────────────────
+
+class _NoteChip extends StatelessWidget {
+  final String note;
+  final Future<void> Function(String) onSave;
+
+  const _NoteChip({required this.note, required this.onSave});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasNote = note.isNotEmpty;
+    return GestureDetector(
+      onTap: () async {
+        final ctrl = TextEditingController(text: note);
+        await showKeyboardSafeSheet(
+          context,
+          GlassSheetWrapper(
+            title: 'Nota esercizio',
+            accentColor: _cyan,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GlassTextField(
+                  controller: ctrl,
+                  hintText: 'Aggiungi una nota...',
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+                GlassPrimaryButton(
+                  label: 'Salva nota',
+                  color: _teal,
+                  onTap: () async {
+                    await onSave(ctrl.text.trim());
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: hasNote
+              ? _cyan.withOpacity(0.1)
+              : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: hasNote
+                ? _cyan.withOpacity(0.35)
+                : Colors.white.withOpacity(0.1),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              hasNote
+                  ? Icons.sticky_note_2_rounded
+                  : Icons.add_comment_rounded,
+              size: 12,
+              color: hasNote
+                  ? _cyan.withOpacity(0.7)
+                  : Colors.white.withOpacity(0.3),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              hasNote ? 'Nota' : 'Aggiungi nota',
+              style: TextStyle(
+                  color: hasNote
+                      ? _cyan.withOpacity(0.7)
+                      : Colors.white.withOpacity(0.3),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sheet: _AddToSessionSheet — menu Glass aggiungi esercizio/circuito
+// ─────────────────────────────────────────────────────────────
+
+class _AddToSessionSheet extends StatelessWidget {
+  final VoidCallback onAddExercise;
+  final VoidCallback onAddCircuit;
+
+  const _AddToSessionSheet({
+    required this.onAddExercise,
+    required this.onAddCircuit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassSheetWrapper(
+      title: 'Aggiungi alla sessione',
+      accentColor: _teal,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _SessionMenuOption(
+            icon: Icons.fitness_center_rounded,
+            label: 'Aggiungi esercizio',
+            subtitle: 'Inserisci un esercizio singolo',
+            color: _teal,
+            onTap: onAddExercise,
+          ),
+          const SizedBox(height: 10),
+          _SessionMenuOption(
+            icon: Icons.loop_rounded,
+            label: 'Aggiungi circuito',
+            subtitle: 'Crea un gruppo di esercizi in serie',
+            color: _indigo,
+            onTap: onAddCircuit,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SessionMenuOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _SessionMenuOption({
     required this.icon,
-    required this.onTap,
+    required this.label,
+    required this.subtitle,
     required this.color,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: SizedBox(
-        width: 28,
-        height: 36,
-        child: Icon(icon,
-            size: 16,
-            color: onTap == null
-                ? color.withOpacity(0.3)
-                : color),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: color.withOpacity(0.3), width: 1),
+              boxShadow: [
+                BoxShadow(
+                    color: color.withOpacity(0.1),
+                    blurRadius: 10)
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child:
+                      Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label,
+                          style: TextStyle(
+                              color: color,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(subtitle,
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.4),
+                              fontSize: 11)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios_rounded,
+                    size: 13, color: color.withOpacity(0.5)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-class _RestBanner extends StatelessWidget {
-  final int elapsed;
-  final int? targetRest;
-  final VoidCallback onStop;
+// ─────────────────────────────────────────────────────────────
+// Sheet: _AddExerciseToSessionSheet
+// ─────────────────────────────────────────────────────────────
 
-  const _RestBanner({
-    required this.elapsed,
-    required this.targetRest,
-    required this.onStop,
+class _AddExerciseToSessionSheet extends StatefulWidget {
+  final List<HiveExercise> allExercises;
+  final Set<dynamic> alreadyIn;
+  final void Function(Set<dynamic> keys) onConfirm;
+
+  const _AddExerciseToSessionSheet({
+    required this.allExercises,
+    required this.alreadyIn,
+    required this.onConfirm,
   });
 
-  String _format(int seconds) {
-    final m = seconds ~/ 60;
-    final s = seconds % 60;
-    return '${m.toString().padLeft(2, '0')}:'
-        '${s.toString().padLeft(2, '0')}';
+  @override
+  State<_AddExerciseToSessionSheet> createState() =>
+      _AddExerciseToSessionSheetState();
+}
+
+class _AddExerciseToSessionSheetState
+    extends State<_AddExerciseToSessionSheet> {
+  String _search = '';
+  String _muscle = 'Tutti';
+  final Set<dynamic> _selected = {};
+
+  static const _groups = [
+    'Tutti', 'Petto', 'Schiena', 'Spalle', 'Bicipiti',
+    'Tricipiti', 'Gambe', 'Addominali', 'Glutei', 'Polpacci',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = widget.allExercises.where((e) {
+      return (_muscle == 'Tutti' || e.muscleGroup == _muscle) &&
+          (_search.isEmpty ||
+              e.name.toLowerCase().contains(
+                  _search.toLowerCase()));
+    }).toList();
+
+    return GlassSheetWrapper(
+      title: 'Aggiungi esercizio',
+      subtitle: _selected.isEmpty
+          ? null
+          : '${_selected.length} selezionati',
+      accentColor: _teal,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GlassTextField(
+            hintText: 'Cerca esercizio...',
+            onChanged: (v) => setState(() => _search = v),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 34,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _groups.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: 6),
+              itemBuilder: (_, i) {
+                final g = _groups[i];
+                final sel = _muscle == g;
+                return GestureDetector(
+                  onTap: () => setState(() => _muscle = g),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: sel
+                          ? _teal.withOpacity(0.2)
+                          : Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: sel
+                            ? _teal.withOpacity(0.6)
+                            : Colors.white.withOpacity(0.1),
+                        width: sel ? 1.2 : 0.8,
+                      ),
+                    ),
+                    child: Text(g,
+                        style: TextStyle(
+                            color: sel
+                                ? _teal
+                                : Colors.white.withOpacity(0.55),
+                            fontSize: 12,
+                            fontWeight: sel
+                                ? FontWeight.w700
+                                : FontWeight.w500)),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 260,
+            child: ListView.builder(
+              physics: const BouncingScrollPhysics(),
+              itemCount: filtered.length,
+              itemBuilder: (_, i) {
+                final ex = filtered[i];
+                final isIn = widget.alreadyIn.contains(ex.key);
+                final isSel = _selected.contains(ex.key);
+                return ListTile(
+                  dense: true,
+                  leading: isIn
+                      ? Icon(Icons.check_circle,
+                          color: _teal.withOpacity(0.5),
+                          size: 20)
+                      : AnimatedContainer(
+                          duration:
+                              const Duration(milliseconds: 150),
+                          width: 22, height: 22,
+                          decoration: BoxDecoration(
+                            color: isSel
+                                ? _teal
+                                : Colors.transparent,
+                            borderRadius:
+                                BorderRadius.circular(6),
+                            border: Border.all(
+                              color: isSel
+                                  ? _teal
+                                  : Colors.white
+                                      .withOpacity(0.25),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: isSel
+                              ? const Icon(Icons.check_rounded,
+                                  size: 14,
+                                  color: Colors.white)
+                              : null,
+                        ),
+                  title: Text(ex.name,
+                      style: TextStyle(
+                          color: isIn
+                              ? Colors.white.withOpacity(0.3)
+                              : Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
+                  subtitle: Text(ex.muscleGroup,
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 11)),
+                  enabled: !isIn,
+                  onTap: isIn
+                      ? null
+                      : () => setState(() {
+                            if (isSel)
+                              _selected.remove(ex.key);
+                            else
+                              _selected.add(ex.key);
+                          }),
+                );
+              },
+            ),
+          ),
+          if (_selected.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            GlassPrimaryButton(
+              label: 'Aggiungi ${_selected.length} esercizi',
+              color: _teal,
+              onTap: () => widget.onConfirm(_selected),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sheet: _AddCircuitToSessionSheet
+// ─────────────────────────────────────────────────────────────
+
+class _AddCircuitToSessionSheet extends StatefulWidget {
+  final List<HiveExercise> allExercises;
+  final void Function(Set<dynamic> keys, int rounds, String name)
+      onConfirm;
+
+  const _AddCircuitToSessionSheet({
+    required this.allExercises,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_AddCircuitToSessionSheet> createState() =>
+      _AddCircuitToSessionSheetState();
+}
+
+class _AddCircuitToSessionSheetState
+    extends State<_AddCircuitToSessionSheet> {
+  String _search = '';
+  String _muscle = 'Tutti';
+  final Set<dynamic> _selected = {};
+  int _rounds = 3;
+  final _nameCtrl = TextEditingController(text: 'Circuito');
+
+  static const _groups = [
+    'Tutti', 'Petto', 'Schiena', 'Spalle', 'Bicipiti',
+    'Tricipiti', 'Gambe', 'Addominali', 'Glutei', 'Polpacci',
+  ];
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
-    final isOver =
-        targetRest != null && elapsed >= targetRest!;
-    final bg =
-        isOver ? cs.errorContainer : cs.secondaryContainer;
-    final fg = isOver
-        ? cs.onErrorContainer
-        : cs.onSecondaryContainer;
+    final filtered = widget.allExercises.where((e) {
+      return (_muscle == 'Tutti' || e.muscleGroup == _muscle) &&
+          (_search.isEmpty ||
+              e.name.toLowerCase().contains(
+                  _search.toLowerCase()));
+    }).toList();
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      margin: const EdgeInsets.only(top: 10),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: bg.withOpacity(isDark ? 0.7 : 0.85),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: (isOver ? cs.error : cs.secondary)
-                    .withOpacity(0.3),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  isOver
-                      ? Icons.notifications_active
-                      : Icons.timer_outlined,
-                  color: fg,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isOver
-                            ? 'Recupero terminato!'
-                            : 'Recupero in corso',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: fg,
-                        ),
-                      ),
-                      Text(
-                        targetRest != null
-                            ? '${_format(elapsed)} / ${_format(targetRest!)}'
-                            : _format(elapsed),
-                        style:
-                            TextStyle(fontSize: 12, color: fg),
-                      ),
-                    ],
+    return GlassSheetWrapper(
+      title: 'Nuovo circuito',
+      accentColor: _indigo,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GlassTextField(
+            controller: _nameCtrl,
+            hintText: 'Nome circuito...',
+            onChanged: (_) {},
+          ),
+          const SizedBox(height: 12),
+          // Selettore cicli
+          Row(
+            children: [
+              Text('Cicli:',
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
+              const Spacer(),
+              GestureDetector(
+                onTap: _rounds > 1
+                    ? () => setState(() => _rounds--)
+                    : null,
+                child: Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: _rounds > 1
+                        ? _cyan.withOpacity(0.1)
+                        : Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: _rounds > 1
+                          ? _cyan.withOpacity(0.4)
+                          : Colors.white.withOpacity(0.1),
+                      width: 1,
+                    ),
                   ),
+                  child: Icon(Icons.remove_rounded,
+                      size: 16,
+                      color: _rounds > 1
+                          ? _cyan
+                          : Colors.white.withOpacity(0.2)),
                 ),
-                GlassTextButton(
-                  onPressed: onStop,
-                  foregroundColor: fg,
-                  child: const Text('Stop'),
+              ),
+              SizedBox(
+                width: 44,
+                child: Text('$_rounds',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800)),
+              ),
+              GestureDetector(
+                onTap: () => setState(() => _rounds++),
+                child: Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: _cyan.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: _cyan.withOpacity(0.4), width: 1),
+                  ),
+                  child: const Icon(Icons.add_rounded,
+                      size: 16, color: _cyan),
                 ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GlassTextField(
+            hintText: 'Cerca esercizio...',
+            onChanged: (v) => setState(() => _search = v),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 34,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _groups.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: 6),
+              itemBuilder: (_, i) {
+                final g = _groups[i];
+                final sel = _muscle == g;
+                return GestureDetector(
+                  onTap: () => setState(() => _muscle = g),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: sel
+                          ? _indigo.withOpacity(0.2)
+                          : Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: sel
+                            ? _indigo.withOpacity(0.6)
+                            : Colors.white.withOpacity(0.1),
+                        width: sel ? 1.2 : 0.8,
+                      ),
+                    ),
+                    child: Text(g,
+                        style: TextStyle(
+                            color: sel
+                                ? _indigo
+                                : Colors.white.withOpacity(0.55),
+                            fontSize: 12,
+                            fontWeight: sel
+                                ? FontWeight.w700
+                                : FontWeight.w500)),
+                  ),
+                );
+              },
             ),
           ),
-        ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 220,
+            child: ListView.builder(
+              physics: const BouncingScrollPhysics(),
+              itemCount: filtered.length,
+              itemBuilder: (_, i) {
+                final ex = filtered[i];
+                final isSel = _selected.contains(ex.key);
+                return ListTile(
+                  dense: true,
+                  leading: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 22, height: 22,
+                    decoration: BoxDecoration(
+                      color: isSel
+                          ? _indigo
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isSel
+                            ? _indigo
+                            : Colors.white.withOpacity(0.25),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: isSel
+                        ? const Icon(Icons.check_rounded,
+                            size: 14, color: Colors.white)
+                        : null,
+                  ),
+                  title: Text(ex.name,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
+                  subtitle: Text(ex.muscleGroup,
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 11)),
+                  onTap: () => setState(() {
+                    if (isSel)
+                      _selected.remove(ex.key);
+                    else
+                      _selected.add(ex.key);
+                  }),
+                );
+              },
+            ),
+          ),
+          if (_selected.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            GlassPrimaryButton(
+              label:
+                  'Crea · ${_selected.length} esercizi · $_rounds cicli',
+              color: _indigo,
+              onTap: () => widget.onConfirm(
+                _selected,
+                _rounds,
+                _nameCtrl.text.trim().isNotEmpty
+                    ? _nameCtrl.text.trim()
+                    : 'Circuito',
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sheet: _ModifyCircuitInSessionSheet
+// Modifica circuito in sessione — NON modifica Hive
+// ─────────────────────────────────────────────────────────────
+
+class _ModifyCircuitInSessionSheet extends StatefulWidget {
+  final String circuitId;
+  final String circuitName;
+  final List<HiveExercise> allExercises;
+  final List<SessionExercise> currentExercises;
+  final int currentRounds;
+  final void Function(dynamic exKey) onAddExercise;
+  final void Function(dynamic exKey) onRemoveExercise;
+  final void Function(int rounds) onChangeRounds;
+
+  const _ModifyCircuitInSessionSheet({
+    required this.circuitId,
+    required this.circuitName,
+    required this.allExercises,
+    required this.currentExercises,
+    required this.currentRounds,
+    required this.onAddExercise,
+    required this.onRemoveExercise,
+    required this.onChangeRounds,
+  });
+
+  @override
+  State<_ModifyCircuitInSessionSheet> createState() =>
+      _ModifyCircuitInSessionSheetState();
+}
+
+class _ModifyCircuitInSessionSheetState
+    extends State<_ModifyCircuitInSessionSheet> {
+  String _search = '';
+  late int _rounds;
+
+  @override
+  void initState() {
+    super.initState();
+    _rounds = widget.currentRounds;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentKeys =
+        widget.currentExercises.map((e) => e.exerciseKey).toSet();
+    final available = widget.allExercises.where((e) {
+      return _search.isEmpty ||
+          e.name.toLowerCase().contains(_search.toLowerCase());
+    }).toList();
+
+    return GlassSheetWrapper(
+      title: 'Modifica circuito',
+      subtitle: widget.circuitName,
+      accentColor: _indigo,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Cicli
+          Row(
+            children: [
+              Text('Cicli:',
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
+              const Spacer(),
+              GestureDetector(
+                onTap: _rounds > 1
+                    ? () {
+                        setState(() => _rounds--);
+                        widget.onChangeRounds(_rounds);
+                      }
+                    : null,
+                child: Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: _rounds > 1
+                        ? _cyan.withOpacity(0.1)
+                        : Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: _rounds > 1
+                          ? _cyan.withOpacity(0.4)
+                          : Colors.white.withOpacity(0.1),
+                      width: 1,
+                    ),
+                  ),
+                  child: Icon(Icons.remove_rounded,
+                      size: 16,
+                      color: _rounds > 1
+                          ? _cyan
+                          : Colors.white.withOpacity(0.2)),
+                ),
+              ),
+              SizedBox(
+                width: 44,
+                child: Text('$_rounds',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800)),
+              ),
+              GestureDetector(
+                onTap: () {
+                  setState(() => _rounds++);
+                  widget.onChangeRounds(_rounds);
+                },
+                child: Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: _cyan.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: _cyan.withOpacity(0.4), width: 1),
+                  ),
+                  child: const Icon(Icons.add_rounded,
+                      size: 16, color: _cyan),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GlassTextField(
+            hintText: 'Cerca esercizio...',
+            onChanged: (v) => setState(() => _search = v),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 260,
+            child: ListView.builder(
+              physics: const BouncingScrollPhysics(),
+              itemCount: available.length,
+              itemBuilder: (_, i) {
+                final ex = available[i];
+                final isIn = currentKeys.contains(ex.key);
+                return ListTile(
+                  dense: true,
+                  leading: GestureDetector(
+                    onTap: () {
+                      if (isIn) {
+                        widget.onRemoveExercise(ex.key);
+                      } else {
+                        widget.onAddExercise(ex.key);
+                      }
+                      setState(() {});
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      width: 22, height: 22,
+                      decoration: BoxDecoration(
+                        color: isIn ? _teal : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isIn
+                              ? _teal
+                              : Colors.white.withOpacity(0.25),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: isIn
+                          ? const Icon(Icons.check_rounded,
+                              size: 14, color: Colors.white)
+                          : null,
+                    ),
+                  ),
+                  title: Text(ex.name,
+                      style: TextStyle(
+                          color: isIn
+                              ? Colors.white
+                              : Colors.white.withOpacity(0.7),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
+                  subtitle: Text(ex.muscleGroup,
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 11)),
+                  onTap: () {
+                    if (isIn) {
+                      widget.onRemoveExercise(ex.key);
+                    } else {
+                      widget.onAddExercise(ex.key);
+                    }
+                    setState(() {});
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          GlassPrimaryButton(
+            label: 'Chiudi',
+            color: _indigo,
+            onTap: () => Navigator.pop(context),
+          ),
+        ],
       ),
     );
   }

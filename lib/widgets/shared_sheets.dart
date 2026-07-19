@@ -1,10 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
-// ─────────────────────────────────────────────────────────────
-// Costanti condivise
-// ─────────────────────────────────────────────────────────────
-
 const kTeal = Color(0xFF00D4AA);
 const kCyan = Color(0xFF00E5FF);
 const kRed  = Color(0xFFFF3B30);
@@ -16,16 +12,10 @@ const kMuscleGroups = [
 
 // ─────────────────────────────────────────────────────────────
 // showKeyboardSafeSheet
-//
-// FIX DEFINITIVO tastiera al primo click:
-//   • Padding STATICO (no AnimatedPadding)
-//   • NO ConstrainedBox — era la causa del salto:
-//       Padding(viewInsets) + ConstrainedBox(85% screen)
-//       sommavano l'altezza del popup oltre il top dello schermo.
-//   • SingleChildScrollView con i figli che usano
-//     mainAxisSize: MainAxisSize.min gestisce l'overflow.
-//   • Identica a _openSheet di workout_detail_screen.dart
-//     che funziona correttamente già al primo click.
+// Struttura IDENTICA a _openSheet di workout_detail_screen.dart
+// (il popup "Cerca esercizio" che funziona già al primo click).
+// Nessun ConstrainedBox — era la causa del salto sommandosi al
+// Padding(viewInsets). Padding statico, no AnimatedPadding.
 // ─────────────────────────────────────────────────────────────
 
 Future<T?> showKeyboardSafeSheet<T>(
@@ -53,8 +43,7 @@ Future<T?> showKeyboardSafeSheet<T>(
 }
 
 // ─────────────────────────────────────────────────────────────
-// showGlassDialog — dialog Glass UI / Jarvis HUD unificato
-// Sostituisce AlertDialog nativo e CupertinoAlertDialog
+// showGlassDialog — dialog Glass UI unificato
 // ─────────────────────────────────────────────────────────────
 
 Future<T?> showGlassDialog<T>({
@@ -98,7 +87,10 @@ Future<T?> showGlassDialog<T>({
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (icon != null) ...[icon, const SizedBox(height: 16)],
+                if (icon != null) ...[
+                  icon,
+                  const SizedBox(height: 16),
+                ],
                 Text(title,
                     style: const TextStyle(
                         color: Colors.white,
@@ -125,10 +117,12 @@ Future<T?> showGlassDialog<T>({
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
-                  children: actions.map((a) => Padding(
-                    padding: const EdgeInsets.only(left: 10),
-                    child: _GlassDialogBtn(action: a),
-                  )).toList(),
+                  children: actions
+                      .map((a) => Padding(
+                            padding: const EdgeInsets.only(left: 10),
+                            child: _GlassDialogBtn(action: a),
+                          ))
+                      .toList(),
                 ),
               ],
             ),
@@ -138,10 +132,6 @@ Future<T?> showGlassDialog<T>({
     ),
   );
 }
-
-// ─────────────────────────────────────────────────────────────
-// GlassDialogAction
-// ─────────────────────────────────────────────────────────────
 
 class GlassDialogAction {
   final String label;
@@ -242,8 +232,8 @@ class GlassSheetWrapper extends StatelessWidget {
         ),
         borderRadius:
             const BorderRadius.vertical(top: Radius.circular(24)),
-        border:
-            Border.all(color: accentColor.withOpacity(0.3), width: 0.8),
+        border: Border.all(
+            color: accentColor.withOpacity(0.3), width: 0.8),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -336,8 +326,8 @@ class GlassTextField extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(12),
-            border:
-                Border.all(color: kCyan.withOpacity(0.2), width: 0.8),
+            border: Border.all(
+                color: kCyan.withOpacity(0.2), width: 0.8),
           ),
           child: TextField(
             controller: controller,
@@ -418,7 +408,9 @@ class GlassPrimaryButton extends StatelessWidget {
           label,
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: enabled ? Colors.white : Colors.white.withOpacity(0.3),
+            color: enabled
+                ? Colors.white
+                : Colors.white.withOpacity(0.3),
             fontWeight: FontWeight.w700,
             fontSize: 15,
           ),
@@ -429,7 +421,11 @@ class GlassPrimaryButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ExerciseFormSheet — unificato creazione + modifica
+// ExerciseFormSheet — FIX TASTIERA: autofocus: false
+// Il popup "Cerca esercizio" funzionante non usa autofocus.
+// Con autofocus: true la tastiera apre durante l'animazione
+// del sheet causando il salto. Con false, l'utente tocca il
+// campo quando il sheet è già stabile → nessun salto.
 // ─────────────────────────────────────────────────────────────
 
 class ExerciseFormSheet extends StatefulWidget {
@@ -514,11 +510,12 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // FIX: autofocus rimosso (default false)
+          // Corrisponde esattamente al popup "Cerca esercizio" funzionante
           GlassTextField(
             controller: _nameCtrl,
             hintText: 'Es. Panca piana, Squat...',
             labelText: 'Nome esercizio',
-            autofocus: true,
             onChanged: (v) {
               setState(() {
                 _nameError = widget.existingNames
@@ -618,7 +615,7 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// WorkoutCreateSheet — unificato creazione scheda
+// WorkoutCreateSheet — FIX TASTIERA: autofocus rimosso
 // ─────────────────────────────────────────────────────────────
 
 class WorkoutCreateSheet extends StatefulWidget {
@@ -657,11 +654,11 @@ class _WorkoutCreateSheetState extends State<WorkoutCreateSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // FIX: autofocus rimosso (default false)
           GlassTextField(
             controller: _nameCtrl,
             hintText: 'Es. Push Day, Full Body...',
             labelText: 'Nome scheda',
-            autofocus: true,
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 20),
