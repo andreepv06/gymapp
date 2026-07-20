@@ -12,10 +12,6 @@ const kMuscleGroups = [
 
 // ─────────────────────────────────────────────────────────────
 // showKeyboardSafeSheet
-// Struttura IDENTICA a _openSheet di workout_detail_screen.dart
-// (il popup "Cerca esercizio" che funziona già al primo click).
-// Nessun ConstrainedBox — era la causa del salto sommandosi al
-// Padding(viewInsets). Padding statico, no AnimatedPadding.
 // ─────────────────────────────────────────────────────────────
 
 Future<T?> showKeyboardSafeSheet<T>(
@@ -43,7 +39,12 @@ Future<T?> showKeyboardSafeSheet<T>(
 }
 
 // ─────────────────────────────────────────────────────────────
-// showGlassDialog — dialog Glass UI unificato
+// showGlassDialog
+//
+// [actionsAxis] — Axis.horizontal (default, bottoni in riga)
+//              — Axis.vertical   (bottoni in colonna, consigliato
+//                                 quando le azioni sono ≥ 3 o i
+//                                 label sono lunghi)
 // ─────────────────────────────────────────────────────────────
 
 Future<T?> showGlassDialog<T>({
@@ -53,6 +54,7 @@ Future<T?> showGlassDialog<T>({
   required String message,
   required List<GlassDialogAction> actions,
   Color accentColor = kCyan,
+  Axis actionsAxis = Axis.horizontal,
 }) {
   return showDialog<T>(
     context: context,
@@ -87,10 +89,7 @@ Future<T?> showGlassDialog<T>({
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (icon != null) ...[
-                  icon,
-                  const SizedBox(height: 16),
-                ],
+                if (icon != null) ...[icon, const SizedBox(height: 16)],
                 Text(title,
                     style: const TextStyle(
                         color: Colors.white,
@@ -115,15 +114,23 @@ Future<T?> showGlassDialog<T>({
                   ),
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: actions
-                      .map((a) => Padding(
-                            padding: const EdgeInsets.only(left: 10),
-                            child: _GlassDialogBtn(action: a),
-                          ))
-                      .toList(),
-                ),
+                // Azioni — orizzontali o verticali
+                if (actionsAxis == Axis.horizontal)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: actions.map((a) => Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: _GlassDialogBtn(action: a),
+                    )).toList(),
+                  )
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: actions.map((a) => Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _GlassDialogBtn(action: a, fullWidth: true),
+                    )).toList(),
+                  ),
               ],
             ),
           ),
@@ -132,6 +139,10 @@ Future<T?> showGlassDialog<T>({
     ),
   );
 }
+
+// ─────────────────────────────────────────────────────────────
+// GlassDialogAction
+// ─────────────────────────────────────────────────────────────
 
 class GlassDialogAction {
   final String label;
@@ -158,7 +169,12 @@ class GlassDialogAction {
 
 class _GlassDialogBtn extends StatelessWidget {
   final GlassDialogAction action;
-  const _GlassDialogBtn({required this.action});
+  final bool fullWidth;
+
+  const _GlassDialogBtn({
+    required this.action,
+    this.fullWidth = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -169,8 +185,8 @@ class _GlassDialogBtn extends StatelessWidget {
     return GestureDetector(
       onTap: action.onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 18, vertical: 11),
+        width: fullWidth ? double.infinity : null,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         decoration: BoxDecoration(
           color: isNeutral
               ? Colors.white.withOpacity(0.07)
@@ -188,6 +204,7 @@ class _GlassDialogBtn extends StatelessWidget {
         ),
         child: Text(
           action.label,
+          textAlign: fullWidth ? TextAlign.center : TextAlign.start,
           style: TextStyle(
             color: isNeutral ? Colors.white.withOpacity(0.7) : c,
             fontSize: 14,
@@ -421,11 +438,7 @@ class GlassPrimaryButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ExerciseFormSheet — FIX TASTIERA: autofocus: false
-// Il popup "Cerca esercizio" funzionante non usa autofocus.
-// Con autofocus: true la tastiera apre durante l'animazione
-// del sheet causando il salto. Con false, l'utente tocca il
-// campo quando il sheet è già stabile → nessun salto.
+// ExerciseFormSheet — unificato creazione + modifica
 // ─────────────────────────────────────────────────────────────
 
 class ExerciseFormSheet extends StatefulWidget {
@@ -510,8 +523,6 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // FIX: autofocus rimosso (default false)
-          // Corrisponde esattamente al popup "Cerca esercizio" funzionante
           GlassTextField(
             controller: _nameCtrl,
             hintText: 'Es. Panca piana, Squat...',
@@ -615,7 +626,7 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// WorkoutCreateSheet — FIX TASTIERA: autofocus rimosso
+// WorkoutCreateSheet — unificato creazione scheda
 // ─────────────────────────────────────────────────────────────
 
 class WorkoutCreateSheet extends StatefulWidget {
@@ -654,7 +665,6 @@ class _WorkoutCreateSheetState extends State<WorkoutCreateSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // FIX: autofocus rimosso (default false)
           GlassTextField(
             controller: _nameCtrl,
             hintText: 'Es. Push Day, Full Body...',
