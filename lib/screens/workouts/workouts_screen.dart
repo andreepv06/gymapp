@@ -798,7 +798,6 @@ class _WorkoutRenameSheetState
             controller: widget.nameController,
             hintText: 'Nuovo nome...',
             labelText: 'Nome scheda',
-            autofocus: true,
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 20),

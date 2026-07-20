@@ -227,15 +227,14 @@ class SessionProvider extends ChangeNotifier {
 
   int getCurrentRound(String circuitId) => _currentRound[circuitId] ?? 0;
   int getTotalRounds(String circuitId) => _circuitTotalRounds[circuitId] ?? 1;
+  String getCircuitName(String circuitId) =>
+      _sessionCircuitNames[circuitId] ?? 'Circuito';
 
-  // Aggiungere subito dopo getTotalRounds(...)
+  // Restituisce le serie di un esercizio per il round corrente di un circuito
   List<ActiveSet> getCircuitSets(String circuitId, dynamic exerciseKey) {
     final round = _currentRound[circuitId] ?? 0;
     return _circuitRoundSets[circuitId]?[round][exerciseKey] ?? [];
   }
-
-  String getCircuitName(String circuitId) =>
-      _sessionCircuitNames[circuitId] ?? 'Circuito';
 
   void nextRound(String circuitId) {
     final total = _circuitTotalRounds[circuitId] ?? 1;
@@ -256,7 +255,6 @@ class SessionProvider extends ChangeNotifier {
     }
   }
 
-  // NUOVO: salta direttamente ad un round specifico
   void goToRound(String circuitId, int round) {
     final total = _circuitTotalRounds[circuitId] ?? 1;
     if (round >= 0 && round < total) {
@@ -297,6 +295,22 @@ class SessionProvider extends ChangeNotifier {
       }
     }
     _savePausedState();
+    notifyListeners();
+  }
+
+  // Mod 4: rimuove l'intero circuito dalla sessione runtime (mai da Hive)
+  Future<void> removeCircuitFromSession(String circuitId) async {
+    _sessionExercises.removeWhere((e) => e.circuitId == circuitId);
+    _circuitRoundSets.remove(circuitId);
+    _currentRound.remove(circuitId);
+    _circuitTotalRounds.remove(circuitId);
+    _sessionCircuitNames.remove(circuitId);
+    if (_restingExerciseKey != null) {
+      final stillInSession = _sessionExercises
+          .any((e) => e.exerciseKey == _restingExerciseKey);
+      if (!stillInSession) _stopRestTimer();
+    }
+    await _savePausedState();
     notifyListeners();
   }
 
@@ -660,8 +674,6 @@ class SessionProvider extends ChangeNotifier {
     final freeExercises =
         exercises.where((e) => !e.isInCircuit).toList();
 
-    // FIX ORDINE SESSIONE: costruisce topItems rispettando
-    // il sortOrder di esercizi liberi E circuiti sullo stesso piano.
     final topItems =
         <({int order, bool isCircuit, dynamic data})>[
       ...freeExercises.map((e) => (
@@ -1101,4 +1113,3 @@ class SessionProvider extends ChangeNotifier {
     _resetSession();
   }
 }
-

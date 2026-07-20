@@ -54,85 +54,103 @@ class _AllenamentiScreenState
   }
 
   // ── FIX TASTIERA: usa showKeyboardSafeSheet da shared_sheets ──
+Future<void> _handlePlayTap(
+    BuildContext ctx, HiveWorkout workout) async {
+  final wp = ctx.read<WorkoutProvider>();
+  final sp = ctx.read<SessionProvider>();
+  wp.loadWorkoutExercises(workout.key);
 
-  Future<void> _handlePlayTap(
-      BuildContext ctx, HiveWorkout workout) async {
-    final wp = ctx.read<WorkoutProvider>();
-    final sp = ctx.read<SessionProvider>();
-    wp.loadWorkoutExercises(workout.key);
-
-    if (sp.hasActiveSession &&
-        sp.currentWorkout?.key == workout.key) {
-      final result = await showCupertinoModalPopup<String>(
-        context: ctx,
-        builder: (c) => CupertinoActionSheet(
-          title: const Text('Sessione in corso'),
-          message: Text(
-              'Hai una sessione attiva per "${workout.name}".'),
-          actions: [
-            CupertinoActionSheetAction(
-              onPressed: () =>
-                  Navigator.pop(c, 'continue'),
-              child: const Text('Continua sessione'),
-            ),
-            CupertinoActionSheetAction(
-              isDestructiveAction: true,
-              onPressed: () => Navigator.pop(c, 'new'),
-              child: const Text('Avvia nuova sessione'),
-            ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(c, 'cancel'),
-            child: const Text('Annulla'),
+  if (sp.hasActiveSession &&
+      sp.currentWorkout?.key == workout.key) {
+    final result = await showCupertinoModalPopup<String>(
+      context: ctx,
+      builder: (c) => CupertinoActionSheet(
+        title: const Text('Sessione in corso'),
+        message: Text(
+            'Hai una sessione attiva per "${workout.name}".'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () =>
+                Navigator.pop(c, 'continue'),
+            child: const Text('Continua sessione'),
           ),
-        ),
-      );
-      if (!ctx.mounted) return;
-      if (result == null || result == 'cancel') return;
-      if (result == 'new') await sp.abandonSession();
-      if (!ctx.mounted) return;
-      pushPage(ctx, ActiveSessionScreen(workout: workout));
-      return;
-    }
-
-    if (sp.hasPausedSessionForWorkout(workout.key)) {
-      final paused =
-          sp.getMostRecentPausedForWorkout(workout.key);
-      final result = await showCupertinoModalPopup<String>(
-        context: ctx,
-        builder: (c) => CupertinoActionSheet(
-          title: const Text('Sessione in pausa'),
-          message: Text(
-              'Hai una sessione in pausa per "${workout.name}".'),
-          actions: [
-            CupertinoActionSheetAction(
-              onPressed: () => Navigator.pop(c, 'resume'),
-              child: const Text('Riprendi sessione'),
-            ),
-            CupertinoActionSheetAction(
-              onPressed: () => Navigator.pop(c, 'new'),
-              child: const Text('Avvia nuova sessione'),
-            ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(c, 'cancel'),
-            child: const Text('Annulla'),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(c, 'new'),
+            child: const Text('Avvia nuova sessione'),
           ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(c, 'cancel'),
+          child: const Text('Annulla'),
         ),
-      );
-      if (!ctx.mounted) return;
-      if (result == null || result == 'cancel') return;
-      if (result == 'resume' && paused != null) {
-        await sp.resumePausedSession(
-            paused['id'] as String);
-        if (!ctx.mounted) return;
-      }
-      pushPage(ctx, ActiveSessionScreen(workout: workout));
-      return;
-    }
-
+      ),
+    );
+    if (!ctx.mounted) return;
+    if (result == null || result == 'cancel') return;
+    if (result == 'new') await sp.abandonSession();
+    if (!ctx.mounted) return;
     pushPage(ctx, ActiveSessionScreen(workout: workout));
+    return;
   }
+
+  // Mod 5: dialog "Sessione in pausa" in Glass UI
+  if (sp.hasPausedSessionForWorkout(workout.key)) {
+    final paused =
+        sp.getMostRecentPausedForWorkout(workout.key);
+    final result = await showGlassDialog<String>(
+      context: ctx,
+      accentColor: _orange,
+      icon: Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          color: _orange.withOpacity(0.12),
+          shape: BoxShape.circle,
+          border: Border.all(color: _orange.withOpacity(0.4)),
+          boxShadow: [
+            BoxShadow(
+                color: _orange.withOpacity(0.2),
+                blurRadius: 12)
+          ],
+        ),
+        child: const Icon(
+            Icons.pause_circle_outline_rounded,
+            color: _orange, size: 22),
+      ),
+      title: 'Sessione in pausa',
+      message:
+          'Hai una sessione in pausa per "${workout.name}".',
+      actions: [
+        GlassDialogAction(
+          label: 'Annulla',
+          onTap: () => Navigator.pop(ctx, 'cancel'),
+        ),
+        GlassDialogAction(
+          label: 'Nuova sessione',
+          onTap: () => Navigator.pop(ctx, 'new'),
+        ),
+        GlassDialogAction(
+          label: 'Riprendi',
+          isDefault: true,
+          color: _orange,
+          onTap: () => Navigator.pop(ctx, 'resume'),
+        ),
+      ],
+    );
+    if (!ctx.mounted) return;
+    if (result == null || result == 'cancel') return;
+    if (result == 'resume' && paused != null) {
+      await sp.resumePausedSession(
+          paused['id'] as String);
+      if (!ctx.mounted) return;
+    }
+    pushPage(ctx, ActiveSessionScreen(workout: workout));
+    return;
+  }
+
+  pushPage(ctx, ActiveSessionScreen(workout: workout));
+}
+
 
   void _handleEditTap(HiveWorkout workout) {
     context

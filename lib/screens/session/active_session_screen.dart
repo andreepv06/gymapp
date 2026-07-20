@@ -17,7 +17,10 @@ const _orange = Color(0xFFFF8C00);
 const _red    = Color(0xFFFF1744);
 const _green  = Color(0xFF22C55E);
 
-// Struttura per gli item di primo livello nella sessione
+// ─────────────────────────────────────────────────────────────
+// _TopItem — item di primo livello nella sessione
+// ─────────────────────────────────────────────────────────────
+
 class _TopItem {
   final bool isFree;
   final SessionExercise? exercise;
@@ -36,13 +39,11 @@ class _TopItem {
         circuitId = cid,
         circuitExercises = exs;
 
-  String get key => isFree
-      ? 'free_${exercise!.exerciseKey}'
-      : 'circ_$circuitId';
+  String get key =>
+      isFree ? 'free_${exercise!.exerciseKey}' : 'circ_$circuitId';
 }
 
-// FIX ORDINE SESSIONE: costruisce la lista di top-item
-// rispettando l'ordine interleaved di _sessionExercises
+// Costruisce la lista top-item rispettando l'ordine interleaved
 List<_TopItem> _buildTopItems(List<SessionExercise> sessionExercises) {
   final items = <_TopItem>[];
   final processedCircuits = <String>{};
@@ -378,7 +379,6 @@ class _ActiveSessionScreenState
                   );
                 }
 
-                // FIX: costruisce top-items in ordine interleaved
                 final topItems = _buildTopItems(sp.sessionExercises);
 
                 return Column(
@@ -404,10 +404,11 @@ class _ActiveSessionScreenState
                                       color: Colors.white.withOpacity(0.4),
                                       fontSize: 14)),
                             )
-                          // D&D ripristinato: ReorderableListView
                           : ReorderableListView.builder(
+                              // Mod 1: padding inferiore aumentato per
+                              // evitare sovrapposizione con la barra azioni
                               padding: const EdgeInsets.fromLTRB(
-                                  16, 8, 16, 20),
+                                  16, 8, 16, 120),
                               physics: const BouncingScrollPhysics(),
                               buildDefaultDragHandles: false,
                               proxyDecorator: (child, i, anim) =>
@@ -425,8 +426,7 @@ class _ActiveSessionScreenState
                                           width: 1.2),
                                       boxShadow: [
                                         BoxShadow(
-                                            color:
-                                                _cyan.withOpacity(0.1),
+                                            color: _cyan.withOpacity(0.1),
                                             blurRadius: 12)
                                       ],
                                     ),
@@ -441,9 +441,6 @@ class _ActiveSessionScreenState
                                 final moved =
                                     reorderedItems.removeAt(oldIndex);
                                 reorderedItems.insert(newIndex, moved);
-
-                                // Ricostruisce flat list mantenendo
-                                // gli esercizi del circuito insieme
                                 final newFlat = <SessionExercise>[];
                                 for (final item in reorderedItems) {
                                   if (item.isFree) {
@@ -521,8 +518,7 @@ class _ActiveSessionScreenState
                                         totalRounds:
                                             sp.getTotalRounds(cid),
                                         getSets: (exKey) =>
-                                            sp.getCircuitSets(
-                                                cid, exKey),
+                                            sp.getCircuitSets(cid, exKey),
                                         onGoToRound: (round) =>
                                             sp.goToRound(cid, round),
                                         onNextRound: () =>
@@ -544,9 +540,16 @@ class _ActiveSessionScreenState
                                             sp.removeSetFromExercise(
                                                 exKey,
                                                 circuitId: cid),
+                                        // Mod 3: rimuovi esercizio dal circuito
+                                        onRemoveExercise: (exKey) =>
+                                            sp.removeExerciseFromCircuitInSession(
+                                                circuitId: cid,
+                                                exerciseKey: exKey),
+                                        // Mod 4: rimuovi intero circuito
+                                        onRemoveCircuit: () =>
+                                            sp.removeCircuitFromSession(cid),
                                         onModify: () =>
-                                            _showModifyCircuitSheet(
-                                                cid),
+                                            _showModifyCircuitSheet(cid),
                                         onReorderExercises:
                                             (reordered) => sp
                                                 .reorderCircuitExercises(
@@ -719,7 +722,7 @@ class _SessionActionsBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _SessionExerciseCard — tutti partono chiusi (_expanded = false)
+// _SessionExerciseCard — Mod 2: conferma prima di eliminare
 // ─────────────────────────────────────────────────────────────
 
 class _SessionExerciseCard extends StatefulWidget {
@@ -753,7 +756,6 @@ class _SessionExerciseCard extends StatefulWidget {
 
 class _SessionExerciseCardState
     extends State<_SessionExerciseCard> {
-  // PARTE 2: tutti gli esercizi partono CHIUSI
   bool _expanded = false;
 
   @override
@@ -771,16 +773,11 @@ class _SessionExerciseCardState
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withOpacity(0.08),
-                Colors.white.withOpacity(0.03),
-              ],
+              colors: [Colors.white.withOpacity(0.08), Colors.white.withOpacity(0.03)],
             ),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: widget.isRestingHere
-                  ? _indigo.withOpacity(0.5)
-                  : _cyan.withOpacity(0.15),
+              color: widget.isRestingHere ? _indigo.withOpacity(0.5) : _cyan.withOpacity(0.15),
               width: widget.isRestingHere ? 1.2 : 0.8,
             ),
             boxShadow: widget.isRestingHere
@@ -801,7 +798,28 @@ class _SessionExerciseCardState
                     Text(widget.exercise.exerciseName, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
                     Text('$completedCount/$totalCount serie', style: TextStyle(color: completedCount == totalCount && totalCount > 0 ? _teal : Colors.white.withOpacity(0.4), fontSize: 11)),
                   ])),
-                  GestureDetector(onTap: widget.onRemove, child: Container(width: 28, height: 28, decoration: BoxDecoration(color: _red.withOpacity(0.08), borderRadius: BorderRadius.circular(7)), child: Icon(Icons.delete_outline_rounded, size: 13, color: _red.withOpacity(0.7)))),
+                  // Mod 2: cestino con dialog di conferma
+                  GestureDetector(
+                    onTap: () async {
+                      final ok = await showGlassDialog<bool>(
+                        context: context,
+                        accentColor: _red,
+                        title: 'Elimina esercizio',
+                        message: 'Vuoi eliminare questo esercizio dalla sessione?',
+                        actions: [
+                          GlassDialogAction(
+                              label: 'Annulla',
+                              onTap: () => Navigator.pop(context, false)),
+                          GlassDialogAction(
+                              label: 'Elimina',
+                              isDestructive: true,
+                              onTap: () => Navigator.pop(context, true)),
+                        ],
+                      );
+                      if (ok == true && context.mounted) widget.onRemove();
+                    },
+                    child: Container(width: 28, height: 28, decoration: BoxDecoration(color: _red.withOpacity(0.08), borderRadius: BorderRadius.circular(7)), child: Icon(Icons.delete_outline_rounded, size: 13, color: _red.withOpacity(0.7))),
+                  ),
                   const SizedBox(width: 6),
                   Icon(_expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: Colors.white.withOpacity(0.35), size: 18),
                 ]),
@@ -832,7 +850,9 @@ class _SessionExerciseCardState
 }
 
 // ─────────────────────────────────────────────────────────────
-// PARTE 3: _SessionCircuitCard con PageView + swipe + puntini
+// _SessionCircuitCard — Mod 1: altezza PageView aumentata
+//                      Mod 3: onRemoveExercise
+//                      Mod 4: onRemoveCircuit con conferma
 // ─────────────────────────────────────────────────────────────
 
 class _SessionCircuitCard extends StatefulWidget {
@@ -847,7 +867,9 @@ class _SessionCircuitCard extends StatefulWidget {
   final void Function(dynamic exKey, int index) onToggle;
   final void Function(dynamic exKey, int index, double weight, int reps) onUpdate;
   final void Function(dynamic exKey) onAddSet, onRemoveSet;
+  final void Function(dynamic exKey) onRemoveExercise; // Mod 3
   final VoidCallback onModify;
+  final VoidCallback onRemoveCircuit; // Mod 4
   final void Function(List<SessionExercise>) onReorderExercises;
 
   const _SessionCircuitCard({
@@ -865,7 +887,9 @@ class _SessionCircuitCard extends StatefulWidget {
     required this.onUpdate,
     required this.onAddSet,
     required this.onRemoveSet,
+    required this.onRemoveExercise,
     required this.onModify,
+    required this.onRemoveCircuit,
     required this.onReorderExercises,
   });
 
@@ -876,7 +900,6 @@ class _SessionCircuitCard extends StatefulWidget {
 
 class _SessionCircuitCardState
     extends State<_SessionCircuitCard> {
-  // PARTE 2: circuiti partono CHIUSI
   bool _expanded = false;
   late PageController _pageController;
 
@@ -890,8 +913,6 @@ class _SessionCircuitCardState
   @override
   void didUpdateWidget(_SessionCircuitCard old) {
     super.didUpdateWidget(old);
-    // Sincronizza PageView con il round corrente
-    // quando cambia dall'esterno (es. frecce)
     if (old.currentRound != widget.currentRound &&
         _pageController.hasClients) {
       _pageController.animateToPage(
@@ -956,7 +977,41 @@ class _SessionCircuitCardState
                     Text(widget.circuitName, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
                     Text('$_completedCount/$_totalCount serie', style: TextStyle(color: _indigo.withOpacity(0.8), fontSize: 11)),
                   ])),
-                  GestureDetector(onTap: widget.onModify, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5), decoration: BoxDecoration(color: _indigo.withOpacity(0.12), borderRadius: BorderRadius.circular(8), border: Border.all(color: _indigo.withOpacity(0.3))), child: const Text('Modifica', style: TextStyle(color: _indigo, fontSize: 11, fontWeight: FontWeight.w600)))),
+                  GestureDetector(
+                    onTap: widget.onModify,
+                    child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5), decoration: BoxDecoration(color: _indigo.withOpacity(0.12), borderRadius: BorderRadius.circular(8), border: Border.all(color: _indigo.withOpacity(0.3))), child: const Text('Modifica', style: TextStyle(color: _indigo, fontSize: 11, fontWeight: FontWeight.w600))),
+                  ),
+                  const SizedBox(width: 6),
+                  // Mod 4: cestino circuito con dialog di conferma
+                  GestureDetector(
+                    onTap: () async {
+                      final ok = await showGlassDialog<bool>(
+                        context: context,
+                        accentColor: _red,
+                        title: 'Elimina circuito',
+                        message: 'Vuoi eliminare definitivamente questo circuito dalla sessione?',
+                        actions: [
+                          GlassDialogAction(
+                              label: 'Annulla',
+                              onTap: () => Navigator.pop(context, false)),
+                          GlassDialogAction(
+                              label: 'Elimina',
+                              isDestructive: true,
+                              onTap: () => Navigator.pop(context, true)),
+                        ],
+                      );
+                      if (ok == true && context.mounted) widget.onRemoveCircuit();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: _red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _red.withOpacity(0.3)),
+                      ),
+                      child: const Text('Elimina', style: TextStyle(color: _red, fontSize: 11, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
                   const SizedBox(width: 6),
                   Icon(_expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: Colors.white.withOpacity(0.35), size: 18),
                 ]),
@@ -965,8 +1020,7 @@ class _SessionCircuitCardState
             if (_expanded) ...[
               Container(height: 0.7, margin: const EdgeInsets.symmetric(horizontal: 14), decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, _indigo.withOpacity(0.3), Colors.transparent]))),
               const SizedBox(height: 10),
-
-              // Navigazione round: freccia ← | puntini | freccia →
+              // Navigazione round
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: ClipRRect(
@@ -981,7 +1035,6 @@ class _SessionCircuitCardState
                         border: Border.all(color: _indigo.withOpacity(0.2)),
                       ),
                       child: Row(children: [
-                        // Freccia sinistra
                         GestureDetector(
                           onTap: widget.currentRound > 0
                               ? () {
@@ -1002,7 +1055,6 @@ class _SessionCircuitCardState
                             child: Icon(Icons.chevron_left_rounded, color: widget.currentRound > 0 ? _indigo : Colors.white.withOpacity(0.2), size: 20),
                           ),
                         ),
-                        // Puntini indicatori + label
                         Expanded(
                           child: Column(children: [
                             Text(
@@ -1038,7 +1090,6 @@ class _SessionCircuitCardState
                             ],
                           ]),
                         ),
-                        // Freccia destra
                         GestureDetector(
                           onTap: widget.currentRound < widget.totalRounds - 1
                               ? () {
@@ -1065,20 +1116,15 @@ class _SessionCircuitCardState
                 ),
               ),
               const SizedBox(height: 10),
-
-              // PARTE 3: PageView orizzontale per swipe tra i round
+              // Mod 1: altezza PageView senza limite massimo
               SizedBox(
-                // Altezza stimata per n esercizi
                 height: widget.exercises.isEmpty
                     ? 60
-                    : (widget.exercises.length * 160.0).clamp(160, 480),
+                    : widget.exercises.length * 240.0,
                 child: PageView.builder(
                   controller: _pageController,
                   itemCount: widget.totalRounds,
-                  onPageChanged: (page) {
-                    // Sincronizza il provider quando l'utente fa swipe
-                    widget.onGoToRound(page);
-                  },
+                  onPageChanged: (page) => widget.onGoToRound(page),
                   itemBuilder: (ctx, roundIndex) {
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1094,6 +1140,7 @@ class _SessionCircuitCardState
                               onUpdate: widget.onUpdate,
                               onAddSet: widget.onAddSet,
                               onRemoveSet: widget.onRemoveSet,
+                              onRemoveExercise: widget.onRemoveExercise, // Mod 3
                               onReorderExercises: widget.onReorderExercises,
                             ),
                     );
@@ -1110,7 +1157,7 @@ class _SessionCircuitCardState
 }
 
 // ─────────────────────────────────────────────────────────────
-// _CircuitRoundContent — esercizi di un singolo round
+// _CircuitRoundContent — Mod 3: propagazione onRemoveExercise
 // ─────────────────────────────────────────────────────────────
 
 class _CircuitRoundContent extends StatelessWidget {
@@ -1121,6 +1168,7 @@ class _CircuitRoundContent extends StatelessWidget {
   final void Function(dynamic exKey, int index) onToggle;
   final void Function(dynamic exKey, int index, double weight, int reps) onUpdate;
   final void Function(dynamic exKey) onAddSet, onRemoveSet;
+  final void Function(dynamic exKey) onRemoveExercise; // Mod 3
   final void Function(List<SessionExercise>) onReorderExercises;
 
   const _CircuitRoundContent({
@@ -1133,6 +1181,7 @@ class _CircuitRoundContent extends StatelessWidget {
     required this.onUpdate,
     required this.onAddSet,
     required this.onRemoveSet,
+    required this.onRemoveExercise,
     required this.onReorderExercises,
   });
 
@@ -1179,6 +1228,7 @@ class _CircuitRoundContent extends StatelessWidget {
               onUpdate: (i, w, r) => onUpdate(ex.exerciseKey, i, w, r),
               onAddSet: () => onAddSet(ex.exerciseKey),
               onRemoveSet: () => onRemoveSet(ex.exerciseKey),
+              onRemove: () => onRemoveExercise(ex.exerciseKey), // Mod 3
             ),
           ),
         );
@@ -1188,7 +1238,7 @@ class _CircuitRoundContent extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _CircuitExerciseBlock
+// _CircuitExerciseBlock — Mod 3: cestino con dialog di conferma
 // ─────────────────────────────────────────────────────────────
 
 class _CircuitExerciseBlock extends StatelessWidget {
@@ -1197,6 +1247,7 @@ class _CircuitExerciseBlock extends StatelessWidget {
   final void Function(int) onToggle;
   final void Function(int, double, int) onUpdate;
   final VoidCallback onAddSet, onRemoveSet;
+  final VoidCallback onRemove; // Mod 3
 
   const _CircuitExerciseBlock({
     required this.exercise,
@@ -1205,6 +1256,7 @@ class _CircuitExerciseBlock extends StatelessWidget {
     required this.onUpdate,
     required this.onAddSet,
     required this.onRemoveSet,
+    required this.onRemove,
   });
 
   @override
@@ -1227,6 +1279,35 @@ class _CircuitExerciseBlock extends StatelessWidget {
               Container(width: 6, height: 6, decoration: BoxDecoration(color: _indigo, shape: BoxShape.circle)),
               const SizedBox(width: 7),
               Expanded(child: Text(exercise.exerciseName, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis)),
+              // Mod 3: cestino esercizio nel circuito
+              GestureDetector(
+                onTap: () async {
+                  final ok = await showGlassDialog<bool>(
+                    context: context,
+                    accentColor: _red,
+                    title: 'Elimina esercizio',
+                    message: 'Vuoi eliminare questo esercizio dalla sessione?',
+                    actions: [
+                      GlassDialogAction(
+                          label: 'Annulla',
+                          onTap: () => Navigator.pop(context, false)),
+                      GlassDialogAction(
+                          label: 'Elimina',
+                          isDestructive: true,
+                          onTap: () => Navigator.pop(context, true)),
+                    ],
+                  );
+                  if (ok == true && context.mounted) onRemove();
+                },
+                child: Container(
+                  width: 24, height: 24,
+                  decoration: BoxDecoration(
+                    color: _red.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(Icons.delete_outline_rounded, size: 12, color: _red.withOpacity(0.7)),
+                ),
+              ),
             ]),
             const SizedBox(height: 8),
             ...sets.asMap().entries.map((e) => _SetRow(index: e.key, set: e.value, onToggle: () => onToggle(e.key), onUpdate: (w, r) => onUpdate(e.key, w, r), compact: true)),
@@ -1275,8 +1356,7 @@ class _SetRowState extends State<_SetRow> {
     super.initState();
     _weightCtrl = TextEditingController(
         text: widget.set.weight > 0 ? widget.set.weight.toString() : '');
-    _repsCtrl =
-        TextEditingController(text: widget.set.reps.toString());
+    _repsCtrl = TextEditingController(text: widget.set.reps.toString());
   }
 
   @override
@@ -1284,6 +1364,20 @@ class _SetRowState extends State<_SetRow> {
     _weightCtrl.dispose();
     _repsCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_SetRow old) {
+    super.didUpdateWidget(old);
+    if (old.set.weight != widget.set.weight &&
+        !_weightCtrl.text.contains(
+            widget.set.weight.toString().replaceAll('.0', ''))) {
+      _weightCtrl.text =
+          widget.set.weight > 0 ? widget.set.weight.toString() : '';
+    }
+    if (old.set.reps != widget.set.reps) {
+      _repsCtrl.text = widget.set.reps.toString();
+    }
   }
 
   @override
@@ -1556,7 +1650,7 @@ class _ModifyCircuitInSessionSheetState extends State<_ModifyCircuitInSessionShe
 }
 
 // ─────────────────────────────────────────────────────────────
-// Micro widget condivisi nella sessione
+// Micro widget condivisi
 // ─────────────────────────────────────────────────────────────
 
 class _ChipRow extends StatelessWidget {
