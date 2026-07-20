@@ -255,18 +255,25 @@ class _ActiveSessionScreenState
     ));
   }
 
+  // ── FIX UNIFICATO: usa ExercisePickerSheet da shared_sheets ──
+
   Future<void> _showAddExerciseSheet() async {
     final sp = context.read<SessionProvider>();
     final all = HiveDatabase.instance.getExercises();
+    // Esercizi già presenti: mostrati come disabilitati
     final alreadyIn = sp.sessionExercises
         .where((e) => e.circuitId == null)
         .map((e) => e.exerciseKey)
         .toSet();
-    await _openSheet(_AddExerciseToSessionSheet(
+
+    await _openSheet(ExercisePickerSheet(
       allExercises: all,
-      alreadyIn: alreadyIn,
-      onConfirm: (keys) async {
-        for (final k in keys) {
+      disabledKeys: alreadyIn,
+      title: 'Aggiungi esercizio',
+      accentColor: _teal,
+      confirmLabel: 'Aggiungi',
+      onConfirm: (result) async {
+        for (final k in result.selectedKeys) {
           try {
             final ex = all.firstWhere((e) => e.key == k);
             await sp.addExerciseToSession(
@@ -284,15 +291,21 @@ class _ActiveSessionScreenState
   Future<void> _showAddCircuitSheet() async {
     final sp = context.read<SessionProvider>();
     final all = HiveDatabase.instance.getExercises();
-    await _openSheet(_AddCircuitToSessionSheet(
+
+    await _openSheet(ExercisePickerSheet(
       allExercises: all,
-      onConfirm: (keys, rounds, name) async {
-        final exList = <({
-          dynamic exerciseKey,
-          String exerciseName,
-          String muscleGroup,
-        })>[];
-        for (final k in keys) {
+      showNameField: true,
+      initialName: 'Circuito',
+      showRoundsControl: true,
+      initialRounds: 3,
+      title: 'Nuovo circuito',
+      accentColor: _indigo,
+      confirmLabel: 'Crea',
+      onConfirm: (result) async {
+        if (result.selectedKeys.isEmpty) return;
+        final exList =
+            <({dynamic exerciseKey, String exerciseName, String muscleGroup})>[];
+        for (final k in result.selectedKeys) {
           try {
             final ex = all.firstWhere((e) => e.key == k);
             exList.add((
@@ -303,38 +316,73 @@ class _ActiveSessionScreenState
           } catch (_) {}
         }
         await sp.addCircuitToSession(
-            exercises: exList, rounds: rounds, name: name);
+          exercises: exList,
+          rounds: result.rounds,
+          name: result.name.isNotEmpty ? result.name : 'Circuito',
+        );
         if (mounted) Navigator.pop(context);
       },
     ));
   }
 
+  // FIX PARTE 2: staged state — nessuna modifica va al provider
+  // prima della conferma. I checkbox aggiornano correttamente
+  // grazie allo stato locale di ExercisePickerSheet.
   Future<void> _showModifyCircuitSheet(String circuitId) async {
     final sp = context.read<SessionProvider>();
     final all = HiveDatabase.instance.getExercises();
-    await _openSheet(_ModifyCircuitInSessionSheet(
-      circuitId: circuitId,
-      circuitName: sp.getCircuitName(circuitId),
+
+    // Snapshot corrente (immutabile durante il picker)
+    final currentExercises = List<SessionExercise>.from(
+        sp.sessionExercises
+            .where((e) => e.circuitId == circuitId));
+    final currentKeys =
+        currentExercises.map((e) => e.exerciseKey).toSet();
+    final currentRounds = sp.getTotalRounds(circuitId);
+
+    await _openSheet(ExercisePickerSheet(
       allExercises: all,
-      currentExercises: sp.sessionExercises
-          .where((e) => e.circuitId == circuitId)
-          .toList(),
-      currentRounds: sp.getTotalRounds(circuitId),
-      onAddExercise: (exKey) {
-        try {
-          final ex = all.firstWhere((e) => e.key == exKey);
-          sp.addExerciseToCircuitInSession(
-            circuitId: circuitId,
-            exerciseKey: ex.key,
-            exerciseName: ex.name,
-            muscleGroup: ex.muscleGroup,
-          );
-        } catch (_) {}
-      },
-      onRemoveExercise: (exKey) =>
+      // Copia locale: ExercisePickerSheet gestisce il suo stato
+      initialSelectedKeys: Set<dynamic>.from(currentKeys),
+      showRoundsControl: true,
+      initialRounds: currentRounds,
+      title: 'Modifica circuito',
+      subtitle: sp.getCircuitName(circuitId),
+      accentColor: _indigo,
+      confirmLabel: 'Salva',
+      // Sempre visibile: l'utente potrebbe cambiare solo i cicli
+      alwaysShowConfirm: true,
+      onConfirm: (result) {
+        final newKeys = result.selectedKeys;
+
+        // 1. Aggiorna cicli solo se cambiati
+        if (result.rounds != currentRounds) {
+          sp.setCircuitRoundsInSession(circuitId, result.rounds);
+        }
+
+        // 2. Aggiungi nuovi esercizi (diff +)
+        for (final key in newKeys.difference(currentKeys)) {
+          try {
+            final ex = all.firstWhere((e) => e.key == key);
+            sp.addExerciseToCircuitInSession(
+              circuitId: circuitId,
+              exerciseKey: ex.key,
+              exerciseName: ex.name,
+              muscleGroup: ex.muscleGroup,
+            );
+          } catch (_) {}
+        }
+
+        // 3. Rimuovi esercizi deselezionati (diff -)
+        for (final key in currentKeys.difference(newKeys)) {
           sp.removeExerciseFromCircuitInSession(
-              circuitId: circuitId, exerciseKey: exKey),
-      onChangeRounds: (r) => sp.setCircuitRoundsInSession(circuitId, r),
+            circuitId: circuitId,
+            exerciseKey: key,
+          );
+        }
+
+        if (mounted) Navigator.pop(context);
+      },
     ));
   }
 
@@ -374,180 +422,184 @@ class _ActiveSessionScreenState
 
                 final topItems = _buildTopItems(sp.sessionExercises);
 
-                return Column(
-                  children: [
-                    _SessionHeader(
-                      workoutName: widget.workout.name,
-                      elapsed: sp.elapsedSeconds,
-                      completed: sp.completedSetsCount,
-                      total: sp.totalSetsCount,
-                      formatTime: _fmt,
-                      onBack: _onBack,
-                    ),
-                    if (sp.isResting)
-                      _RestTimerBanner(
-                          elapsed: sp.restElapsed,
-                          onStop: sp.stopRestTimer),
-                    Expanded(
-                      child: topItems.isEmpty
-                          ? Center(
-                              child: Text('Nessun esercizio',
-                                  style: TextStyle(
-                                      color: Colors.white.withOpacity(0.4),
-                                      fontSize: 14)))
-                          : ReorderableListView.builder(
-                              padding: const EdgeInsets.fromLTRB(
-                                  16, 8, 16, 120),
-                              physics: const BouncingScrollPhysics(),
-                              buildDefaultDragHandles: false,
-                              proxyDecorator: (child, i, anim) =>
-                                  AnimatedBuilder(
-                                animation: anim,
-                                builder: (_, __) => Material(
-                                  elevation: 0,
-                                  color: Colors.transparent,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(18),
-                                      border: Border.all(
-                                          color: _cyan.withOpacity(0.4),
-                                          width: 1.2),
-                                      boxShadow: [
-                                        BoxShadow(
-                                            color: _cyan.withOpacity(0.1),
-                                            blurRadius: 12)
-                                      ],
-                                    ),
-                                    child: child,
+                return Column(children: [
+                  _SessionHeader(
+                    workoutName: widget.workout.name,
+                    elapsed: sp.elapsedSeconds,
+                    completed: sp.completedSetsCount,
+                    total: sp.totalSetsCount,
+                    formatTime: _fmt,
+                    onBack: _onBack,
+                  ),
+                  if (sp.isResting)
+                    _RestTimerBanner(
+                        elapsed: sp.restElapsed,
+                        onStop: sp.stopRestTimer),
+                  Expanded(
+                    child: topItems.isEmpty
+                        ? Center(
+                            child: Text('Nessun esercizio',
+                                style: TextStyle(
+                                    color:
+                                        Colors.white.withOpacity(0.4),
+                                    fontSize: 14)))
+                        : ReorderableListView.builder(
+                            padding: const EdgeInsets.fromLTRB(
+                                16, 8, 16, 120),
+                            physics: const BouncingScrollPhysics(),
+                            buildDefaultDragHandles: false,
+                            proxyDecorator: (child, i, anim) =>
+                                AnimatedBuilder(
+                              animation: anim,
+                              builder: (_, __) => Material(
+                                elevation: 0,
+                                color: Colors.transparent,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius:
+                                        BorderRadius.circular(18),
+                                    border: Border.all(
+                                        color: _cyan.withOpacity(0.4),
+                                        width: 1.2),
+                                    boxShadow: [
+                                      BoxShadow(
+                                          color: _cyan.withOpacity(0.1),
+                                          blurRadius: 12)
+                                    ],
                                   ),
+                                  child: child,
                                 ),
                               ),
-                              onReorder: (oldIndex, newIndex) {
-                                if (newIndex > oldIndex) newIndex--;
-                                final reordered =
-                                    List<_TopItem>.from(topItems);
-                                final moved = reordered.removeAt(oldIndex);
-                                reordered.insert(newIndex, moved);
-                                final newFlat = <SessionExercise>[];
-                                for (final item in reordered) {
-                                  if (item.isFree) {
-                                    newFlat.add(item.exercise!);
-                                  } else {
-                                    newFlat.addAll(sp.sessionExercises
-                                        .where((e) =>
-                                            e.circuitId ==
-                                            item.circuitId));
-                                  }
-                                }
-                                sp.reorderSessionExercisesFlat(newFlat);
-                                HapticFeedback.selectionClick();
-                              },
-                              itemCount: topItems.length,
-                              itemBuilder: (ctx, i) {
-                                final item = topItems[i];
-                                if (item.isFree) {
-                                  final ex = item.exercise!;
-                                  return ReorderableDelayedDragStartListener(
-                                    key: ValueKey(item.key),
-                                    index: i,
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(
-                                          bottom: 12),
-                                      child: _SessionExerciseCard(
-                                        exercise: ex,
-                                        sets: sp.exerciseSets[
-                                                ex.exerciseKey] ??
-                                            [],
-                                        isRestingHere: sp.isResting &&
-                                            sp.restingExerciseId ==
-                                                ex.exerciseKey,
-                                        onToggle: (idx) => sp.toggleSet(
-                                            ex.exerciseKey, idx),
-                                        onUpdate: (idx, w, r) =>
-                                            sp.updateSet(
-                                                ex.exerciseKey, idx, w,
-                                                r),
-                                        onAddSet: () =>
-                                            sp.addSetToExercise(
-                                                ex.exerciseKey),
-                                        onRemoveSet: () =>
-                                            sp.removeSetFromExercise(
-                                                ex.exerciseKey),
-                                        onRemove: () =>
-                                            sp.removeExerciseFromSession(
-                                                ex.exerciseKey),
-                                        onUpdateNote: (note) =>
-                                            sp.updateExerciseNote(
-                                                ex.exerciseKey, note),
-                                        currentNote:
-                                            ex.sessionNote ?? '',
-                                      ),
-                                    ),
-                                  );
-                                } else {
-                                  final cid = item.circuitId!;
-                                  final circExs =
-                                      item.circuitExercises!;
-                                  return ReorderableDelayedDragStartListener(
-                                    key: ValueKey(item.key),
-                                    index: i,
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(
-                                          bottom: 12),
-                                      child: _SessionCircuitCard(
-                                        circuitId: cid,
-                                        circuitName:
-                                            sp.getCircuitName(cid),
-                                        exercises: circExs,
-                                        currentRound:
-                                            sp.getCurrentRound(cid),
-                                        totalRounds:
-                                            sp.getTotalRounds(cid),
-                                        getSets: (exKey) =>
-                                            sp.getCircuitSets(cid, exKey),
-                                        onGoToRound: (round) =>
-                                            sp.goToRound(cid, round),
-                                        onNextRound: () =>
-                                            sp.nextRound(cid),
-                                        onPrevRound: () =>
-                                            sp.prevRound(cid),
-                                        onToggle: (exKey, idx) =>
-                                            sp.toggleSet(exKey, idx,
-                                                circuitId: cid),
-                                        onUpdate: (exKey, idx, w, r) =>
-                                            sp.updateSet(exKey, idx, w,
-                                                r,
-                                                circuitId: cid),
-                                        onAddSet: (exKey) =>
-                                            sp.addSetToExercise(exKey,
-                                                circuitId: cid),
-                                        onRemoveSet: (exKey) =>
-                                            sp.removeSetFromExercise(exKey,
-                                                circuitId: cid),
-                                        onRemoveExercise: (exKey) =>
-                                            sp.removeExerciseFromCircuitInSession(
-                                                circuitId: cid,
-                                                exerciseKey: exKey),
-                                        onRemoveCircuit: () =>
-                                            sp.removeCircuitFromSession(cid),
-                                        onModify: () =>
-                                            _showModifyCircuitSheet(cid),
-                                        onReorderExercises: (reordered) =>
-                                            sp.reorderCircuitExercises(
-                                                cid, reordered),
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
                             ),
-                    ),
-                    _SessionActionsBar(
-                        onAdd: _showAddMenu,
-                        onFinish: _finishSession),
-                  ],
-                );
+                            onReorder: (oldIndex, newIndex) {
+                              if (newIndex > oldIndex) newIndex--;
+                              final reordered =
+                                  List<_TopItem>.from(topItems);
+                              final moved =
+                                  reordered.removeAt(oldIndex);
+                              reordered.insert(newIndex, moved);
+                              final newFlat = <SessionExercise>[];
+                              for (final item in reordered) {
+                                if (item.isFree) {
+                                  newFlat.add(item.exercise!);
+                                } else {
+                                  newFlat.addAll(sp.sessionExercises
+                                      .where((e) =>
+                                          e.circuitId ==
+                                          item.circuitId));
+                                }
+                              }
+                              sp.reorderSessionExercisesFlat(newFlat);
+                              HapticFeedback.selectionClick();
+                            },
+                            itemCount: topItems.length,
+                            itemBuilder: (ctx, i) {
+                              final item = topItems[i];
+                              if (item.isFree) {
+                                final ex = item.exercise!;
+                                return ReorderableDelayedDragStartListener(
+                                  key: ValueKey(item.key),
+                                  index: i,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(
+                                        bottom: 12),
+                                    child: _SessionExerciseCard(
+                                      exercise: ex,
+                                      sets: sp.exerciseSets[
+                                              ex.exerciseKey] ??
+                                          [],
+                                      isRestingHere: sp.isResting &&
+                                          sp.restingExerciseId ==
+                                              ex.exerciseKey,
+                                      onToggle: (idx) => sp.toggleSet(
+                                          ex.exerciseKey, idx),
+                                      onUpdate: (idx, w, r) =>
+                                          sp.updateSet(
+                                              ex.exerciseKey, idx, w,
+                                              r),
+                                      onAddSet: () =>
+                                          sp.addSetToExercise(
+                                              ex.exerciseKey),
+                                      onRemoveSet: () =>
+                                          sp.removeSetFromExercise(
+                                              ex.exerciseKey),
+                                      onRemove: () =>
+                                          sp.removeExerciseFromSession(
+                                              ex.exerciseKey),
+                                      onUpdateNote: (note) =>
+                                          sp.updateExerciseNote(
+                                              ex.exerciseKey, note),
+                                      currentNote:
+                                          ex.sessionNote ?? '',
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                final cid = item.circuitId!;
+                                final circExs =
+                                    item.circuitExercises!;
+                                return ReorderableDelayedDragStartListener(
+                                  key: ValueKey(item.key),
+                                  index: i,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(
+                                        bottom: 12),
+                                    child: _SessionCircuitCard(
+                                      circuitId: cid,
+                                      circuitName:
+                                          sp.getCircuitName(cid),
+                                      exercises: circExs,
+                                      currentRound:
+                                          sp.getCurrentRound(cid),
+                                      totalRounds:
+                                          sp.getTotalRounds(cid),
+                                      getSets: (exKey) =>
+                                          sp.getCircuitSets(cid, exKey),
+                                      onGoToRound: (round) =>
+                                          sp.goToRound(cid, round),
+                                      onNextRound: () =>
+                                          sp.nextRound(cid),
+                                      onPrevRound: () =>
+                                          sp.prevRound(cid),
+                                      onToggle: (exKey, idx) =>
+                                          sp.toggleSet(exKey, idx,
+                                              circuitId: cid),
+                                      onUpdate:
+                                          (exKey, idx, w, r) =>
+                                              sp.updateSet(
+                                                  exKey, idx, w, r,
+                                                  circuitId: cid),
+                                      onAddSet: (exKey) =>
+                                          sp.addSetToExercise(exKey,
+                                              circuitId: cid),
+                                      onRemoveSet: (exKey) =>
+                                          sp.removeSetFromExercise(
+                                              exKey,
+                                              circuitId: cid),
+                                      onRemoveExercise: (exKey) =>
+                                          sp.removeExerciseFromCircuitInSession(
+                                              circuitId: cid,
+                                              exerciseKey: exKey),
+                                      onRemoveCircuit: () =>
+                                          sp.removeCircuitFromSession(
+                                              cid),
+                                      onModify: () =>
+                                          _showModifyCircuitSheet(cid),
+                                      onReorderExercises:
+                                          (reordered) =>
+                                              sp.reorderCircuitExercises(
+                                                  cid, reordered),
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                  ),
+                  _SessionActionsBar(
+                      onAdd: _showAddMenu,
+                      onFinish: _finishSession),
+                ]);
               },
             ),
           ),
@@ -714,16 +766,11 @@ class _SessionExerciseCard extends StatefulWidget {
 
   const _SessionExerciseCard({
     super.key,
-    required this.exercise,
-    required this.sets,
-    required this.isRestingHere,
-    required this.onToggle,
-    required this.onUpdate,
-    required this.onAddSet,
-    required this.onRemoveSet,
-    required this.onRemove,
-    required this.onUpdateNote,
-    required this.currentNote,
+    required this.exercise, required this.sets,
+    required this.isRestingHere, required this.onToggle,
+    required this.onUpdate, required this.onAddSet,
+    required this.onRemoveSet, required this.onRemove,
+    required this.onUpdateNote, required this.currentNote,
   });
 
   @override
@@ -731,7 +778,8 @@ class _SessionExerciseCard extends StatefulWidget {
       _SessionExerciseCardState();
 }
 
-class _SessionExerciseCardState extends State<_SessionExerciseCard> {
+class _SessionExerciseCardState
+    extends State<_SessionExerciseCard> {
   bool _expanded = false;
 
   @override
@@ -765,7 +813,6 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
                     Text(widget.exercise.exerciseName, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
                     Text('$completedCount/$totalCount serie', style: TextStyle(color: completedCount == totalCount && totalCount > 0 ? _teal : Colors.white.withOpacity(0.4), fontSize: 11)),
                   ])),
-                  // Conferma eliminazione esercizio
                   GestureDetector(
                     onTap: () async {
                       final ok = await showGlassDialog<bool>(
@@ -813,58 +860,42 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
 
 // ─────────────────────────────────────────────────────────────
 // _SessionCircuitCard
-//
-// FIX SPAZIO ECCESSIVO (sezione 8 prompt):
-//   Rimosso PageView con altezza fissa.
-//   Sostituito con AnimatedSwitcher + _CircuitRoundContent
-//   che usa shrinkWrap:true e NeverScrollableScrollPhysics().
-//   Il bordo ora si adatta esattamente al contenuto reale.
 // ─────────────────────────────────────────────────────────────
 
 class _SessionCircuitCard extends StatefulWidget {
-  final String circuitId;
-  final String circuitName;
+  final String circuitId, circuitName;
   final List<SessionExercise> exercises;
-  final int currentRound;
-  final int totalRounds;
-  final List<ActiveSet> Function(dynamic exKey) getSets;
-  final void Function(int round) onGoToRound;
+  final int currentRound, totalRounds;
+  final List<ActiveSet> Function(dynamic) getSets;
+  final void Function(int) onGoToRound;
   final VoidCallback onNextRound, onPrevRound;
-  final void Function(dynamic exKey, int index) onToggle;
-  final void Function(dynamic exKey, int index, double weight, int reps) onUpdate;
-  final void Function(dynamic exKey) onAddSet, onRemoveSet;
-  final void Function(dynamic exKey) onRemoveExercise;
-  final VoidCallback onModify;
-  final VoidCallback onRemoveCircuit;
+  final void Function(dynamic, int) onToggle;
+  final void Function(dynamic, int, double, int) onUpdate;
+  final void Function(dynamic) onAddSet, onRemoveSet;
+  final void Function(dynamic) onRemoveExercise;
+  final VoidCallback onModify, onRemoveCircuit;
   final void Function(List<SessionExercise>) onReorderExercises;
 
   const _SessionCircuitCard({
     super.key,
-    required this.circuitId,
-    required this.circuitName,
-    required this.exercises,
-    required this.currentRound,
-    required this.totalRounds,
-    required this.getSets,
-    required this.onGoToRound,
-    required this.onNextRound,
-    required this.onPrevRound,
-    required this.onToggle,
-    required this.onUpdate,
-    required this.onAddSet,
-    required this.onRemoveSet,
-    required this.onRemoveExercise,
-    required this.onModify,
-    required this.onRemoveCircuit,
+    required this.circuitId, required this.circuitName,
+    required this.exercises, required this.currentRound,
+    required this.totalRounds, required this.getSets,
+    required this.onGoToRound, required this.onNextRound,
+    required this.onPrevRound, required this.onToggle,
+    required this.onUpdate, required this.onAddSet,
+    required this.onRemoveSet, required this.onRemoveExercise,
+    required this.onModify, required this.onRemoveCircuit,
     required this.onReorderExercises,
   });
 
   @override
-  State<_SessionCircuitCard> createState() => _SessionCircuitCardState();
+  State<_SessionCircuitCard> createState() =>
+      _SessionCircuitCardState();
 }
 
-class _SessionCircuitCardState extends State<_SessionCircuitCard> {
-  // FIX: PageController rimosso — non più necessario senza PageView
+class _SessionCircuitCardState
+    extends State<_SessionCircuitCard> {
   bool _expanded = false;
 
   int get _completedCount {
@@ -897,7 +928,6 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
             boxShadow: [BoxShadow(color: _indigo.withOpacity(0.1), blurRadius: 16)],
           ),
           child: Column(children: [
-            // Header
             GestureDetector(
               onTap: () => setState(() => _expanded = !_expanded),
               child: Padding(
@@ -913,7 +943,6 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                   ])),
                   GestureDetector(onTap: widget.onModify, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5), decoration: BoxDecoration(color: _indigo.withOpacity(0.12), borderRadius: BorderRadius.circular(8), border: Border.all(color: _indigo.withOpacity(0.3))), child: const Text('Modifica', style: TextStyle(color: _indigo, fontSize: 11, fontWeight: FontWeight.w600)))),
                   const SizedBox(width: 6),
-                  // Conferma eliminazione circuito
                   GestureDetector(
                     onTap: () async {
                       final ok = await showGlassDialog<bool>(
@@ -928,11 +957,7 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                       );
                       if (ok == true && context.mounted) widget.onRemoveCircuit();
                     },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                      decoration: BoxDecoration(color: _red.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: _red.withOpacity(0.3))),
-                      child: const Text('Elimina', style: TextStyle(color: _red, fontSize: 11, fontWeight: FontWeight.w600)),
-                    ),
+                    child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5), decoration: BoxDecoration(color: _red.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: _red.withOpacity(0.3))), child: const Text('Elimina', style: TextStyle(color: _red, fontSize: 11, fontWeight: FontWeight.w600))),
                   ),
                   const SizedBox(width: 6),
                   Icon(_expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: Colors.white.withOpacity(0.35), size: 18),
@@ -942,7 +967,7 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
             if (_expanded) ...[
               Container(height: 0.7, margin: const EdgeInsets.symmetric(horizontal: 14), decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, _indigo.withOpacity(0.3), Colors.transparent]))),
               const SizedBox(height: 10),
-              // Navigazione round — frecce + puntini
+              // Navigazione round
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: ClipRRect(
@@ -954,7 +979,6 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                       decoration: BoxDecoration(color: _indigo.withOpacity(0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: _indigo.withOpacity(0.2))),
                       child: Row(children: [
                         GestureDetector(
-                          // FIX: rimosso _pageController.animateToPage
                           onTap: widget.currentRound > 0 ? widget.onPrevRound : null,
                           child: Container(width: 30, height: 30, decoration: BoxDecoration(color: widget.currentRound > 0 ? _indigo.withOpacity(0.15) : Colors.transparent, shape: BoxShape.circle), child: Icon(Icons.chevron_left_rounded, color: widget.currentRound > 0 ? _indigo : Colors.white.withOpacity(0.2), size: 20)),
                         ),
@@ -968,7 +992,6 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                                 children: List.generate(widget.totalRounds, (i) {
                                   final active = i == widget.currentRound;
                                   return GestureDetector(
-                                    // FIX: rimosso _pageController.animateToPage
                                     onTap: () => widget.onGoToRound(i),
                                     child: AnimatedContainer(
                                       duration: const Duration(milliseconds: 200),
@@ -987,7 +1010,6 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                           ]),
                         ),
                         GestureDetector(
-                          // FIX: rimosso _pageController.animateToPage
                           onTap: widget.currentRound < widget.totalRounds - 1 ? widget.onNextRound : null,
                           child: Container(width: 30, height: 30, decoration: BoxDecoration(color: widget.currentRound < widget.totalRounds - 1 ? _indigo.withOpacity(0.15) : Colors.transparent, shape: BoxShape.circle), child: Icon(Icons.chevron_right_rounded, color: widget.currentRound < widget.totalRounds - 1 ? _indigo : Colors.white.withOpacity(0.2), size: 20)),
                         ),
@@ -997,10 +1019,7 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                 ),
               ),
               const SizedBox(height: 10),
-              // FIX SPAZIO ECCESSIVO:
-              // AnimatedSwitcher sostituisce PageView con altezza fissa.
-              // _CircuitRoundContent usa shrinkWrap:true →
-              // il bordo del circuito si adatta esattamente al contenuto.
+              // Contenuto round — shrinkWrap elimina lo spazio eccessivo
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 transitionBuilder: (child, anim) =>
@@ -1012,10 +1031,7 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                       ? Padding(
                           padding: const EdgeInsets.all(14),
                           child: Text('Nessun esercizio',
-                              style: TextStyle(
-                                  color: Colors.white.withOpacity(0.35),
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic)))
+                              style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 12, fontStyle: FontStyle.italic)))
                       : _CircuitRoundContent(
                           circuitId: widget.circuitId,
                           exercises: widget.exercises,
@@ -1040,31 +1056,24 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
 
 // ─────────────────────────────────────────────────────────────
 // _CircuitRoundContent
-// shrinkWrap:true + NeverScrollableScrollPhysics() → altezza naturale
 // ─────────────────────────────────────────────────────────────
 
 class _CircuitRoundContent extends StatelessWidget {
   final String circuitId;
   final List<SessionExercise> exercises;
   final int roundIndex;
-  final List<ActiveSet> Function(dynamic exKey) getSets;
-  final void Function(dynamic exKey, int index) onToggle;
-  final void Function(dynamic exKey, int index, double weight, int reps) onUpdate;
-  final void Function(dynamic exKey) onAddSet, onRemoveSet;
-  final void Function(dynamic exKey) onRemoveExercise;
+  final List<ActiveSet> Function(dynamic) getSets;
+  final void Function(dynamic, int) onToggle;
+  final void Function(dynamic, int, double, int) onUpdate;
+  final void Function(dynamic) onAddSet, onRemoveSet, onRemoveExercise;
   final void Function(List<SessionExercise>) onReorderExercises;
 
   const _CircuitRoundContent({
-    required this.circuitId,
-    required this.exercises,
-    required this.roundIndex,
-    required this.getSets,
-    required this.onToggle,
-    required this.onUpdate,
-    required this.onAddSet,
-    required this.onRemoveSet,
-    required this.onRemoveExercise,
-    required this.onReorderExercises,
+    required this.circuitId, required this.exercises,
+    required this.roundIndex, required this.getSets,
+    required this.onToggle, required this.onUpdate,
+    required this.onAddSet, required this.onRemoveSet,
+    required this.onRemoveExercise, required this.onReorderExercises,
   });
 
   @override
@@ -1080,8 +1089,8 @@ class _CircuitRoundContent extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _cyan.withOpacity(0.5), width: 1.2),
-              boxShadow: [BoxShadow(color: _cyan.withOpacity(0.12), blurRadius: 10)],
+              border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.5), width: 1.2),
+              boxShadow: [BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.12), blurRadius: 10)],
             ),
             child: child,
           ),
@@ -1103,8 +1112,7 @@ class _CircuitRoundContent extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: _CircuitExerciseBlock(
-              exercise: ex,
-              sets: sets,
+              exercise: ex, sets: sets,
               onToggle: (i) => onToggle(ex.exerciseKey, i),
               onUpdate: (i, w, r) => onUpdate(ex.exerciseKey, i, w, r),
               onAddSet: () => onAddSet(ex.exerciseKey),
@@ -1156,7 +1164,6 @@ class _CircuitExerciseBlock extends StatelessWidget {
               Container(width: 6, height: 6, decoration: BoxDecoration(color: _indigo, shape: BoxShape.circle)),
               const SizedBox(width: 7),
               Expanded(child: Text(exercise.exerciseName, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis)),
-              // Conferma eliminazione esercizio nel circuito
               GestureDetector(
                 onTap: () async {
                   final ok = await showGlassDialog<bool>(
@@ -1219,7 +1226,8 @@ class _SetRowState extends State<_SetRow> {
     super.initState();
     _weightCtrl = TextEditingController(
         text: widget.set.weight > 0 ? widget.set.weight.toString() : '');
-    _repsCtrl = TextEditingController(text: widget.set.reps.toString());
+    _repsCtrl =
+        TextEditingController(text: widget.set.reps.toString());
   }
 
   @override
@@ -1401,147 +1409,4 @@ class _SessionMenuOption extends StatelessWidget {
       ))),
     );
   }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Sheet: _AddExerciseToSessionSheet
-// ─────────────────────────────────────────────────────────────
-
-class _AddExerciseToSessionSheet extends StatefulWidget {
-  final List<HiveExercise> allExercises;
-  final Set<dynamic> alreadyIn;
-  final void Function(Set<dynamic>) onConfirm;
-  const _AddExerciseToSessionSheet({required this.allExercises, required this.alreadyIn, required this.onConfirm});
-  @override State<_AddExerciseToSessionSheet> createState() => _AddExerciseToSessionSheetState();
-}
-class _AddExerciseToSessionSheetState extends State<_AddExerciseToSessionSheet> {
-  String _search = ''; String _muscle = 'Tutti'; final Set<dynamic> _selected = {};
-  static const _groups = ['Tutti', 'Petto', 'Schiena', 'Spalle', 'Bicipiti', 'Tricipiti', 'Gambe', 'Addominali', 'Glutei', 'Polpacci'];
-  @override
-  Widget build(BuildContext context) {
-    final filtered = widget.allExercises.where((e) => (_muscle == 'Tutti' || e.muscleGroup == _muscle) && (_search.isEmpty || e.name.toLowerCase().contains(_search.toLowerCase()))).toList();
-    return GlassSheetWrapper(title: 'Aggiungi esercizio', subtitle: _selected.isEmpty ? null : '${_selected.length} selezionati', accentColor: _teal, child: Column(mainAxisSize: MainAxisSize.min, children: [
-      GlassTextField(hintText: 'Cerca esercizio...', onChanged: (v) => setState(() => _search = v)),
-      const SizedBox(height: 10),
-      _ChipRow(groups: _groups, selected: _muscle, color: _teal, onSelect: (g) => setState(() => _muscle = g)),
-      const SizedBox(height: 10),
-      SizedBox(height: 260, child: ListView.builder(physics: const BouncingScrollPhysics(), itemCount: filtered.length, itemBuilder: (_, i) {
-        final ex = filtered[i]; final isIn = widget.alreadyIn.contains(ex.key); final isSel = _selected.contains(ex.key);
-        return _ExTile(exercise: ex, isIn: isIn, isSel: isSel, accentColor: _teal, onTap: isIn ? null : () => setState(() { if (isSel) _selected.remove(ex.key); else _selected.add(ex.key); }));
-      })),
-      if (_selected.isNotEmpty) ...[const SizedBox(height: 10), GlassPrimaryButton(label: 'Aggiungi ${_selected.length} esercizi', color: _teal, onTap: () => widget.onConfirm(_selected))],
-    ]));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Sheet: _AddCircuitToSessionSheet
-// ─────────────────────────────────────────────────────────────
-
-class _AddCircuitToSessionSheet extends StatefulWidget {
-  final List<HiveExercise> allExercises;
-  final void Function(Set<dynamic>, int, String) onConfirm;
-  const _AddCircuitToSessionSheet({required this.allExercises, required this.onConfirm});
-  @override State<_AddCircuitToSessionSheet> createState() => _AddCircuitToSessionSheetState();
-}
-class _AddCircuitToSessionSheetState extends State<_AddCircuitToSessionSheet> {
-  String _search = ''; String _muscle = 'Tutti'; final Set<dynamic> _selected = {}; int _rounds = 3;
-  final _nameCtrl = TextEditingController(text: 'Circuito');
-  static const _groups = ['Tutti', 'Petto', 'Schiena', 'Spalle', 'Bicipiti', 'Tricipiti', 'Gambe', 'Addominali', 'Glutei', 'Polpacci'];
-  @override void dispose() { _nameCtrl.dispose(); super.dispose(); }
-  @override
-  Widget build(BuildContext context) {
-    final filtered = widget.allExercises.where((e) => (_muscle == 'Tutti' || e.muscleGroup == _muscle) && (_search.isEmpty || e.name.toLowerCase().contains(_search.toLowerCase()))).toList();
-    return GlassSheetWrapper(title: 'Nuovo circuito', accentColor: _indigo, child: Column(mainAxisSize: MainAxisSize.min, children: [
-      GlassTextField(controller: _nameCtrl, hintText: 'Nome circuito...', onChanged: (_) {}),
-      const SizedBox(height: 12),
-      _RoundsRow(rounds: _rounds, onChanged: (v) => setState(() => _rounds = v)),
-      const SizedBox(height: 12),
-      GlassTextField(hintText: 'Cerca esercizio...', onChanged: (v) => setState(() => _search = v)),
-      const SizedBox(height: 10),
-      _ChipRow(groups: _groups, selected: _muscle, color: _indigo, onSelect: (g) => setState(() => _muscle = g)),
-      const SizedBox(height: 10),
-      SizedBox(height: 220, child: ListView.builder(physics: const BouncingScrollPhysics(), itemCount: filtered.length, itemBuilder: (_, i) {
-        final ex = filtered[i]; final isSel = _selected.contains(ex.key);
-        return _ExTile(exercise: ex, isIn: false, isSel: isSel, accentColor: _indigo, onTap: () => setState(() { if (isSel) _selected.remove(ex.key); else _selected.add(ex.key); }));
-      })),
-      if (_selected.isNotEmpty) ...[const SizedBox(height: 10), GlassPrimaryButton(label: 'Crea · ${_selected.length} esercizi · $_rounds cicli', color: _indigo, onTap: () => widget.onConfirm(_selected, _rounds, _nameCtrl.text.trim().isNotEmpty ? _nameCtrl.text.trim() : 'Circuito'))],
-    ]));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Sheet: _ModifyCircuitInSessionSheet
-// ─────────────────────────────────────────────────────────────
-
-class _ModifyCircuitInSessionSheet extends StatefulWidget {
-  final String circuitId, circuitName;
-  final List<HiveExercise> allExercises;
-  final List<SessionExercise> currentExercises;
-  final int currentRounds;
-  final void Function(dynamic) onAddExercise, onRemoveExercise;
-  final void Function(int) onChangeRounds;
-  const _ModifyCircuitInSessionSheet({required this.circuitId, required this.circuitName, required this.allExercises, required this.currentExercises, required this.currentRounds, required this.onAddExercise, required this.onRemoveExercise, required this.onChangeRounds});
-  @override State<_ModifyCircuitInSessionSheet> createState() => _ModifyCircuitInSessionSheetState();
-}
-class _ModifyCircuitInSessionSheetState extends State<_ModifyCircuitInSessionSheet> {
-  String _search = ''; late int _rounds;
-  @override void initState() { super.initState(); _rounds = widget.currentRounds; }
-  @override
-  Widget build(BuildContext context) {
-    final currentKeys = widget.currentExercises.map((e) => e.exerciseKey).toSet();
-    final available = widget.allExercises.where((e) => _search.isEmpty || e.name.toLowerCase().contains(_search.toLowerCase())).toList();
-    return GlassSheetWrapper(title: 'Modifica circuito', subtitle: widget.circuitName, accentColor: _indigo, child: Column(mainAxisSize: MainAxisSize.min, children: [
-      _RoundsRow(rounds: _rounds, onChanged: (v) { setState(() => _rounds = v); widget.onChangeRounds(v); }),
-      const SizedBox(height: 12),
-      GlassTextField(hintText: 'Cerca esercizio...', onChanged: (v) => setState(() => _search = v)),
-      const SizedBox(height: 10),
-      SizedBox(height: 260, child: ListView.builder(physics: const BouncingScrollPhysics(), itemCount: available.length, itemBuilder: (_, i) {
-        final ex = available[i]; final isIn = currentKeys.contains(ex.key);
-        return _ExTile(exercise: ex, isIn: false, isSel: isIn, accentColor: _teal, onTap: () { if (isIn) { widget.onRemoveExercise(ex.key); } else { widget.onAddExercise(ex.key); } setState(() {}); });
-      })),
-      const SizedBox(height: 10),
-      GlassPrimaryButton(label: 'Chiudi', color: _indigo, onTap: () => Navigator.pop(context)),
-    ]));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Micro widget condivisi
-// ─────────────────────────────────────────────────────────────
-
-class _ChipRow extends StatelessWidget {
-  final List<String> groups; final String selected; final Color color; final void Function(String) onSelect;
-  const _ChipRow({required this.groups, required this.selected, required this.color, required this.onSelect});
-  @override
-  Widget build(BuildContext context) => SizedBox(height: 34, child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: groups.length, separatorBuilder: (_, __) => const SizedBox(width: 6), itemBuilder: (_, i) {
-    final g = groups[i]; final sel = selected == g;
-    return GestureDetector(onTap: () => onSelect(g), child: AnimatedContainer(duration: const Duration(milliseconds: 150), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), decoration: BoxDecoration(color: sel ? color.withOpacity(0.2) : Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(9), border: Border.all(color: sel ? color.withOpacity(0.6) : Colors.white.withOpacity(0.1), width: sel ? 1.2 : 0.8)), child: Text(g, style: TextStyle(color: sel ? color : Colors.white.withOpacity(0.55), fontSize: 12, fontWeight: sel ? FontWeight.w700 : FontWeight.w500))));
-  }));
-}
-
-class _RoundsRow extends StatelessWidget {
-  final int rounds; final void Function(int) onChanged;
-  const _RoundsRow({required this.rounds, required this.onChanged});
-  @override
-  Widget build(BuildContext context) => Row(children: [
-    Text('Cicli:', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14, fontWeight: FontWeight.w600)),
-    const Spacer(),
-    GestureDetector(onTap: rounds > 1 ? () => onChanged(rounds - 1) : null, child: Container(width: 32, height: 32, decoration: BoxDecoration(color: rounds > 1 ? _cyan.withOpacity(0.1) : Colors.transparent, shape: BoxShape.circle, border: Border.all(color: rounds > 1 ? _cyan.withOpacity(0.4) : Colors.white.withOpacity(0.1), width: 1)), child: Icon(Icons.remove_rounded, size: 16, color: rounds > 1 ? _cyan : Colors.white.withOpacity(0.2)))),
-    SizedBox(width: 44, child: Text('$rounds', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
-    GestureDetector(onTap: () => onChanged(rounds + 1), child: Container(width: 32, height: 32, decoration: BoxDecoration(color: _cyan.withOpacity(0.1), shape: BoxShape.circle, border: Border.all(color: _cyan.withOpacity(0.4), width: 1)), child: const Icon(Icons.add_rounded, size: 16, color: _cyan))),
-  ]);
-}
-
-class _ExTile extends StatelessWidget {
-  final HiveExercise exercise; final bool isIn, isSel; final Color accentColor; final VoidCallback? onTap;
-  const _ExTile({required this.exercise, required this.isIn, required this.isSel, required this.accentColor, required this.onTap});
-  @override
-  Widget build(BuildContext context) => ListTile(
-    dense: true,
-    leading: AnimatedContainer(duration: const Duration(milliseconds: 150), width: 22, height: 22, decoration: BoxDecoration(color: isSel ? accentColor : Colors.transparent, borderRadius: BorderRadius.circular(6), border: Border.all(color: isSel ? accentColor : Colors.white.withOpacity(0.25), width: 1.2)), child: isSel ? const Icon(Icons.check_rounded, size: 14, color: Colors.white) : null),
-    title: Text(exercise.name, style: TextStyle(color: isIn ? Colors.white.withOpacity(0.35) : Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-    subtitle: Text(exercise.muscleGroup, style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11)),
-    onTap: onTap,
-  );
 }

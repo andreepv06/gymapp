@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../models/hive_models.dart';
 
 const kTeal = Color(0xFF00D4AA);
 const kCyan = Color(0xFF00E5FF);
@@ -40,11 +41,6 @@ Future<T?> showKeyboardSafeSheet<T>(
 
 // ─────────────────────────────────────────────────────────────
 // showGlassDialog
-//
-// [actionsAxis] — Axis.horizontal (default, bottoni in riga)
-//              — Axis.vertical   (bottoni in colonna, consigliato
-//                                 quando le azioni sono ≥ 3 o i
-//                                 label sono lunghi)
 // ─────────────────────────────────────────────────────────────
 
 Future<T?> showGlassDialog<T>({
@@ -114,22 +110,26 @@ Future<T?> showGlassDialog<T>({
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Azioni — orizzontali o verticali
                 if (actionsAxis == Axis.horizontal)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
-                    children: actions.map((a) => Padding(
-                      padding: const EdgeInsets.only(left: 10),
-                      child: _GlassDialogBtn(action: a),
-                    )).toList(),
+                    children: actions
+                        .map((a) => Padding(
+                              padding: const EdgeInsets.only(left: 10),
+                              child: _GlassDialogBtn(action: a),
+                            ))
+                        .toList(),
                   )
                 else
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: actions.map((a) => Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: _GlassDialogBtn(action: a, fullWidth: true),
-                    )).toList(),
+                    children: actions
+                        .map((a) => Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child:
+                                  _GlassDialogBtn(action: a, fullWidth: true),
+                            ))
+                        .toList(),
                   ),
               ],
             ),
@@ -171,10 +171,7 @@ class _GlassDialogBtn extends StatelessWidget {
   final GlassDialogAction action;
   final bool fullWidth;
 
-  const _GlassDialogBtn({
-    required this.action,
-    this.fullWidth = false,
-  });
+  const _GlassDialogBtn({required this.action, this.fullWidth = false});
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +183,8 @@ class _GlassDialogBtn extends StatelessWidget {
       onTap: action.onTap,
       child: Container(
         width: fullWidth ? double.infinity : null,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         decoration: BoxDecoration(
           color: isNeutral
               ? Colors.white.withOpacity(0.07)
@@ -274,31 +272,29 @@ class GlassSheetWrapper extends StatelessWidget {
           const SizedBox(height: 18),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                if (leadingIcon != null) ...[
-                  leadingIcon!,
-                  const SizedBox(width: 12),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800)),
-                      if (subtitle != null)
-                        Text(subtitle!,
-                            style: TextStyle(
-                                color: accentColor.withOpacity(0.7),
-                                fontSize: 12)),
-                    ],
-                  ),
-                ),
+            child: Row(children: [
+              if (leadingIcon != null) ...[
+                leadingIcon!,
+                const SizedBox(width: 12),
               ],
-            ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800)),
+                    if (subtitle != null)
+                      Text(subtitle!,
+                          style: TextStyle(
+                              color: accentColor.withOpacity(0.7),
+                              fontSize: 12)),
+                  ],
+                ),
+              ),
+            ]),
           ),
           const SizedBox(height: 16),
           Padding(
@@ -351,14 +347,16 @@ class GlassTextField extends StatelessWidget {
             autofocus: autofocus,
             maxLines: maxLines,
             textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style:
+                const TextStyle(color: Colors.white, fontSize: 14),
             decoration: InputDecoration(
               hintText: hintText,
               labelText: labelText,
               hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.3), fontSize: 14),
-              labelStyle:
-                  TextStyle(color: Colors.white.withOpacity(0.5)),
+                  color: Colors.white.withOpacity(0.3),
+                  fontSize: 14),
+              labelStyle: TextStyle(
+                  color: Colors.white.withOpacity(0.5)),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
                   horizontal: 14, vertical: 13),
@@ -438,7 +436,7 @@ class GlassPrimaryButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ExerciseFormSheet — unificato creazione + modifica
+// ExerciseFormSheet — creazione + modifica esercizio
 // ─────────────────────────────────────────────────────────────
 
 class ExerciseFormSheet extends StatefulWidget {
@@ -461,7 +459,8 @@ class ExerciseFormSheet extends StatefulWidget {
   bool get isEditing => initialName != null;
 
   @override
-  State<ExerciseFormSheet> createState() => _ExerciseFormSheetState();
+  State<ExerciseFormSheet> createState() =>
+      _ExerciseFormSheetState();
 }
 
 class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
@@ -473,7 +472,8 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
   @override
   void initState() {
     super.initState();
-    _nameCtrl = TextEditingController(text: widget.initialName ?? '');
+    _nameCtrl =
+        TextEditingController(text: widget.initialName ?? '');
     _notesCtrl =
         TextEditingController(text: widget.initialNotes ?? '');
     _selectedMuscle =
@@ -498,17 +498,18 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
       return;
     }
     setState(() => _nameError = null);
-    widget.onConfirm(name, _selectedMuscle, _notesCtrl.text.trim());
+    widget.onConfirm(
+        name, _selectedMuscle, _notesCtrl.text.trim());
   }
 
   @override
   Widget build(BuildContext context) {
     final canConfirm =
         _nameCtrl.text.trim().isNotEmpty && _nameError == null;
-
     return GlassSheetWrapper(
-      title:
-          widget.isEditing ? 'Modifica esercizio' : 'Nuovo esercizio',
+      title: widget.isEditing
+          ? 'Modifica esercizio'
+          : 'Nuovo esercizio',
       subtitle: widget.isEditing ? widget.initialName : null,
       accentColor: kTeal,
       leadingIcon: Container(
@@ -520,113 +521,69 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
         child: const Icon(Icons.fitness_center_rounded,
             color: kTeal, size: 20),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GlassTextField(
-            controller: _nameCtrl,
-            hintText: 'Es. Panca piana, Squat...',
-            labelText: 'Nome esercizio',
-            onChanged: (v) {
-              setState(() {
-                _nameError = widget.existingNames
-                        .contains(v.trim().toLowerCase())
-                    ? 'Esercizio già esistente'
-                    : null;
-              });
-            },
-          ),
-          if (_nameError != null) ...[
-            const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(_nameError!,
-                  style: TextStyle(
-                      color: kRed.withOpacity(0.85), fontSize: 11)),
-            ),
-          ],
-          const SizedBox(height: 14),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        GlassTextField(
+          controller: _nameCtrl,
+          hintText: 'Es. Panca piana, Squat...',
+          labelText: 'Nome esercizio',
+          onChanged: (v) {
+            setState(() {
+              _nameError = widget.existingNames
+                      .contains(v.trim().toLowerCase())
+                  ? 'Esercizio già esistente'
+                  : null;
+            });
+          },
+        ),
+        if (_nameError != null) ...[
+          const SizedBox(height: 6),
           Align(
             alignment: Alignment.centerLeft,
-            child: Text('Gruppo muscolare',
+            child: Text(_nameError!,
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.4)),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 36,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: kMuscleGroups.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 6),
-              itemBuilder: (_, i) {
-                final g = kMuscleGroups[i];
-                final sel = _selectedMuscle == g;
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedMuscle = g),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: sel
-                          ? kTeal.withOpacity(0.2)
-                          : Colors.white.withOpacity(0.06),
-                      borderRadius: BorderRadius.circular(9),
-                      border: Border.all(
-                        color: sel
-                            ? kTeal.withOpacity(0.6)
-                            : Colors.white.withOpacity(0.1),
-                        width: sel ? 1.2 : 0.8,
-                      ),
-                      boxShadow: sel
-                          ? [
-                              BoxShadow(
-                                  color: kTeal.withOpacity(0.15),
-                                  blurRadius: 8)
-                            ]
-                          : null,
-                    ),
-                    child: Text(g,
-                        style: TextStyle(
-                            color: sel
-                                ? kTeal
-                                : Colors.white.withOpacity(0.55),
-                            fontSize: 12,
-                            fontWeight: sel
-                                ? FontWeight.w700
-                                : FontWeight.w500)),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 14),
-          GlassTextField(
-            controller: _notesCtrl,
-            hintText: 'Es. Grip neutro, 3 secondi in discesa...',
-            labelText: 'Note (opzionale)',
-            maxLines: 2,
-          ),
-          const SizedBox(height: 20),
-          GlassPrimaryButton(
-            label: widget.isEditing
-                ? 'Salva modifiche'
-                : 'Aggiungi esercizio',
-            color: kTeal,
-            onTap: canConfirm ? _submit : null,
+                    color: kRed.withOpacity(0.85),
+                    fontSize: 11)),
           ),
         ],
-      ),
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text('Gruppo muscolare',
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.4)),
+        ),
+        const SizedBox(height: 8),
+        _SharedMuscleChips(
+          groups: kMuscleGroups,
+          selected: _selectedMuscle,
+          accentColor: kTeal,
+          onSelect: (g) => setState(() => _selectedMuscle = g),
+        ),
+        const SizedBox(height: 14),
+        GlassTextField(
+          controller: _notesCtrl,
+          hintText: 'Es. Grip neutro, 3 secondi in discesa...',
+          labelText: 'Note (opzionale)',
+          maxLines: 2,
+        ),
+        const SizedBox(height: 20),
+        GlassPrimaryButton(
+          label: widget.isEditing
+              ? 'Salva modifiche'
+              : 'Aggiungi esercizio',
+          color: kTeal,
+          onTap: canConfirm ? _submit : null,
+        ),
+      ]),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// WorkoutCreateSheet — unificato creazione scheda
+// WorkoutCreateSheet
 // ─────────────────────────────────────────────────────────────
 
 class WorkoutCreateSheet extends StatefulWidget {
@@ -638,7 +595,8 @@ class WorkoutCreateSheet extends StatefulWidget {
       _WorkoutCreateSheetState();
 }
 
-class _WorkoutCreateSheetState extends State<WorkoutCreateSheet> {
+class _WorkoutCreateSheetState
+    extends State<WorkoutCreateSheet> {
   final _nameCtrl = TextEditingController();
 
   @override
@@ -650,7 +608,6 @@ class _WorkoutCreateSheetState extends State<WorkoutCreateSheet> {
   @override
   Widget build(BuildContext context) {
     final hasName = _nameCtrl.text.trim().isNotEmpty;
-
     return GlassSheetWrapper(
       title: 'Nuova scheda',
       accentColor: kTeal,
@@ -660,27 +617,456 @@ class _WorkoutCreateSheetState extends State<WorkoutCreateSheet> {
           color: kTeal.withOpacity(0.15),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Icon(Icons.add_rounded, color: kTeal, size: 20),
+        child: const Icon(Icons.add_rounded,
+            color: kTeal, size: 20),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        GlassTextField(
+          controller: _nameCtrl,
+          hintText: 'Es. Push Day, Full Body...',
+          labelText: 'Nome scheda',
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 20),
+        GlassPrimaryButton(
+          label: 'Crea scheda',
+          color: kTeal,
+          onTap: hasName
+              ? () => widget.onConfirm(_nameCtrl.text.trim())
+              : null,
+        ),
+      ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ExercisePickerResult
+// ─────────────────────────────────────────────────────────────
+
+class ExercisePickerResult {
+  final Set<dynamic> selectedKeys;
+  final int rounds;
+  final String name;
+
+  const ExercisePickerResult({
+    required this.selectedKeys,
+    required this.rounds,
+    required this.name,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// ExercisePickerSheet — componente unificato per la selezione
+// degli esercizi. Utilizzato da:
+//   • Aggiungi esercizio (sessione)
+//   • Crea circuito (sessione)
+//   • Modifica circuito (sessione) — staged, con conferma
+//
+// [initialSelectedKeys] — esercizi già selezionati all'apertura.
+//   Vengono copiati in stato locale: nessuna modifica viene
+//   propagata al provider prima della conferma.
+//
+// [disabledKeys] — esercizi non selezionabili (già presenti e
+//   non rimovibili). Mostrati in grigio con check.
+//
+// [alwaysShowConfirm] — se true, il pulsante di conferma è
+//   sempre visibile (utile nel flusso di modifica dove l'utente
+//   potrebbe voler cambiare solo i cicli).
+// ─────────────────────────────────────────────────────────────
+
+class ExercisePickerSheet extends StatefulWidget {
+  final List<HiveExercise> allExercises;
+  final Set<dynamic> initialSelectedKeys;
+  final Set<dynamic> disabledKeys;
+  final bool showRoundsControl;
+  final int initialRounds;
+  final bool showNameField;
+  final String initialName;
+  final String title;
+  final String? subtitle;
+  final Color accentColor;
+  final String confirmLabel;
+  final bool alwaysShowConfirm;
+  final void Function(ExercisePickerResult) onConfirm;
+
+  const ExercisePickerSheet({
+    super.key,
+    required this.allExercises,
+    required this.onConfirm,
+    this.initialSelectedKeys = const <dynamic>{},
+    this.disabledKeys = const <dynamic>{},
+    this.showRoundsControl = false,
+    this.initialRounds = 3,
+    this.showNameField = false,
+    this.initialName = '',
+    required this.title,
+    this.subtitle,
+    required this.accentColor,
+    this.confirmLabel = 'Conferma',
+    this.alwaysShowConfirm = false,
+  });
+
+  @override
+  State<ExercisePickerSheet> createState() =>
+      _ExercisePickerSheetState();
+}
+
+class _ExercisePickerSheetState
+    extends State<ExercisePickerSheet> {
+  late Set<dynamic> _selectedKeys;
+  late int _rounds;
+  late TextEditingController _nameCtrl;
+  String _search = '';
+  String _muscle = 'Tutti';
+
+  static const _allGroups = [
+    'Tutti', 'Petto', 'Schiena', 'Spalle', 'Bicipiti',
+    'Tricipiti', 'Gambe', 'Addominali', 'Glutei', 'Polpacci',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Copia locale: nessuna modifica va al provider
+    // finché l'utente non conferma
+    _selectedKeys = Set<dynamic>.from(widget.initialSelectedKeys);
+    _rounds = widget.initialRounds;
+    _nameCtrl =
+        TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  List<HiveExercise> get _filtered {
+    return widget.allExercises.where((e) {
+      final muscle =
+          _muscle == 'Tutti' || e.muscleGroup == _muscle;
+      final search = _search.isEmpty ||
+          e.name.toLowerCase().contains(_search.toLowerCase());
+      return muscle && search;
+    }).toList();
+  }
+
+  void _toggle(dynamic key) {
+    if (widget.disabledKeys.contains(key)) return;
+    setState(() {
+      if (_selectedKeys.contains(key)) {
+        _selectedKeys.remove(key);
+      } else {
+        _selectedKeys.add(key);
+      }
+    });
+  }
+
+  bool get _showConfirm =>
+      widget.alwaysShowConfirm || _selectedKeys.isNotEmpty;
+
+  String get _confirmLabel {
+    final toggleable = _selectedKeys
+        .where((k) => !widget.disabledKeys.contains(k))
+        .length;
+    if (toggleable > 0) {
+      return '${widget.confirmLabel} · $toggleable eserc.';
+    }
+    return widget.confirmLabel;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filtered;
+    return GlassSheetWrapper(
+      title: widget.title,
+      subtitle: widget.subtitle,
+      accentColor: widget.accentColor,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Nome (opzionale)
+        if (widget.showNameField) ...[
           GlassTextField(
             controller: _nameCtrl,
-            hintText: 'Es. Push Day, Full Body...',
-            labelText: 'Nome scheda',
+            hintText: 'Nome circuito...',
             onChanged: (_) => setState(() {}),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+        ],
+        // Cicli (opzionale)
+        if (widget.showRoundsControl) ...[
+          _SharedRoundsRow(
+            rounds: _rounds,
+            onChanged: (v) => setState(() => _rounds = v),
+          ),
+          const SizedBox(height: 12),
+        ],
+        // Ricerca
+        GlassTextField(
+          hintText: 'Cerca esercizio...',
+          onChanged: (v) => setState(() => _search = v),
+        ),
+        const SizedBox(height: 10),
+        // Chip gruppi muscolari
+        _SharedMuscleChips(
+          groups: _allGroups,
+          selected: _muscle,
+          accentColor: widget.accentColor,
+          onSelect: (g) => setState(() => _muscle = g),
+        ),
+        const SizedBox(height: 10),
+        // Lista esercizi
+        SizedBox(
+          height: 260,
+          child: filtered.isEmpty
+              ? Center(
+                  child: Text(
+                    'Nessun esercizio trovato',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.35),
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic),
+                  ),
+                )
+              : ListView.builder(
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) {
+                    final ex = filtered[i];
+                    final isDisabled =
+                        widget.disabledKeys.contains(ex.key);
+                    final isSelected =
+                        _selectedKeys.contains(ex.key) || isDisabled;
+                    return _PickerExerciseTile(
+                      exercise: ex,
+                      isSelected: isSelected,
+                      isDisabled: isDisabled,
+                      accentColor: widget.accentColor,
+                      onTap: isDisabled
+                          ? null
+                          : () => _toggle(ex.key),
+                    );
+                  },
+                ),
+        ),
+        // Pulsante conferma
+        if (_showConfirm) ...[
+          const SizedBox(height: 10),
           GlassPrimaryButton(
-            label: 'Crea scheda',
-            color: kTeal,
-            onTap: hasName
-                ? () => widget.onConfirm(_nameCtrl.text.trim())
-                : null,
+            label: _confirmLabel,
+            color: widget.accentColor,
+            onTap: () => widget.onConfirm(ExercisePickerResult(
+              selectedKeys: Set<dynamic>.from(_selectedKeys),
+              rounds: _rounds,
+              name: _nameCtrl.text.trim().isNotEmpty
+                  ? _nameCtrl.text.trim()
+                  : widget.initialName,
+            )),
           ),
         ],
+      ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _SharedMuscleChips — chip gruppo muscolare condivisi
+// ─────────────────────────────────────────────────────────────
+
+class _SharedMuscleChips extends StatelessWidget {
+  final List<String> groups;
+  final String selected;
+  final Color accentColor;
+  final void Function(String) onSelect;
+
+  const _SharedMuscleChips({
+    required this.groups,
+    required this.selected,
+    required this.accentColor,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 34,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: groups.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (_, i) {
+          final g = groups[i];
+          final sel = selected == g;
+          return GestureDetector(
+            onTap: () => onSelect(g),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: sel
+                    ? accentColor.withOpacity(0.2)
+                    : Colors.white.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(
+                  color: sel
+                      ? accentColor.withOpacity(0.6)
+                      : Colors.white.withOpacity(0.1),
+                  width: sel ? 1.2 : 0.8,
+                ),
+                boxShadow: sel
+                    ? [
+                        BoxShadow(
+                            color: accentColor.withOpacity(0.15),
+                            blurRadius: 8)
+                      ]
+                    : null,
+              ),
+              child: Text(g,
+                  style: TextStyle(
+                      color: sel
+                          ? accentColor
+                          : Colors.white.withOpacity(0.55),
+                      fontSize: 12,
+                      fontWeight: sel
+                          ? FontWeight.w700
+                          : FontWeight.w500)),
+            ),
+          );
+        },
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _SharedRoundsRow — controllo cicli condiviso
+// ─────────────────────────────────────────────────────────────
+
+class _SharedRoundsRow extends StatelessWidget {
+  final int rounds;
+  final void Function(int) onChanged;
+
+  const _SharedRoundsRow(
+      {required this.rounds, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Text('Cicli:',
+          style: TextStyle(
+              color: Colors.white.withOpacity(0.6),
+              fontSize: 14,
+              fontWeight: FontWeight.w600)),
+      const Spacer(),
+      GestureDetector(
+        onTap: rounds > 1 ? () => onChanged(rounds - 1) : null,
+        child: Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(
+            color: rounds > 1
+                ? kCyan.withOpacity(0.1)
+                : Colors.transparent,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: rounds > 1
+                  ? kCyan.withOpacity(0.4)
+                  : Colors.white.withOpacity(0.1),
+              width: 1,
+            ),
+          ),
+          child: Icon(Icons.remove_rounded,
+              size: 16,
+              color: rounds > 1
+                  ? kCyan
+                  : Colors.white.withOpacity(0.2)),
+        ),
+      ),
+      SizedBox(
+        width: 44,
+        child: Text('$rounds',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w800)),
+      ),
+      GestureDetector(
+        onTap: () => onChanged(rounds + 1),
+        child: Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(
+            color: kCyan.withOpacity(0.1),
+            shape: BoxShape.circle,
+            border: Border.all(
+                color: kCyan.withOpacity(0.4), width: 1),
+          ),
+          child: const Icon(Icons.add_rounded,
+              size: 16, color: kCyan),
+        ),
+      ),
+    ]);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _PickerExerciseTile — tile esercizio per ExercisePickerSheet
+// ─────────────────────────────────────────────────────────────
+
+class _PickerExerciseTile extends StatelessWidget {
+  final HiveExercise exercise;
+  final bool isSelected;
+  final bool isDisabled; // già presente, non modificabile
+  final Color accentColor;
+  final VoidCallback? onTap;
+
+  const _PickerExerciseTile({
+    required this.exercise,
+    required this.isSelected,
+    required this.isDisabled,
+    required this.accentColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveColor =
+        isDisabled ? Colors.white.withOpacity(0.3) : accentColor;
+    return ListTile(
+      dense: true,
+      leading: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 22, height: 22,
+        decoration: BoxDecoration(
+          color: isSelected ? effectiveColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected
+                ? effectiveColor
+                : Colors.white.withOpacity(0.25),
+            width: 1.2,
+          ),
+        ),
+        child: isSelected
+            ? Icon(Icons.check_rounded,
+                size: 14,
+                color: isDisabled
+                    ? Colors.white.withOpacity(0.5)
+                    : Colors.white)
+            : null,
+      ),
+      title: Text(exercise.name,
+          style: TextStyle(
+              color: isDisabled
+                  ? Colors.white.withOpacity(0.35)
+                  : Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600)),
+      subtitle: Text(exercise.muscleGroup,
+          style: TextStyle(
+              color: Colors.white.withOpacity(0.4),
+              fontSize: 11)),
+      onTap: onTap,
     );
   }
 }
