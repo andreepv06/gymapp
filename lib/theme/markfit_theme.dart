@@ -4,16 +4,18 @@ import 'package:flutter/material.dart';
 // ─────────────────────────────────────────────────────────────
 // MarkFit Design System — Jarvis Glass UI
 // ─────────────────────────────────────────────────────────────
-// Integrazione in MaterialApp:
-//   theme:     AppTheme.light()
-//   darkTheme: AppTheme.dark()
 //
-// Utilizzo nelle schermate:
-//   context.mkTheme.accent       → colore accent tema-aware
-//   context.mkTheme.glassBg      → sfondo card glass
-//   context.isDarkMode           → bool
+// Integrazione in main.dart:
+//   MaterialApp(
+//     theme:     AppTheme.light(),
+//     darkTheme: AppTheme.dark(),
+//     themeMode: ThemeMode.system,
+//   )
 //
-// Fallback sicuro: se il tema non è registrato restituisce dark.
+// Utilizzo:
+//   context.mkTheme.accent        → Color
+//   context.mkTheme.glassBg       → Color
+//   GlassColors.accent(context)   → Color (helper statico)
 // ─────────────────────────────────────────────────────────────
 
 // ── Costanti colore raw ───────────────────────────────────────
@@ -22,30 +24,31 @@ class MarkFitColors {
   MarkFitColors._();
 
   // Dark palette — Jarvis HUD
-  static const Color dkBackground    = Color(0xFF0A0A0E);
-  static const Color dkSurface       = Color(0xFF0D0D12);
-  static const Color dkCyan          = Color(0xFF00E5FF); // Jarvis accent
-  static const Color dkTeal          = Color(0xFF00D4AA); // primary action
-  static const Color dkSuccess       = Color(0xFF00FF88);
-  static const Color dkError         = Color(0xFFFF3040);
-  static const Color dkWarning       = Color(0xFFFF8C00);
-  static const Color dkIndigo        = Color(0xFF6366F1);
-  static const Color dkText          = Color(0xFFFFFFFF);
-  static const Color dkTextSub       = Color(0xB3FFFFFF); // white70
-  static const Color dkTextTert      = Color(0x73FFFFFF); // white45
+  static const Color dkBackground = Color(0xFF0A0A0E);
+  static const Color dkSurface    = Color(0xFF0D0D12);
+  static const Color dkCyan       = Color(0xFF00E5FF);
+  static const Color dkTeal       = Color(0xFF00D4AA);
+  static const Color dkSuccess    = Color(0xFF00FF88);
+  static const Color dkError      = Color(0xFFFF3040);
+  static const Color dkWarning    = Color(0xFFFF8C00);
+  static const Color dkIndigo     = Color(0xFF6366F1);
+  static const Color dkPurple     = Color(0xFF8A2BE2);
+  static const Color dkText       = Color(0xFFFFFFFF);
+  static const Color dkTextSub    = Color(0xB3FFFFFF);
+  static const Color dkTextTert   = Color(0x73FFFFFF);
 
-  // Light palette — iOS Glass
-  static const Color ltBackground    = Color(0xFFF4F6FA);
-  static const Color ltSurface       = Color(0xFFFFFFFF);
-  static const Color ltBlue          = Color(0xFF007AFF); // iOS accent
-  static const Color ltTeal          = Color(0xFF00A884);
-  static const Color ltSuccess       = Color(0xFF34C759);
-  static const Color ltError         = Color(0xFFFF3B30);
-  static const Color ltWarning       = Color(0xFFFF9500);
-  static const Color ltIndigo        = Color(0xFF5856D6);
-  static const Color ltText          = Color(0xFF1C1C1E);
-  static const Color ltTextSub       = Color(0xFF8E8E93);
-  static const Color ltTextTert      = Color(0xFFAEAEB2);
+  // Light palette — iOS Frost Glass
+  static const Color ltBackground = Color(0xFFF4F6FA);
+  static const Color ltSurface    = Color(0xFFFFFFFF);
+  static const Color ltBlue       = Color(0xFF007AFF);
+  static const Color ltTeal       = Color(0xFF00A884);
+  static const Color ltSuccess    = Color(0xFF34C759);
+  static const Color ltError      = Color(0xFFFF3B30);
+  static const Color ltWarning    = Color(0xFFFF9500);
+  static const Color ltIndigo     = Color(0xFF5856D6);
+  static const Color ltText       = Color(0xFF1C1C1E);
+  static const Color ltTextSub    = Color(0xFF8E8E93);
+  static const Color ltTextTert   = Color(0xFFAEAEB2);
 }
 
 // ── ThemeExtension — token centralizzati ─────────────────────
@@ -61,28 +64,34 @@ class MarkFitThemeData extends ThemeExtension<MarkFitThemeData> {
     required this.error,
     required this.warning,
     required this.indigo,
+    required this.purple,
     required this.textPrimary,
     required this.textSecondary,
     required this.textTertiary,
     required this.glassBg,
+    required this.glassBgStrong,
     required this.glassBorder,
     required this.glassBlur,
+    required this.glowOpacity,
   });
 
   final Color  background;
   final Color  surface;
-  final Color  accent;    // Jarvis cyan (dark) / iOS blue (light)
-  final Color  teal;      // primary action
+  final Color  accent;
+  final Color  teal;
   final Color  success;
   final Color  error;
   final Color  warning;
   final Color  indigo;
+  final Color  purple;
   final Color  textPrimary;
   final Color  textSecondary;
   final Color  textTertiary;
-  final Color  glassBg;     // background glass card
-  final Color  glassBorder; // border olografico
-  final double glassBlur;   // BackdropFilter sigma
+  final Color  glassBg;
+  final Color  glassBgStrong;
+  final Color  glassBorder;
+  final double glassBlur;
+  final double glowOpacity;
 
   // ── Preset dark ─────────────────────────────────────────────
 
@@ -95,12 +104,15 @@ class MarkFitThemeData extends ThemeExtension<MarkFitThemeData> {
     error:         MarkFitColors.dkError,
     warning:       MarkFitColors.dkWarning,
     indigo:        MarkFitColors.dkIndigo,
+    purple:        MarkFitColors.dkPurple,
     textPrimary:   MarkFitColors.dkText,
     textSecondary: MarkFitColors.dkTextSub,
     textTertiary:  MarkFitColors.dkTextTert,
-    glassBg:       Color(0x0DFFFFFF),  // white 5%
-    glassBorder:   Color(0x3300E5FF),  // cyan 20%
+    glassBg:       Color(0x0DFFFFFF),
+    glassBgStrong: Color(0x14FFFFFF),
+    glassBorder:   Color(0x3300E5FF),
     glassBlur:     12,
+    glowOpacity:   0.25,
   );
 
   // ── Preset light ─────────────────────────────────────────────
@@ -114,12 +126,15 @@ class MarkFitThemeData extends ThemeExtension<MarkFitThemeData> {
     error:         MarkFitColors.ltError,
     warning:       MarkFitColors.ltWarning,
     indigo:        MarkFitColors.ltIndigo,
+    purple:        Color(0xFF7C3AED),
     textPrimary:   MarkFitColors.ltText,
     textSecondary: MarkFitColors.ltTextSub,
     textTertiary:  MarkFitColors.ltTextTert,
-    glassBg:       Color(0x0A000000),  // black 4%
-    glassBorder:   Color(0x33007AFF),  // blue 20%
-    glassBlur:     12,
+    glassBg:       Color(0xA6FFFFFF),
+    glassBgStrong: Color(0xCCFFFFFF),
+    glassBorder:   Color(0x26007AFF),
+    glassBlur:     15,
+    glowOpacity:   0.12,
   );
 
   // ── Helper opacità ─────────────────────────────────────────
@@ -129,15 +144,15 @@ class MarkFitThemeData extends ThemeExtension<MarkFitThemeData> {
   Color errorWith(double o)   => error.withOpacity(o);
   Color warningWith(double o) => warning.withOpacity(o);
   Color indigoWith(double o)  => indigo.withOpacity(o);
-
-  // ── ThemeExtension ─────────────────────────────────────────
+  Color purpleWith(double o)  => purple.withOpacity(o);
 
   @override
   MarkFitThemeData copyWith({
     Color? background, Color? surface, Color? accent, Color? teal,
     Color? success, Color? error, Color? warning, Color? indigo,
-    Color? textPrimary, Color? textSecondary, Color? textTertiary,
-    Color? glassBg, Color? glassBorder, double? glassBlur,
+    Color? purple, Color? textPrimary, Color? textSecondary,
+    Color? textTertiary, Color? glassBg, Color? glassBgStrong,
+    Color? glassBorder, double? glassBlur, double? glowOpacity,
   }) => MarkFitThemeData(
     background:    background    ?? this.background,
     surface:       surface       ?? this.surface,
@@ -147,12 +162,15 @@ class MarkFitThemeData extends ThemeExtension<MarkFitThemeData> {
     error:         error         ?? this.error,
     warning:       warning       ?? this.warning,
     indigo:        indigo        ?? this.indigo,
+    purple:        purple        ?? this.purple,
     textPrimary:   textPrimary   ?? this.textPrimary,
     textSecondary: textSecondary ?? this.textSecondary,
     textTertiary:  textTertiary  ?? this.textTertiary,
     glassBg:       glassBg       ?? this.glassBg,
+    glassBgStrong: glassBgStrong ?? this.glassBgStrong,
     glassBorder:   glassBorder   ?? this.glassBorder,
     glassBlur:     glassBlur     ?? this.glassBlur,
+    glowOpacity:   glowOpacity   ?? this.glowOpacity,
   );
 
   @override
@@ -167,12 +185,15 @@ class MarkFitThemeData extends ThemeExtension<MarkFitThemeData> {
       error:         Color.lerp(error,         other.error,         t)!,
       warning:       Color.lerp(warning,       other.warning,       t)!,
       indigo:        Color.lerp(indigo,        other.indigo,        t)!,
+      purple:        Color.lerp(purple,        other.purple,        t)!,
       textPrimary:   Color.lerp(textPrimary,   other.textPrimary,   t)!,
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
       textTertiary:  Color.lerp(textTertiary,  other.textTertiary,  t)!,
       glassBg:       Color.lerp(glassBg,       other.glassBg,       t)!,
+      glassBgStrong: Color.lerp(glassBgStrong, other.glassBgStrong, t)!,
       glassBorder:   Color.lerp(glassBorder,   other.glassBorder,   t)!,
       glassBlur:     lerpDouble(glassBlur,     other.glassBlur,     t)!,
+      glowOpacity:   lerpDouble(glowOpacity,   other.glowOpacity,   t)!,
     );
   }
 }
@@ -180,8 +201,6 @@ class MarkFitThemeData extends ThemeExtension<MarkFitThemeData> {
 // ── BuildContext extension ────────────────────────────────────
 
 extension MarkFitThemeX on BuildContext {
-  /// Design tokens MarkFit. Fallback sicuro a dark se il tema
-  /// non è ancora registrato nel MaterialApp.
   MarkFitThemeData get mkTheme =>
       Theme.of(this).extension<MarkFitThemeData>() ??
       MarkFitThemeData.dark;
@@ -190,13 +209,95 @@ extension MarkFitThemeX on BuildContext {
       Theme.of(this).brightness == Brightness.dark;
 }
 
+// ── GlassColors — helper statico per le schermate ─────────────
+// Utilizzo:
+//   color: GlassColors.accent(context)
+//   color: GlassColors.card(context)
+
+class GlassColors {
+  GlassColors._();
+
+  static Color background(BuildContext context) =>
+      context.mkTheme.background;
+
+  static Color surface(BuildContext context) =>
+      context.mkTheme.surface;
+
+  static Color card(BuildContext context) =>
+      context.mkTheme.glassBg;
+
+  static Color cardStrong(BuildContext context) =>
+      context.mkTheme.glassBgStrong;
+
+  static Color border(BuildContext context) =>
+      context.mkTheme.glassBorder;
+
+  static Color accent(BuildContext context) =>
+      context.mkTheme.accent;
+
+  static Color primary(BuildContext context) =>
+      context.mkTheme.teal;
+
+  static Color error(BuildContext context) =>
+      context.mkTheme.error;
+
+  static Color warning(BuildContext context) =>
+      context.mkTheme.warning;
+
+  static Color success(BuildContext context) =>
+      context.mkTheme.success;
+
+  static Color indigo(BuildContext context) =>
+      context.mkTheme.indigo;
+
+  static Color purple(BuildContext context) =>
+      context.mkTheme.purple;
+
+  static Color text(BuildContext context) =>
+      context.mkTheme.textPrimary;
+
+  static Color textSub(BuildContext context) =>
+      context.mkTheme.textSecondary;
+
+  static Color textTert(BuildContext context) =>
+      context.mkTheme.textTertiary;
+
+  static double blur(BuildContext context) =>
+      context.mkTheme.glassBlur;
+
+  static double glow(BuildContext context) =>
+      context.mkTheme.glowOpacity;
+}
+
+// ── GlassDimensions — spacing e radius coerenti ───────────────
+
+class GlassDimensions {
+  GlassDimensions._();
+
+  static const double radiusXS  = 8;
+  static const double radiusSM  = 12;
+  static const double radiusMD  = 16;
+  static const double radiusLG  = 20;
+  static const double radiusXL  = 24;
+  static const double radius2XL = 28;
+
+  static const double blurLight  = 8;
+  static const double blurMedium = 12;
+  static const double blurStrong = 16;
+  static const double blurXL     = 24;
+
+  static const double spacingXS = 6;
+  static const double spacingSM = 10;
+  static const double spacingMD = 16;
+  static const double spacingLG = 20;
+  static const double spacingXL = 28;
+
+  static const double borderThin   = 0.8;
+  static const double borderMedium = 1.0;
+  static const double borderStrong = 1.5;
+}
+
 // ── AppTheme factory ─────────────────────────────────────────
-// Utilizzo in main.dart:
-//   MaterialApp(
-//     theme:      AppTheme.light(),
-//     darkTheme:  AppTheme.dark(),
-//     themeMode:  ThemeMode.system,
-//   )
 
 class AppTheme {
   AppTheme._();
