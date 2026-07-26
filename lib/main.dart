@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import 'db/hive_database.dart';
 import 'db/goal_database.dart';
 import 'db/sport_database.dart';
@@ -13,12 +14,8 @@ import 'providers/theme_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/goal_provider.dart';
 import 'providers/sport_provider.dart';
+import 'providers/profile_provider.dart';
 import 'navigation/navigation_depth_notifier.dart';
-// HomeScreen sostituisce DashboardScreen come tab 0.
-// DashboardScreen NON viene rimosso dal filesystem perché
-// potrebbe essere referenziato da altri percorsi di navigazione
-// interni (es. SessionSelectorScreen → GoalsScreen ecc.).
-// Solo il collegamento nell'IndexedStack viene aggiornato.
 import 'screens/home/home_screen.dart';
 import 'screens/workouts/allenamenti_screen.dart';
 import 'screens/history/history_screen.dart';
@@ -30,9 +27,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
+      statusBarColor:         Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness: Brightness.light,
+      statusBarBrightness:     Brightness.light,
     ),
   );
   await HiveDatabase.instance.init();
@@ -42,9 +39,10 @@ void main() async {
   runApp(const MyApp());
 }
 
-/// Notifier per l'indice della tab corrente. Semplificato:
-/// non gestisce più un PageController perché la navigazione
-/// tra tab avviene con IndexedStack, non PageView.
+// ─────────────────────────────────────────────────────────────
+// NavigationNotifier
+// ─────────────────────────────────────────────────────────────
+
 class NavigationNotifier extends ChangeNotifier {
   int _currentIndex = 0;
   int get currentIndex => _currentIndex;
@@ -62,6 +60,10 @@ class NavigationNotifier extends ChangeNotifier {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// MyApp
+// ─────────────────────────────────────────────────────────────
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -78,24 +80,22 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => GoalProvider()),
         ChangeNotifierProvider(create: (_) => SportProvider()),
+        // Profile image provider — auto-load al boot
+        ChangeNotifierProvider(
+            create: (_) => ProfileProvider()..loadProfile()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, __) {
           return MaterialApp(
             title: 'MarkFit',
             debugShowCheckedModeBanner: false,
-            theme: _buildTheme(Brightness.light),
+            theme:     _buildTheme(Brightness.light),
             darkTheme: _buildTheme(Brightness.dark),
             themeMode: themeProvider.themeMode,
             builder: (context, child) {
               final theme = Theme.of(context);
-              final cs = theme.colorScheme;
+              final cs    = theme.colorScheme;
               final isDark = theme.brightness == Brightness.dark;
-              // FIX WHITE FLASH DEFINITIVO
-              // CupertinoPageRoute legge scaffoldBackgroundColor
-              // da CupertinoTheme per il background durante lo
-              // swipe-back. Senza questa impostazione esplicita,
-              // usa il default iOS (bianco) → flash bianco.
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: SystemUiOverlayStyle(
                   statusBarColor: Colors.transparent,
@@ -108,17 +108,13 @@ class MyApp extends StatelessWidget {
                   data: CupertinoThemeData(
                     brightness:
                         isDark ? Brightness.dark : Brightness.light,
-                    primaryColor: cs.primary,
+                    primaryColor:           cs.primary,
                     scaffoldBackgroundColor: cs.surface,
-                    barBackgroundColor: cs.surface,
+                    barBackgroundColor:      cs.surface,
                     textTheme: CupertinoTextThemeData(
-                      primaryColor: cs.primary,
-                    ),
+                      primaryColor: cs.primary),
                   ),
-                  child: ColoredBox(
-                    color: cs.surface,
-                    child: child!,
-                  ),
+                  child: ColoredBox(color: cs.surface, child: child!),
                 ),
               );
             },
@@ -135,37 +131,28 @@ class MyApp extends StatelessWidget {
       brightness: brightness,
     );
     return ThemeData(
-      colorScheme: cs,
-      useMaterial3: true,
+      colorScheme:             cs,
+      useMaterial3:            true,
       scaffoldBackgroundColor: cs.surface,
-      canvasColor: cs.surface,
-      dialogBackgroundColor: cs.surface,
-      // Nessun pageTransitionsTheme: tutte le navigazioni usano
-      // CupertinoPageRoute via app_router.dart. La transizione è
-      // gestita nativamente, identica a Instagram/WhatsApp su iOS.
+      canvasColor:             cs.surface,
+      dialogBackgroundColor:   cs.surface,
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(
-            fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineMedium: TextStyle(
-            fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineSmall: TextStyle(
-            fontWeight: FontWeight.w600, letterSpacing: -0.3),
-        titleLarge: TextStyle(fontWeight: FontWeight.w600),
-        titleMedium: TextStyle(fontWeight: FontWeight.w600),
-        bodyLarge: TextStyle(letterSpacing: 0.1),
+        headlineLarge:  TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineMedium: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+        headlineSmall:  TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
+        titleLarge:     TextStyle(fontWeight: FontWeight.w600),
+        titleMedium:    TextStyle(fontWeight: FontWeight.w600),
+        bodyLarge:      TextStyle(letterSpacing: 0.1),
       ),
       cardTheme: CardThemeData(
-        elevation: 0,
-        color: cs.surface,
+        elevation: 0, color: cs.surface,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16)),
         surfaceTintColor: cs.surfaceTint,
       ),
       appBarTheme: AppBarTheme(
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        centerTitle: true,
-        backgroundColor: cs.surface,
+        elevation: 0, scrolledUnderElevation: 1,
+        centerTitle: true, backgroundColor: cs.surface,
         surfaceTintColor: cs.surfaceTint,
         systemOverlayStyle: brightness == Brightness.dark
             ? SystemUiOverlayStyle.light
@@ -173,32 +160,24 @@ class MyApp extends StatelessWidget {
             : SystemUiOverlayStyle.dark
                 .copyWith(statusBarColor: Colors.transparent),
         titleTextStyle: TextStyle(
-          color: cs.onSurface,
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.3,
-        ),
+          color: cs.onSurface, fontSize: 18,
+          fontWeight: FontWeight.w700, letterSpacing: -0.3),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: cs.surfaceContainerHighest.withOpacity(0.4),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: cs.outlineVariant, width: 1),
-        ),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: cs.outlineVariant, width: 1)),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: cs.primary, width: 2),
-        ),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: cs.primary, width: 2)),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: cs.error, width: 1),
-        ),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: cs.error, width: 1)),
         contentPadding: const EdgeInsets.symmetric(
             horizontal: 16, vertical: 14),
       ),
@@ -208,16 +187,13 @@ class MyApp extends StatelessWidget {
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12)),
           textStyle: const TextStyle(
-              fontWeight: FontWeight.w600, fontSize: 15),
-        ),
+              fontWeight: FontWeight.w600, fontSize: 15)),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12)),
-          textStyle:
-              const TextStyle(fontWeight: FontWeight.w600),
-        ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600)),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: cs.surface,
@@ -228,9 +204,8 @@ class MyApp extends StatelessWidget {
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: cs.surface,
         shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(24)),
-        ),
+            borderRadius:
+                BorderRadius.vertical(top: Radius.circular(24))),
         elevation: 0,
       ),
       snackBarTheme: SnackBarThemeData(
@@ -242,9 +217,12 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// AppEntry
+// ─────────────────────────────────────────────────────────────
+
 class AppEntry extends StatefulWidget {
   const AppEntry({super.key});
-
   @override
   State<AppEntry> createState() => _AppEntryState();
 }
@@ -273,15 +251,11 @@ class _AppEntryState extends State<AppEntry> {
       return Scaffold(
         backgroundColor: cs.surface,
         body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.fitness_center,
-                  size: 48, color: cs.primary),
-              const SizedBox(height: 16),
-              CircularProgressIndicator(color: cs.primary),
-            ],
-          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.fitness_center, size: 48, color: cs.primary),
+            const SizedBox(height: 16),
+            CircularProgressIndicator(color: cs.primary),
+          ]),
         ),
       );
     }
@@ -299,6 +273,10 @@ class _AppEntryState extends State<AppEntry> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// MainShell — extendBody per contenuto sotto la navbar
+// ─────────────────────────────────────────────────────────────
+
 class MainShell extends StatelessWidget {
   const MainShell({super.key});
 
@@ -306,33 +284,20 @@ class MainShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final currentIndex =
         context.watch<NavigationNotifier>().currentIndex;
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
-    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: cs.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      // extendBody = true → il contenuto scorre sotto la navbar
+      // esattamente come iOS 26 TabView Liquid Glass
       extendBody: true,
-      // IndexedStack: mantiene lo stato di ogni tab in memoria
-      // (come Instagram/WhatsApp), ZERO swipe orizzontale possibile.
-      // Il gesto orizzontale è riservato esclusivamente al
-      // swipe-back di CupertinoPageRoute sulle schermate interne.
-      //
-      // FIX ARCHITETTURALE:
-      // Sostituito DashboardScreen() con HomeScreen() all'indice 0.
-      // home_screen.dart era presente in lib/screens/home/ ma non
-      // era mai referenziato: era codice morto. Ogni modifica al
-      // file non produceva alcun effetto visivo perché l'app
-      // renderizzava DashboardScreen come prima tab.
-      // Da ora qualsiasi modifica a home_screen.dart viene
-      // immediatamente visualizzata nell'applicazione.
       body: IndexedStack(
         index: currentIndex,
         children: const [
-          HomeScreen(),         // index 0 — tab "Oggi"
-          AllenamentiScreen(),  // index 1
-          HistoryScreen(),      // index 2
-          SettingsScreen(),     // index 3
+          HomeScreen(),
+          AllenamentiScreen(),
+          HistoryScreen(),
+          SettingsScreen(),
         ],
       ),
       bottomNavigationBar: _LiquidGlassNavBar(
@@ -344,6 +309,16 @@ class MainShell extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// _LiquidGlassNavBar
+// Replica iOS 26 Liquid Glass TabView:
+// • floating sopra il contenuto (extendBody: true)
+// • blur del contenuto sottostante visibile
+// • pill animata per tab selezionato
+// • animazione morbida tra stati
+// • dark / light mode differenziati
+// ─────────────────────────────────────────────────────────────
 
 class _LiquidGlassNavBar extends StatelessWidget {
   final int currentIndex;
@@ -357,66 +332,67 @@ class _LiquidGlassNavBar extends StatelessWidget {
   });
 
   static const _items = [
-    _NavItem(icon: Icons.today_rounded, label: 'Oggi'),
-    _NavItem(
-        icon: Icons.fitness_center_rounded,
-        label: 'Allenamenti'),
-    _NavItem(icon: Icons.bar_chart_rounded, label: 'Storico'),
-    _NavItem(
-        icon: Icons.settings_rounded, label: 'Impostazioni'),
+    _NavItem(icon: Icons.today_rounded,           activeIcon: Icons.today_rounded,          label: 'Oggi'),
+    _NavItem(icon: Icons.fitness_center_rounded,  activeIcon: Icons.fitness_center_rounded, label: 'Allenamenti'),
+    _NavItem(icon: Icons.bar_chart_rounded,       activeIcon: Icons.bar_chart_rounded,      label: 'Storico'),
+    _NavItem(icon: Icons.settings_rounded,        activeIcon: Icons.settings_rounded,       label: 'Impostazioni'),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final cs           = Theme.of(context).colorScheme;
+    final bottomPad    = MediaQuery.of(context).padding.bottom;
+
+    // Colori Liquid Glass differenziati per dark/light
     final glassBg = isDark
-        ? Colors.grey.shade900.withOpacity(0.55)
-        : Colors.white.withOpacity(0.6);
+        ? Colors.grey.shade900.withOpacity(0.6)
+        : Colors.white.withOpacity(0.72);
     final glassBorder = isDark
-        ? Colors.white.withOpacity(0.08)
-        : Colors.white.withOpacity(0.7);
+        ? Colors.white.withOpacity(0.1)
+        : Colors.white.withOpacity(0.85);
+    final glowColor = isDark
+        ? const Color(0xFF00E5FF).withOpacity(0.08)
+        : Colors.black.withOpacity(0.04);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-          20, 0, 20, bottomPadding + 16),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPad + 12),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(40),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          // Blur forte = contenuto scorre "attraverso" la navbar
+          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
-            height: 66,
+            height: 68,
             decoration: BoxDecoration(
               color: glassBg,
               borderRadius: BorderRadius.circular(40),
-              border: Border.all(
-                  color: glassBorder, width: 1.2),
+              border: Border.all(color: glassBorder, width: 1),
               boxShadow: [
+                // Ombra principale
                 BoxShadow(
-                  color: Colors.black
-                      .withOpacity(isDark ? 0.35 : 0.1),
-                  blurRadius: 32,
-                  spreadRadius: -4,
-                  offset: const Offset(0, 8),
-                ),
+                  color: Colors.black.withOpacity(isDark ? 0.4 : 0.12),
+                  blurRadius: 36, spreadRadius: -4,
+                  offset: const Offset(0, 10)),
+                // Glow superiore (effetto iOS 26)
                 BoxShadow(
-                  color: Colors.white
-                      .withOpacity(isDark ? 0.04 : 0.6),
+                  color: glowColor,
                   blurRadius: 0,
-                  offset: const Offset(0, 1),
-                ),
+                  offset: const Offset(0, 1)),
               ],
             ),
             child: Row(
               children: List.generate(_items.length, (i) {
                 return Expanded(
                   child: GestureDetector(
-                    onTap: () => onTap(i),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      onTap(i);
+                    },
                     behavior: HitTestBehavior.opaque,
                     child: _LiquidNavItem(
-                      item: _items[i],
-                      selected: i == currentIndex,
-                      isDark: isDark,
+                      item:         _items[i],
+                      selected:     i == currentIndex,
+                      isDark:       isDark,
                       primaryColor: cs.primary,
                     ),
                   ),
@@ -431,129 +407,126 @@ class _LiquidGlassNavBar extends StatelessWidget {
 }
 
 class _NavItem {
-  final IconData icon;
+  final IconData icon, activeIcon;
   final String label;
-  const _NavItem({required this.icon, required this.label});
+  const _NavItem({
+    required this.icon, required this.activeIcon,
+    required this.label});
 }
 
-class _LiquidNavItem extends StatelessWidget {
+// ─────────────────────────────────────────────────────────────
+// _LiquidNavItem — singolo item con pill animata
+// ─────────────────────────────────────────────────────────────
+
+class _LiquidNavItem extends StatefulWidget {
   final _NavItem item;
-  final bool selected;
-  final bool isDark;
+  final bool selected, isDark;
   final Color primaryColor;
 
   const _LiquidNavItem({
-    required this.item,
-    required this.selected,
-    required this.isDark,
-    required this.primaryColor,
+    required this.item, required this.selected,
+    required this.isDark, required this.primaryColor,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final unselected = isDark
-        ? Colors.white.withOpacity(0.45)
-        : Colors.grey.shade600;
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 220),
-      transitionBuilder: (child, anim) =>
-          FadeTransition(opacity: anim, child: child),
-      child: selected
-          ? _SelectedItem(
-              key: ValueKey('sel_${item.label}'),
-              item: item,
-              primaryColor: primaryColor,
-            )
-          : _UnselectedItem(
-              key: ValueKey('unsel_${item.label}'),
-              item: item,
-              color: unselected,
-            ),
-    );
-  }
+  State<_LiquidNavItem> createState() => _LiquidNavItemState();
 }
 
-class _SelectedItem extends StatelessWidget {
-  final _NavItem item;
-  final Color primaryColor;
+class _LiquidNavItemState extends State<_LiquidNavItem>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double>   _scale;
+  late Animation<double>   _pillW;
 
-  const _SelectedItem(
-      {super.key,
-      required this.item,
-      required this.primaryColor});
+  @override
+  void initState() {
+    super.initState();
+    _ctrl  = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 320));
+    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack);
+    _pillW = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOutCubic);
+    if (widget.selected) _ctrl.forward();
+  }
+
+  @override
+  void didUpdateWidget(_LiquidNavItem old) {
+    super.didUpdateWidget(old);
+    if (widget.selected && !old.selected) {
+      _ctrl.forward();
+    } else if (!widget.selected && old.selected) {
+      _ctrl.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final unselectedColor = widget.isDark
+        ? Colors.white.withOpacity(0.42)
+        : Colors.grey.shade500;
+
     return SizedBox(
-      height: 66,
-      child: Center(
-        child: Container(
-          width: 56,
-          height: 40,
-          decoration: BoxDecoration(
-            color: primaryColor,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: primaryColor.withOpacity(0.45),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.white.withOpacity(0.25),
-                Colors.transparent
-              ],
-            ),
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Positioned(
-                top: 3,
-                child: Container(
-                  width: 28,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
-              Icon(item.icon, color: Colors.white, size: 22),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _UnselectedItem extends StatelessWidget {
-  final _NavItem item;
-  final Color color;
-
-  const _UnselectedItem(
-      {super.key, required this.item, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 66,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(item.icon, color: color, size: 22),
-          const SizedBox(height: 3),
-          Text(item.label,
-              style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w500,
-                  color: color)),
-        ],
+      height: 68,
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (_, __) {
+          final pillWidth = 58.0 + 6 * _pillW.value;
+          return Center(
+            child: widget.selected
+                ? Column(mainAxisSize: MainAxisSize.min, children: [
+                    Container(
+                      width: pillWidth, height: 42,
+                      decoration: BoxDecoration(
+                        color: widget.primaryColor,
+                        borderRadius: BorderRadius.circular(21),
+                        boxShadow: [
+                          BoxShadow(
+                            color: widget.primaryColor.withOpacity(0.5),
+                            blurRadius: 14, offset: const Offset(0, 4)),
+                        ],
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withOpacity(0.22),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                      child: Stack(alignment: Alignment.center, children: [
+                        // Highlight speculare in cima (effetto iOS 26)
+                        Positioned(
+                          top: 4,
+                          child: Container(
+                            width: 28, height: 5,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.28),
+                              borderRadius: BorderRadius.circular(3)),
+                          ),
+                        ),
+                        Transform.scale(
+                          scale: 0.88 + 0.12 * _scale.value,
+                          child: Icon(widget.item.activeIcon,
+                              color: Colors.white, size: 22)),
+                      ]),
+                    ),
+                  ])
+                : Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(widget.item.icon,
+                        color: unselectedColor, size: 22),
+                    const SizedBox(height: 3),
+                    Text(widget.item.label,
+                        style: TextStyle(
+                            fontSize: 9, fontWeight: FontWeight.w500,
+                            color: unselectedColor)),
+                  ]),
+          );
+        },
       ),
     );
   }
