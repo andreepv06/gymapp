@@ -7,7 +7,6 @@ import '../../core/persistence/categories_repository.dart';
 import '../../models/goal_models.dart';
 import '../../providers/goal_provider.dart';
 import '../../widgets/cosmic_background.dart';
-import '../../widgets/shared_sheets.dart';
 
 // ── Design tokens ─────────────────────────────────────────────
 const _cyan   = Color(0xFF00E5FF);
@@ -19,7 +18,6 @@ const _red    = Color(0xFFFF3B30);
 const _green  = Color(0xFF22C55E);
 const _blue   = Color(0xFF3B82F6);
 
-// Mappa colori categoria (condivisa con goals_screen)
 const _catColors = <String, Color>{
   'Studio':        Color(0xFF6366F1),
   'Sport':         Color(0xFF00D4AA),
@@ -40,44 +38,62 @@ const _catColors = <String, Color>{
 Color _colorFor(String cat) =>
     _catColors[cat] ?? const Color(0xFF9CA3AF);
 
-// Tipi di durata
-enum _DurationType { singleDay, range, days, indefinite }
+// ─────────────────────────────────────────────────────────────
+// Tipi di pianificazione — mappati 1:1 su scheduleType di HiveGoal
+// ─────────────────────────────────────────────────────────────
 
-extension _DurationTypeExt on _DurationType {
+enum _ScheduleType {
+  daily,
+  specificDays,
+  weekdays,
+  weekend,
+  dateRange,
+  customInterval,
+}
+
+extension _ScheduleTypeX on _ScheduleType {
+  String get id {
+    switch (this) {
+      case _ScheduleType.daily:           return 'daily';
+      case _ScheduleType.specificDays:    return 'specificDays';
+      case _ScheduleType.weekdays:        return 'weekdays';
+      case _ScheduleType.weekend:         return 'weekend';
+      case _ScheduleType.dateRange:       return 'dateRange';
+      case _ScheduleType.customInterval:  return 'customInterval';
+    }
+  }
+
   String get label {
     switch (this) {
-      case _DurationType.singleDay:   return 'Singolo giorno';
-      case _DurationType.range:       return 'Intervallo date';
-      case _DurationType.days:        return 'N. di giorni';
-      case _DurationType.indefinite:  return 'Indefinita';
+      case _ScheduleType.daily:           return 'Ogni giorno';
+      case _ScheduleType.specificDays:    return 'Giorni specifici';
+      case _ScheduleType.weekdays:        return 'Giorni feriali';
+      case _ScheduleType.weekend:         return 'Weekend';
+      case _ScheduleType.dateRange:       return 'Intervallo date';
+      case _ScheduleType.customInterval:  return 'Ogni N giorni';
     }
   }
 
   IconData get icon {
     switch (this) {
-      case _DurationType.singleDay:  return Icons.today_rounded;
-      case _DurationType.range:      return Icons.date_range_rounded;
-      case _DurationType.days:       return Icons.calendar_view_week_rounded;
-      case _DurationType.indefinite: return Icons.all_inclusive_rounded;
+      case _ScheduleType.daily:           return Icons.all_inclusive_rounded;
+      case _ScheduleType.specificDays:    return Icons.view_week_rounded;
+      case _ScheduleType.weekdays:        return Icons.business_center_rounded;
+      case _ScheduleType.weekend:         return Icons.weekend_rounded;
+      case _ScheduleType.dateRange:       return Icons.date_range_rounded;
+      case _ScheduleType.customInterval:  return Icons.repeat_rounded;
     }
   }
 
-  String get id {
-    switch (this) {
-      case _DurationType.singleDay:  return 'single';
-      case _DurationType.range:      return 'range';
-      case _DurationType.days:       return 'days';
-      case _DurationType.indefinite: return 'indefinite';
-    }
-  }
-
-  static _DurationType fromId(String id) {
+  static _ScheduleType fromId(String id) {
     switch (id) {
-      case 'single':     return _DurationType.singleDay;
-      case 'range':      return _DurationType.range;
-      case 'days':       return _DurationType.days;
-      case 'indefinite': return _DurationType.indefinite;
-      default:           return _DurationType.indefinite;
+      case 'daily':          return _ScheduleType.daily;
+      case 'specificDays':   return _ScheduleType.specificDays;
+      case 'weekdays':       return _ScheduleType.weekdays;
+      case 'weekend':        return _ScheduleType.weekend;
+      case 'dateRange':      return _ScheduleType.dateRange;
+      case 'customInterval': return _ScheduleType.customInterval;
+      default:               return _ScheduleType.daily;
     }
   }
 }
@@ -89,7 +105,6 @@ extension _DurationTypeExt on _DurationType {
 class NewGoalScreen extends StatefulWidget {
   final HiveGoal? editGoal;
   const NewGoalScreen({super.key, this.editGoal});
-
   bool get isEditing => editGoal != null;
 
   @override
@@ -97,28 +112,32 @@ class NewGoalScreen extends StatefulWidget {
 }
 
 class _NewGoalScreenState extends State<NewGoalScreen> {
-  // Controllers
-  final _titleCtrl  = TextEditingController();
-  final _descCtrl   = TextEditingController();
-  final _daysCtrl   = TextEditingController();
+  final _titleCtrl    = TextEditingController();
+  final _descCtrl     = TextEditingController();
+  final _intervalCtrl = TextEditingController();
   final _customCatCtrl = TextEditingController();
 
-  // Form state
-  String         _selectedCategory = '';
-  _DurationType  _durationType     = _DurationType.indefinite;
-  DateTime?      _startDate;
-  DateTime?      _endDate;
-  bool           _saving           = false;
-  bool           _showCustomCatField = false;
+  String        _selectedCategory   = '';
+  _ScheduleType _scheduleType       = _ScheduleType.daily;
+  List<int>     _selectedDays       = [];   // per specificDays
+  DateTime?     _startDate;
+  DateTime?     _endDate;
+  String?       _deadlineDate;
+  bool          _saving             = false;
+  bool          _showCustomCatField = false;
 
-  // Categorie caricate
-  List<String> _allCategories = [];
+  List<String>  _allCategories = [];
+
+  // Nomi giorni della settimana (1=Lun ... 7=Dom)
+  static const _dayNames = [
+    '', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'
+  ];
 
   @override
   void initState() {
     super.initState();
     _loadCategories();
-    _prefillForEdit();
+    _prefill();
   }
 
   Future<void> _loadCategories() async {
@@ -126,51 +145,34 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
     if (mounted) setState(() => _allCategories = cats);
   }
 
-  void _prefillForEdit() {
+  void _prefill() {
     final g = widget.editGoal;
     if (g == null) {
       _startDate = DateTime.now();
       return;
     }
-    _titleCtrl.text       = g.title;
-    _selectedCategory     = g.category;
-    // Campi opzionali — acceduti in modo sicuro
-    try {
-      final dynamic rawDesc = (g as dynamic).description;
-      if (rawDesc is String) _descCtrl.text = rawDesc;
-    } catch (_) {}
-    try {
-      final dynamic rawDt = (g as dynamic).durationType;
-      if (rawDt is String) {
-        _durationType = _DurationTypeExt.fromId(rawDt);
-      }
-    } catch (_) {}
-    try {
-      final dynamic rawStart = (g as dynamic).startDate;
-      if (rawStart is String && rawStart.isNotEmpty) {
-        _startDate = DateTime.tryParse(rawStart);
-      }
-    } catch (_) {}
-    try {
-      final dynamic rawEnd = (g as dynamic).endDate;
-      if (rawEnd is String && rawEnd.isNotEmpty) {
-        _endDate = DateTime.tryParse(rawEnd);
-      }
-    } catch (_) {}
-    try {
-      final dynamic rawDays = (g as dynamic).durationDays;
-      if (rawDays is int && rawDays > 0) {
-        _daysCtrl.text = '$rawDays';
-      }
-    } catch (_) {}
-    _startDate ??= DateTime.now();
+    _titleCtrl.text    = g.title;
+    _descCtrl.text     = g.description ?? '';
+    _selectedCategory  = g.category;
+    _scheduleType      = _ScheduleTypeX.fromId(g.scheduleType);
+    _selectedDays      = List<int>.from(g.scheduleDaysOfWeek ?? []);
+    _startDate         = g.scheduleStartDate != null
+        ? DateTime.tryParse(g.scheduleStartDate!) ?? DateTime.now()
+        : DateTime.now();
+    _endDate           = g.scheduleEndDate != null
+        ? DateTime.tryParse(g.scheduleEndDate!) : null;
+    _intervalCtrl.text =
+        g.scheduleCustomInterval != null
+            ? '${g.scheduleCustomInterval}'
+            : '';
+    _deadlineDate      = g.deadlineDate;
   }
 
   @override
   void dispose() {
     _titleCtrl.dispose();
     _descCtrl.dispose();
-    _daysCtrl.dispose();
+    _intervalCtrl.dispose();
     _customCatCtrl.dispose();
     super.dispose();
   }
@@ -184,7 +186,11 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
     if (_selectedCategory.isEmpty) {
       return 'Seleziona una categoria.';
     }
-    if (_durationType == _DurationType.range) {
+    if (_scheduleType == _ScheduleType.specificDays &&
+        _selectedDays.isEmpty) {
+      return 'Seleziona almeno un giorno.';
+    }
+    if (_scheduleType == _ScheduleType.dateRange) {
       if (_startDate == null || _endDate == null) {
         return 'Seleziona le date di inizio e fine.';
       }
@@ -192,122 +198,135 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
         return 'La data di fine deve essere successiva a quella di inizio.';
       }
     }
-    if (_durationType == _DurationType.days) {
-      final d = int.tryParse(_daysCtrl.text.trim());
-      if (d == null || d < 1) {
-        return 'Inserisci un numero di giorni valido (≥ 1).';
+    if (_scheduleType == _ScheduleType.customInterval) {
+      final n = int.tryParse(_intervalCtrl.text.trim());
+      if (n == null || n < 1) {
+        return 'Inserisci un intervallo valido (≥ 1 giorno).';
       }
     }
     return null;
   }
 
+  // ── Salvataggio ───────────────────────────────────────────────
+
   Future<void> _save() async {
     final err = _validate();
     if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(err, style: const TextStyle(
-            color: Colors.white, fontWeight: FontWeight.w600)),
-        backgroundColor: _red.withOpacity(0.85),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3)));
+      _showError(err);
       return;
     }
-
     setState(() => _saving = true);
 
-    final gp          = context.read<GoalProvider>();
-    final title       = _titleCtrl.text.trim();
-    final category    = _selectedCategory;
-    final description = _descCtrl.text.trim();
-    final durationType = _durationType.id;
-    final startDate   = _startDate?.toIso8601String() ??
-        DateTime.now().toIso8601String();
-    final endDate     = _endDate?.toIso8601String();
-    final durationDays =
-        int.tryParse(_daysCtrl.text.trim());
+    final gp       = context.read<GoalProvider>();
+    final title    = _titleCtrl.text.trim();
+    final desc     = _descCtrl.text.trim();
+    final cat      = _selectedCategory;
+    final schType  = _scheduleType.id;
+    final startStr = _startDate != null ? _fmtDate(_startDate!) : null;
+    final endStr   = _endDate   != null ? _fmtDate(_endDate!)   : null;
+    final interval = int.tryParse(_intervalCtrl.text.trim());
 
     try {
       if (widget.isEditing) {
-        await gp.updateGoal(
-          widget.editGoal!.key,
-          title:        title,
-          category:     category,
-          description:  description,
-          durationType: durationType,
-          startDate:    startDate,
-          endDate:      endDate,
-          durationDays: durationDays,
-        );
+        // updateGoal(key, HiveGoal) — aggiorniamo il model esistente
+        final existing = widget.editGoal!;
+        existing.title                  = title;
+        existing.description            = desc.isEmpty ? null : desc;
+        existing.category               = cat;
+        existing.scheduleType           = schType;
+        existing.scheduleDaysOfWeek     =
+            _scheduleType == _ScheduleType.specificDays
+                ? _selectedDays : null;
+        existing.scheduleStartDate      =
+            (_scheduleType == _ScheduleType.dateRange ||
+             _scheduleType == _ScheduleType.customInterval)
+                ? startStr : null;
+        existing.scheduleEndDate        =
+            _scheduleType == _ScheduleType.dateRange ? endStr : null;
+        existing.scheduleCustomInterval =
+            _scheduleType == _ScheduleType.customInterval ? interval : null;
+        existing.deadlineDate           = _deadlineDate;
+        await gp.updateGoal(existing.key, existing);
       } else {
         await gp.addGoal(
-          title:        title,
-          category:     category,
-          description:  description,
-          durationType: durationType,
-          startDate:    startDate,
-          endDate:      endDate,
-          durationDays: durationDays,
+          title:                title,
+          description:          desc.isEmpty ? null : desc,
+          category:             cat,
+          scheduleType:         schType,
+          scheduleDaysOfWeek:
+              _scheduleType == _ScheduleType.specificDays
+                  ? _selectedDays : null,
+          scheduleStartDate:
+              (_scheduleType == _ScheduleType.dateRange ||
+               _scheduleType == _ScheduleType.customInterval)
+                  ? startStr : null,
+          scheduleEndDate:
+              _scheduleType == _ScheduleType.dateRange ? endStr : null,
+          scheduleCustomInterval:
+              _scheduleType == _ScheduleType.customInterval ? interval : null,
+          deadlineDate: _deadlineDate,
         );
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Errore: $e',
-              style: const TextStyle(color: Colors.white)),
-          backgroundColor: _red.withOpacity(0.85),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16)));
-      }
+      if (mounted) _showError('Errore durante il salvataggio: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: const TextStyle(
+          color: Colors.white, fontWeight: FontWeight.w600)),
+      backgroundColor: _red.withOpacity(0.85),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.all(16),
+      duration: const Duration(seconds: 3)));
+  }
+
+  String _fmtDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  String _displayDate(DateTime? d) {
+    if (d == null) return 'Seleziona data';
+    const months = ['','Gen','Feb','Mar','Apr','Mag','Giu',
+        'Lug','Ago','Set','Ott','Nov','Dic'];
+    return '${d.day} ${months[d.month]} ${d.year}';
+  }
+
+  // ── Categoria personalizzata ──────────────────────────────────
+
   Future<void> _addCustomCategory() async {
     final name = _customCatCtrl.text.trim();
     if (name.isEmpty) return;
     final err = await CategoriesRepository.addCustom(name);
-    if (err != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(err, style: const TextStyle(
-            color: Colors.white)),
-        backgroundColor: _red.withOpacity(0.85),
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16)));
-      return;
-    }
+    if (err != null && mounted) { _showError(err); return; }
     await _loadCategories();
-    if (mounted) {
-      setState(() {
-        _selectedCategory      = name;
-        _showCustomCatField    = false;
-        _customCatCtrl.clear();
-        FocusScope.of(context).unfocus();
-      });
-    }
+    if (mounted) setState(() {
+      _selectedCategory   = name;
+      _showCustomCatField = false;
+      _customCatCtrl.clear();
+      FocusScope.of(context).unfocus();
+    });
   }
 
   // ── Date picker Glass ─────────────────────────────────────────
 
   Future<DateTime?> _pickDate(DateTime initial,
-      {DateTime? firstDate, DateTime? lastDate}) async {
-    DateTime result = initial;
+      {DateTime? firstDate}) async {
+    DateTime? picked;
     await showDialog(
       context: context,
       barrierColor: Colors.black.withOpacity(0.55),
-      builder: (ctx) => _GlassDatePickerDialog(
+      builder: (ctx) => _GlassDatePicker(
         initialDate: initial,
         firstDate:   firstDate,
-        lastDate:    lastDate,
-        onConfirm:   (d) { result = d; Navigator.pop(ctx); },
-        onCancel:    () => Navigator.pop(ctx),
-      ),
-    );
-    return result;
+        onConfirm:   (d) { picked = d; Navigator.pop(ctx); },
+        onCancel:    () => Navigator.pop(ctx)));
+    return picked;
   }
 
   // ── Build ─────────────────────────────────────────────────────
@@ -319,53 +338,55 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
       body: CosmicBackground(
         child: SafeArea(
           child: Column(children: [
-            // ── App Bar ────────────────────────────────────────
-            _NewGoalAppBar(
+            _AppBar(
               isEditing: widget.isEditing,
-              onBack:    () => Navigator.pop(context),
-              onSave:    _saving ? null : _save),
-
-            // ── Form scrollabile ───────────────────────────────
+              saving:    _saving,
+              canSave:   _titleCtrl.text.trim().isNotEmpty &&
+                  _selectedCategory.isNotEmpty,
+              onBack: () => Navigator.pop(context),
+              onSave: _saving ? null : _save),
             Expanded(
               child: GestureDetector(
                 onTap: () => FocusScope.of(context).unfocus(),
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+                  padding:
+                      const EdgeInsets.fromLTRB(20, 12, 20, 40),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
 
-                      // ── Titolo ────────────────────────────────
-                      _FormLabel(label: 'Titolo', icon: Icons.edit_rounded,
+                      // ── Titolo ───────────────────────────────
+                      _Label(label: 'Titolo',
+                          icon: Icons.edit_rounded,
                           color: _teal, required: true),
                       const SizedBox(height: 8),
-                      _GlassInput(
-                        controller: _titleCtrl,
-                        hintText:   'Es. Leggere 20 min al giorno...',
-                        accentColor: _teal,
-                        onChanged:  (_) => setState(() {})),
+                      _GlassTextField(
+                        controller:  _titleCtrl,
+                        hint:        'Es. Leggere 20 min al giorno...',
+                        accent:      _teal,
+                        onChanged:   (_) => setState(() {})),
                       const SizedBox(height: 16),
 
-                      // ── Descrizione ───────────────────────────
-                      _FormLabel(label: 'Descrizione',
+                      // ── Descrizione ──────────────────────────
+                      _Label(label: 'Descrizione',
                           icon: Icons.notes_rounded, color: _cyan),
                       const SizedBox(height: 8),
-                      _GlassInput(
-                        controller:  _descCtrl,
-                        hintText:    'Aggiungi una nota (opzionale)...',
-                        accentColor: _cyan,
-                        maxLines:    3),
+                      _GlassTextField(
+                        controller: _descCtrl,
+                        hint:       'Note opzionali...',
+                        accent:     _cyan,
+                        maxLines:   3),
                       const SizedBox(height: 16),
 
-                      // ── Categoria ─────────────────────────────
-                      _FormLabel(label: 'Categoria',
-                          icon: Icons.label_rounded, color: _indigo,
-                          required: true),
+                      // ── Categoria ────────────────────────────
+                      _Label(label: 'Categoria',
+                          icon: Icons.label_rounded,
+                          color: _indigo, required: true),
                       const SizedBox(height: 10),
                       _CategoryGrid(
-                        categories:       _allCategories,
-                        selected:         _selectedCategory,
+                        categories:  _allCategories,
+                        selected:    _selectedCategory,
                         onSelect: (c) =>
                             setState(() => _selectedCategory = c),
                         onAddCustom: () =>
@@ -377,39 +398,68 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
                         })),
                       if (_showCustomCatField) ...[
                         const SizedBox(height: 10),
-                        _CustomCategoryInput(
+                        _CustomCatInput(
                           controller: _customCatCtrl,
                           onConfirm:  _addCustomCategory),
                       ],
                       const SizedBox(height: 16),
 
-                      // ── Durata ────────────────────────────────
-                      _FormLabel(label: 'Durata',
+                      // ── Pianificazione ───────────────────────
+                      _Label(label: 'Pianificazione',
                           icon: Icons.schedule_rounded, color: _orange),
                       const SizedBox(height: 10),
-                      _DurationSelector(
-                        selected: _durationType,
+                      _ScheduleSelector(
+                        selected: _scheduleType,
                         onSelect: (t) =>
-                            setState(() => _durationType = t)),
+                            setState(() => _scheduleType = t)),
                       const SizedBox(height: 12),
 
-                      // ── Inputs contestuali durata ─────────────
+                      // ── Controlli contestuali ────────────────
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 250),
+                        transitionBuilder: (child, anim) =>
+                            FadeTransition(opacity: anim,
+                                child: SizeTransition(
+                                    sizeFactor: anim, child: child)),
                         child: KeyedSubtree(
-                          key: ValueKey(_durationType),
-                          child: _buildDurationInputs()),
-                      ),
-
-                      // ── Pulsante Salva ────────────────────────
-                      const SizedBox(height: 24),
-                      _SaveButton(
-                        isEditing: widget.isEditing,
-                        isSaving:  _saving,
-                        canSave:   _titleCtrl.text.trim().isNotEmpty &&
-                            _selectedCategory.isNotEmpty,
-                        onSave:    _save),
+                          key: ValueKey(_scheduleType),
+                          child: _buildScheduleDetails())),
                       const SizedBox(height: 16),
+
+                      // ── Scadenza (opzionale) ─────────────────
+                      _Label(label: 'Scadenza (opzionale)',
+                          icon: Icons.flag_rounded, color: _red),
+                      const SizedBox(height: 8),
+                      _DateRow(
+                        icon:   Icons.event_rounded,
+                        label:  'Data scadenza',
+                        value:  _deadlineDate != null
+                            ? _displayDate(DateTime.tryParse(_deadlineDate!))
+                            : 'Nessuna scadenza',
+                        color:  _red,
+                        hasValue: _deadlineDate != null,
+                        onTap:  () async {
+                          final d = await _pickDate(
+                              _deadlineDate != null
+                                  ? DateTime.parse(_deadlineDate!)
+                                  : DateTime.now());
+                          if (d != null) {
+                            setState(
+                                () => _deadlineDate = _fmtDate(d));
+                          }
+                        },
+                        onClear: _deadlineDate != null
+                            ? () => setState(() => _deadlineDate = null)
+                            : null),
+                      const SizedBox(height: 28),
+
+                      // ── Pulsante Salva ───────────────────────
+                      _SaveBtn(
+                        isEditing: widget.isEditing,
+                        saving:    _saving,
+                        canSave: _titleCtrl.text.trim().isNotEmpty &&
+                            _selectedCategory.isNotEmpty,
+                        onSave: _save),
                     ],
                   ),
                 ),
@@ -421,57 +471,153 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
     );
   }
 
-  Widget _buildDurationInputs() {
-    switch (_durationType) {
-      case _DurationType.singleDay:
-        return _SingleDayInput(
-          date:     _startDate ?? DateTime.now(),
-          onPick: () async {
-            final d = await _pickDate(_startDate ?? DateTime.now());
-            if (d != null) setState(() => _startDate = d);
-          });
+  Widget _buildScheduleDetails() {
+    switch (_scheduleType) {
+      case _ScheduleType.daily:
+      case _ScheduleType.weekdays:
+      case _ScheduleType.weekend:
+        return _InfoBox(
+          icon: _scheduleType.icon,
+          text: _scheduleType == _ScheduleType.daily
+              ? 'L\'obiettivo verrà mostrato ogni giorno.'
+              : _scheduleType == _ScheduleType.weekdays
+                  ? 'Visibile dal lunedì al venerdì.'
+                  : 'Visibile sabato e domenica.');
 
-      case _DurationType.range:
-        return _DateRangeInput(
-          startDate: _startDate,
-          endDate:   _endDate,
-          onPickStart: () async {
-            final d = await _pickDate(
-                _startDate ?? DateTime.now());
-            if (d != null) setState(() => _startDate = d);
-          },
-          onPickEnd: () async {
-            final d = await _pickDate(
-                _endDate ?? (_startDate ?? DateTime.now()),
-                firstDate: _startDate);
-            if (d != null) setState(() => _endDate = d);
-          });
+      case _ScheduleType.specificDays:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+          Text('Seleziona i giorni:',
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.55),
+                  fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          Wrap(spacing: 8, runSpacing: 8,
+            children: List.generate(7, (i) {
+              final day = i + 1; // 1=Lun...7=Dom
+              final sel = _selectedDays.contains(day);
+              return GestureDetector(
+                onTap: () => setState(() {
+                  if (sel) {
+                    _selectedDays.remove(day);
+                  } else {
+                    _selectedDays.add(day);
+                  }
+                }),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? _indigo.withOpacity(0.2)
+                        : Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(
+                      color: sel
+                          ? _indigo.withOpacity(0.6)
+                          : Colors.white.withOpacity(0.12),
+                      width: sel ? 1.2 : 0.8)),
+                  child: Text(_dayNames[day], style: TextStyle(
+                      color: sel
+                          ? _indigo
+                          : Colors.white.withOpacity(0.5),
+                      fontSize: 12,
+                      fontWeight: sel
+                          ? FontWeight.w700 : FontWeight.w500))));
+            })),
+        ]);
 
-      case _DurationType.days:
-        return _DaysCountInput(
-          controller:  _daysCtrl,
-          startDate:   _startDate ?? DateTime.now(),
-          onPickStart: () async {
-            final d = await _pickDate(_startDate ?? DateTime.now());
-            if (d != null) setState(() => _startDate = d);
-          });
+      case _ScheduleType.dateRange:
+        return Column(children: [
+          _DateRow(
+            icon:  Icons.play_arrow_rounded,
+            label: 'Data inizio',
+            value: _displayDate(_startDate),
+            color: _green,
+            hasValue: _startDate != null,
+            onTap: () async {
+              final d = await _pickDate(
+                  _startDate ?? DateTime.now());
+              if (d != null) setState(() => _startDate = d);
+            }),
+          const SizedBox(height: 8),
+          _DateRow(
+            icon:  Icons.stop_rounded,
+            label: 'Data fine',
+            value: _displayDate(_endDate),
+            color: _red,
+            hasValue: _endDate != null,
+            onTap: () async {
+              final d = await _pickDate(
+                  _endDate ?? (_startDate ?? DateTime.now()),
+                  firstDate: _startDate);
+              if (d != null) setState(() => _endDate = d);
+            }),
+        ]);
 
-      case _DurationType.indefinite:
-        return _IndefiniteInfo();
+      case _ScheduleType.customInterval:
+        return Column(children: [
+          _DateRow(
+            icon:  Icons.play_arrow_rounded,
+            label: 'Data inizio',
+            value: _displayDate(_startDate),
+            color: _green,
+            hasValue: _startDate != null,
+            onTap: () async {
+              final d = await _pickDate(
+                  _startDate ?? DateTime.now());
+              if (d != null) setState(() => _startDate = d);
+            }),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: _blue.withOpacity(0.2), width: 0.8)),
+                child: Row(children: [
+                  const SizedBox(width: 14),
+                  Icon(Icons.repeat_rounded,
+                      color: _blue.withOpacity(0.7), size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller:  _intervalCtrl,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText:  'Ogni quanti giorni? (es. 2)',
+                        hintStyle: TextStyle(
+                            color: Colors.white.withOpacity(0.3),
+                            fontSize: 14),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 0, vertical: 13)))),
+                ]))),
+          ),
+        ]);
     }
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _NewGoalAppBar
+// _AppBar
 // ─────────────────────────────────────────────────────────────
 
-class _NewGoalAppBar extends StatelessWidget {
-  final bool isEditing;
+class _AppBar extends StatelessWidget {
+  final bool isEditing, saving, canSave;
   final VoidCallback onBack;
   final VoidCallback? onSave;
-  const _NewGoalAppBar({
-    required this.isEditing, required this.onBack, this.onSave});
+  const _AppBar({
+    required this.isEditing, required this.saving,
+    required this.canSave, required this.onBack, this.onSave});
 
   @override
   Widget build(BuildContext context) {
@@ -485,29 +631,26 @@ class _NewGoalAppBar extends StatelessWidget {
                 color: _teal.withOpacity(0.15), width: 0.6))),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: Row(children: [
+            // Back
             GestureDetector(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                onBack();
-              },
+              onTap: () { HapticFeedback.lightImpact(); onBack(); },
               child: Container(
                 width: 36, height: 36,
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.07),
                   borderRadius: BorderRadius.circular(11),
                   border: Border.all(
-                      color: Colors.white.withOpacity(0.12),
-                      width: 0.7)),
+                      color: Colors.white.withOpacity(0.12), width: 0.7)),
                 child: const Icon(Icons.arrow_back_ios_new_rounded,
                     size: 15, color: Colors.white))),
             const SizedBox(width: 12),
+            // Titolo
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                 Text(isEditing
-                    ? 'Modifica obiettivo'
-                    : 'Nuovo obiettivo',
+                    ? 'Modifica obiettivo' : 'Nuovo obiettivo',
                   style: const TextStyle(color: Colors.white,
                       fontSize: 17, fontWeight: FontWeight.w800,
                       letterSpacing: -0.3)),
@@ -518,32 +661,8 @@ class _NewGoalAppBar extends StatelessWidget {
                       color: Colors.white.withOpacity(0.4),
                       fontSize: 11)),
               ])),
-            if (onSave != null)
-              GestureDetector(
-                onTap: () {
-                  HapticFeedback.mediumImpact();
-                  onSave?.call();
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [_teal, Color(0xFF00A880)]),
-                    borderRadius: BorderRadius.circular(11),
-                    boxShadow: [BoxShadow(
-                        color: _teal.withOpacity(0.4),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3))]),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.check_rounded,
-                        color: Colors.white, size: 15),
-                    const SizedBox(width: 5),
-                    Text(isEditing ? 'Aggiorna' : 'Salva',
-                        style: const TextStyle(color: Colors.white,
-                            fontSize: 12, fontWeight: FontWeight.w700)),
-                  ])))
-            else
+            // Azione salva
+            if (saving)
               Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 14, vertical: 8),
@@ -551,8 +670,7 @@ class _NewGoalAppBar extends StatelessWidget {
                   color: Colors.white.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(11)),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  SizedBox(
-                    width: 12, height: 12,
+                  SizedBox(width: 12, height: 12,
                     child: CircularProgressIndicator(
                         strokeWidth: 2,
                         color: _teal.withOpacity(0.7))),
@@ -560,7 +678,42 @@ class _NewGoalAppBar extends StatelessWidget {
                   const Text('Salvo...',
                       style: TextStyle(color: Colors.white,
                           fontSize: 12, fontWeight: FontWeight.w600)),
-                ])),
+                ]))
+            else
+              GestureDetector(
+                onTap: canSave ? () {
+                  HapticFeedback.mediumImpact();
+                  onSave?.call();
+                } : null,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: canSave
+                        ? const LinearGradient(
+                            colors: [_teal, _tealDk])
+                        : null,
+                    color: canSave
+                        ? null : Colors.white.withOpacity(0.04),
+                    borderRadius: BorderRadius.circular(11),
+                    boxShadow: canSave ? [BoxShadow(
+                        color: _teal.withOpacity(0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3))] : null),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.check_rounded, color: canSave
+                        ? Colors.white
+                        : Colors.white.withOpacity(0.25), size: 15),
+                    const SizedBox(width: 5),
+                    Text(isEditing ? 'Aggiorna' : 'Salva',
+                        style: TextStyle(
+                            color: canSave
+                                ? Colors.white
+                                : Colors.white.withOpacity(0.25),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700)),
+                  ]))),
           ]),
         ),
       ),
@@ -569,15 +722,14 @@ class _NewGoalAppBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _FormLabel
+// _Label
 // ─────────────────────────────────────────────────────────────
 
-class _FormLabel extends StatelessWidget {
+class _Label extends StatelessWidget {
   final String label; final IconData icon;
   final Color color; final bool required;
-  const _FormLabel({
-    required this.label, required this.icon,
-    required this.color, this.required = false});
+  const _Label({required this.label, required this.icon,
+      required this.color, this.required = false});
 
   @override
   Widget build(BuildContext context) => Row(children: [
@@ -587,9 +739,8 @@ class _FormLabel extends StatelessWidget {
           borderRadius: BorderRadius.circular(7)),
       child: Icon(icon, size: 13, color: color)),
     const SizedBox(width: 8),
-    Text(label, style: const TextStyle(
-        color: Colors.white, fontSize: 13,
-        fontWeight: FontWeight.w700)),
+    Text(label, style: const TextStyle(color: Colors.white,
+        fontSize: 13, fontWeight: FontWeight.w700)),
     if (required) ...[
       const SizedBox(width: 4),
       Text('*', style: TextStyle(
@@ -600,52 +751,40 @@ class _FormLabel extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GlassInput
+// _GlassTextField
 // ─────────────────────────────────────────────────────────────
 
-class _GlassInput extends StatelessWidget {
+class _GlassTextField extends StatelessWidget {
   final TextEditingController controller;
-  final String hintText;
-  final Color accentColor;
+  final String hint; final Color accent;
   final void Function(String)? onChanged;
   final int maxLines;
-
-  const _GlassInput({
-    required this.controller, required this.hintText,
-    required this.accentColor, this.onChanged,
-    this.maxLines = 1});
+  const _GlassTextField({
+    required this.controller, required this.hint, required this.accent,
+    this.onChanged, this.maxLines = 1});
 
   @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-                color: accentColor.withOpacity(0.2), width: 0.8)),
-          child: TextField(
-            controller: controller,
-            maxLines:   maxLines,
-            textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 14),
-            decoration: InputDecoration(
-              hintText:  hintText,
-              hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.3),
-                  fontSize: 14),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 13)),
-            onChanged: onChanged),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(14),
+    child: BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: accent.withOpacity(0.2), width: 0.8)),
+        child: TextField(
+          controller: controller, maxLines: maxLines,
+          textCapitalization: TextCapitalization.sentences,
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+          decoration: InputDecoration(
+            hintText:  hint,
+            hintStyle: TextStyle(
+                color: Colors.white.withOpacity(0.3), fontSize: 14),
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 13)),
+          onChanged: onChanged))));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -653,157 +792,130 @@ class _GlassInput extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 
 class _CategoryGrid extends StatelessWidget {
-  final List<String> categories;
-  final String selected;
-  final ValueChanged<String> onSelect;
-  final VoidCallback onAddCustom;
-
-  const _CategoryGrid({
-    required this.categories, required this.selected,
-    required this.onSelect, required this.onAddCustom});
+  final List<String> categories; final String selected;
+  final ValueChanged<String> onSelect; final VoidCallback onAddCustom;
+  const _CategoryGrid({required this.categories, required this.selected,
+      required this.onSelect, required this.onAddCustom});
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8, runSpacing: 8,
-      children: [
-        ...categories.map((cat) {
-          final isSel = cat == selected;
-          final color = _colorFor(cat);
-          return GestureDetector(
-            onTap: () => onSelect(cat),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: isSel
-                    ? color.withOpacity(0.18)
-                    : Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isSel
-                      ? color.withOpacity(0.6)
-                      : Colors.white.withOpacity(0.1),
-                  width: isSel ? 1.3 : 0.8),
-                boxShadow: isSel
-                    ? [BoxShadow(
-                        color: color.withOpacity(0.25),
-                        blurRadius: 8)] : null),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Container(width: 8, height: 8,
-                  decoration: BoxDecoration(
-                      color: _colorFor(cat), shape: BoxShape.circle,
-                      boxShadow: isSel ? [BoxShadow(
-                          color: _colorFor(cat).withOpacity(0.6),
-                          blurRadius: 4)] : null)),
-                const SizedBox(width: 7),
-                Text(cat, style: TextStyle(
-                    color: isSel ? color : Colors.white.withOpacity(0.55),
-                    fontSize: 12,
-                    fontWeight: isSel
-                        ? FontWeight.w700 : FontWeight.w500)),
-              ]),
-            ),
-          );
-        }),
-        // Chip aggiungi categoria custom
-        GestureDetector(
-          onTap: onAddCustom,
+    return Wrap(spacing: 8, runSpacing: 8, children: [
+      ...categories.map((cat) {
+        final isSel = cat == selected;
+        final color = _colorFor(cat);
+        return GestureDetector(
+          onTap: () => onSelect(cat),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             padding: const EdgeInsets.symmetric(
                 horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: _cyan.withOpacity(0.06),
+              color: isSel
+                  ? color.withOpacity(0.18)
+                  : Colors.white.withOpacity(0.05),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                  color: _cyan.withOpacity(0.25), width: 0.8),
-              boxShadow: null),
+                color: isSel
+                    ? color.withOpacity(0.6)
+                    : Colors.white.withOpacity(0.1),
+                width: isSel ? 1.3 : 0.8),
+              boxShadow: isSel ? [BoxShadow(
+                  color: color.withOpacity(0.25), blurRadius: 8)] : null),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.add_rounded,
-                  color: _cyan.withOpacity(0.7), size: 14),
-              const SizedBox(width: 5),
-              Text('Personalizzata',
-                  style: TextStyle(
-                      color: _cyan.withOpacity(0.7), fontSize: 12,
-                      fontWeight: FontWeight.w500)),
-            ])),
-        ),
-      ],
-    );
+              Container(width: 8, height: 8,
+                decoration: BoxDecoration(
+                    color: color, shape: BoxShape.circle,
+                    boxShadow: isSel ? [BoxShadow(
+                        color: color.withOpacity(0.6), blurRadius: 4)]
+                        : null)),
+              const SizedBox(width: 7),
+              Text(cat, style: TextStyle(
+                  color: isSel ? color : Colors.white.withOpacity(0.55),
+                  fontSize: 12,
+                  fontWeight: isSel
+                      ? FontWeight.w700 : FontWeight.w500)),
+            ])));
+      }),
+      // Chip aggiungi personalizzata
+      GestureDetector(
+        onTap: onAddCustom,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: _cyan.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _cyan.withOpacity(0.25), width: 0.8)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.add_rounded, color: _cyan.withOpacity(0.7), size: 14),
+            const SizedBox(width: 5),
+            Text('Personalizzata', style: TextStyle(
+                color: _cyan.withOpacity(0.7), fontSize: 12,
+                fontWeight: FontWeight.w500)),
+          ]))),
+    ]);
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _CustomCategoryInput
+// _CustomCatInput
 // ─────────────────────────────────────────────────────────────
 
-class _CustomCategoryInput extends StatelessWidget {
+class _CustomCatInput extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onConfirm;
-  const _CustomCategoryInput({
-    required this.controller, required this.onConfirm});
+  const _CustomCatInput(
+      {required this.controller, required this.onConfirm});
 
   @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          decoration: BoxDecoration(
-            color: _cyan.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: _cyan.withOpacity(0.25), width: 0.8)),
-          child: Row(children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                textCapitalization: TextCapitalization.sentences,
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText:  'Nome categoria personalizzata...',
-                  hintStyle: TextStyle(
-                      color: Colors.white.withOpacity(0.3),
-                      fontSize: 13),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 12)),
-                onSubmitted: (_) => onConfirm())),
-            GestureDetector(
-              onTap: onConfirm,
-              child: Container(
-                margin: const EdgeInsets.all(6),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                      colors: [_cyan, Color(0xFF00B8D4)]),
-                  borderRadius: BorderRadius.circular(9),
-                  boxShadow: [BoxShadow(
-                      color: _cyan.withOpacity(0.3), blurRadius: 8)]),
-                child: const Text('Aggiungi',
-                    style: TextStyle(
-                        color: Colors.white, fontSize: 12,
-                        fontWeight: FontWeight.w700)))),
-          ]),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(12),
+    child: BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _cyan.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _cyan.withOpacity(0.25), width: 0.8)),
+        child: Row(children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              decoration: InputDecoration(
+                hintText:  'Nome categoria...',
+                hintStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.3), fontSize: 13),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12)),
+              onSubmitted: (_) => onConfirm())),
+          GestureDetector(
+            onTap: onConfirm,
+            child: Container(
+              margin: const EdgeInsets.all(6),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [_cyan, Color(0xFF00B8D4)]),
+                borderRadius: BorderRadius.circular(9),
+                boxShadow: [BoxShadow(
+                    color: _cyan.withOpacity(0.3), blurRadius: 8)]),
+              child: const Text('Aggiungi',
+                  style: TextStyle(color: Colors.white,
+                      fontSize: 12, fontWeight: FontWeight.w700)))),
+        ]))));
 }
 
 // ─────────────────────────────────────────────────────────────
-// _DurationSelector
+// _ScheduleSelector
 // ─────────────────────────────────────────────────────────────
 
-class _DurationSelector extends StatelessWidget {
-  final _DurationType selected;
-  final ValueChanged<_DurationType> onSelect;
-  const _DurationSelector(
+class _ScheduleSelector extends StatelessWidget {
+  final _ScheduleType selected;
+  final ValueChanged<_ScheduleType> onSelect;
+  const _ScheduleSelector(
       {required this.selected, required this.onSelect});
 
   @override
@@ -818,70 +930,63 @@ class _DurationSelector extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
                 color: _orange.withOpacity(0.15), width: 0.8)),
-          child: Column(children: [
-            ..._DurationType.values.asMap().entries.map((e) {
-              final i    = e.key;
-              final type = e.value;
-              final isSel = type == selected;
-              final last = i == _DurationType.values.length - 1;
-              return Column(children: [
-                GestureDetector(
-                  onTap: () => onSelect(type),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 13),
-                    decoration: BoxDecoration(
-                      color: isSel
-                          ? _orange.withOpacity(0.1)
-                          : Colors.transparent),
-                    child: Row(children: [
-                      Container(width: 34, height: 34,
-                        decoration: BoxDecoration(
+          child: Column(children: _ScheduleType.values.asMap().entries.map((e) {
+            final i    = e.key;
+            final type = e.value;
+            final isSel = type == selected;
+            final last  = i == _ScheduleType.values.length - 1;
+            return Column(children: [
+              GestureDetector(
+                onTap: () => onSelect(type),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 13),
+                  decoration: BoxDecoration(
+                    color: isSel
+                        ? _orange.withOpacity(0.09)
+                        : Colors.transparent),
+                  child: Row(children: [
+                    Container(width: 34, height: 34,
+                      decoration: BoxDecoration(
+                        color: isSel
+                            ? _orange.withOpacity(0.15)
+                            : Colors.white.withOpacity(0.04),
+                        borderRadius: BorderRadius.circular(9)),
+                      child: Icon(type.icon, size: 17,
                           color: isSel
-                              ? _orange.withOpacity(0.15)
-                              : Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(9)),
-                        child: Icon(type.icon, size: 17,
-                            color: isSel
-                                ? _orange
-                                : Colors.white.withOpacity(0.4))),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(type.label,
-                            style: TextStyle(
-                                color: isSel
-                                    ? Colors.white
-                                    : Colors.white.withOpacity(0.55),
-                                fontSize: 13,
-                                fontWeight: isSel
-                                    ? FontWeight.w700
-                                    : FontWeight.w500))),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        width: 20, height: 20,
-                        decoration: BoxDecoration(
-                          color: isSel ? _orange : Colors.transparent,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isSel
-                                ? _orange
-                                : Colors.white.withOpacity(0.2),
-                            width: 1.5)),
-                        child: isSel
-                            ? const Icon(Icons.check_rounded,
-                                color: Colors.white, size: 11)
-                            : null),
-                    ]),
-                  ),
-                ),
-                if (!last)
-                  Divider(height: 0, thickness: 0.5,
-                      indent: 14, endIndent: 14,
-                      color: Colors.white.withOpacity(0.05)),
-              ]);
-            }),
-          ]),
+                              ? _orange
+                              : Colors.white.withOpacity(0.35))),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(type.label, style: TextStyle(
+                        color: isSel
+                            ? Colors.white
+                            : Colors.white.withOpacity(0.55),
+                        fontSize: 13,
+                        fontWeight: isSel
+                            ? FontWeight.w700 : FontWeight.w500))),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      width: 20, height: 20,
+                      decoration: BoxDecoration(
+                        color: isSel ? _orange : Colors.transparent,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSel
+                              ? _orange
+                              : Colors.white.withOpacity(0.2),
+                          width: 1.5)),
+                      child: isSel
+                          ? const Icon(Icons.check_rounded,
+                              color: Colors.white, size: 11)
+                          : null),
+                  ]))),
+              if (!last)
+                Divider(height: 0, thickness: 0.5,
+                    indent: 14, endIndent: 14,
+                    color: Colors.white.withOpacity(0.05)),
+            ]);
+          }).toList()),
         ),
       ),
     );
@@ -889,205 +994,100 @@ class _DurationSelector extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Widget inputs durata contestuali
+// _InfoBox
 // ─────────────────────────────────────────────────────────────
 
-class _SingleDayInput extends StatelessWidget {
-  final DateTime date; final VoidCallback onPick;
-  const _SingleDayInput({required this.date, required this.onPick});
-
+class _InfoBox extends StatelessWidget {
+  final IconData icon; final String text;
+  const _InfoBox({required this.icon, required this.text});
   @override
-  Widget build(BuildContext context) {
-    return _DatePickerRow(
-      icon: Icons.today_rounded, label: 'Data obiettivo',
-      date: date, color: _orange, onPick: onPick);
-  }
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(14),
+    child: BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _indigo.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _indigo.withOpacity(0.18), width: 0.8)),
+        child: Row(children: [
+          Icon(icon, color: _indigo.withOpacity(0.7), size: 18),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: TextStyle(
+              color: Colors.white.withOpacity(0.55),
+              fontSize: 12, height: 1.5))),
+        ]))));
 }
 
-class _DateRangeInput extends StatelessWidget {
-  final DateTime? startDate, endDate;
-  final VoidCallback onPickStart, onPickEnd;
-  const _DateRangeInput({
-    this.startDate, this.endDate,
-    required this.onPickStart, required this.onPickEnd});
+// ─────────────────────────────────────────────────────────────
+// _DateRow
+// ─────────────────────────────────────────────────────────────
+
+class _DateRow extends StatelessWidget {
+  final IconData icon; final String label, value;
+  final Color color; final bool hasValue;
+  final VoidCallback onTap; final VoidCallback? onClear;
+  const _DateRow({
+    required this.icon, required this.label, required this.value,
+    required this.color, required this.hasValue,
+    required this.onTap, this.onClear});
 
   @override
-  Widget build(BuildContext context) => Column(children: [
-    _DatePickerRow(
-      icon: Icons.play_arrow_rounded, label: 'Data inizio',
-      date: startDate, color: _green, onPick: onPickStart),
-    const SizedBox(height: 8),
-    _DatePickerRow(
-      icon: Icons.stop_rounded, label: 'Data fine',
-      date: endDate, color: _red,
-      placeholder: 'Seleziona data fine',
-      onPick: onPickEnd),
-  ]);
-}
-
-class _DaysCountInput extends StatelessWidget {
-  final TextEditingController controller;
-  final DateTime startDate; final VoidCallback onPickStart;
-  const _DaysCountInput({
-    required this.controller, required this.startDate,
-    required this.onPickStart});
-
-  @override
-  Widget build(BuildContext context) => Column(children: [
-    _DatePickerRow(
-      icon: Icons.play_arrow_rounded, label: 'Data inizio',
-      date: startDate, color: _green, onPick: onPickStart),
-    const SizedBox(height: 8),
-    ClipRRect(
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
         child: Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: 14, vertical: 13),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-                color: _blue.withOpacity(0.2), width: 0.8)),
+                color: color.withOpacity(0.2), width: 0.8)),
           child: Row(children: [
-            Container(
-              width: 46,
-              alignment: Alignment.center,
-              child: Icon(Icons.calendar_view_week_rounded,
-                  color: _blue.withOpacity(0.7), size: 18)),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 14),
-                decoration: InputDecoration(
-                  hintText:  'Numero di giorni (es. 30)',
-                  hintStyle: TextStyle(
-                      color: Colors.white.withOpacity(0.3),
-                      fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 0, vertical: 13)))),
-          ]),
-        ),
-      ),
-    ),
-  ]);
-}
-
-class _IndefiniteInfo extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _indigo.withOpacity(0.06),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-                color: _indigo.withOpacity(0.2), width: 0.8)),
-          child: Row(children: [
-            Icon(Icons.all_inclusive_rounded,
-                color: _indigo.withOpacity(0.7), size: 18),
+            Icon(icon, color: color.withOpacity(0.7), size: 18),
             const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'L\'obiettivo non ha una scadenza. '
-                'Verrà mostrato ogni giorno fino a quando non decidi di eliminarlo.',
-                style: TextStyle(
-                    color: Colors.white.withOpacity(0.55),
-                    fontSize: 12, height: 1.5))),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// _DatePickerRow
-// ─────────────────────────────────────────────────────────────
-
-class _DatePickerRow extends StatelessWidget {
-  final IconData icon; final String label;
-  final DateTime? date; final Color color;
-  final String placeholder; final VoidCallback onPick;
-
-  const _DatePickerRow({
-    required this.icon, required this.label,
-    this.date, required this.color,
-    this.placeholder = 'Seleziona data',
-    required this.onPick});
-
-  String _format(DateTime? d) {
-    if (d == null) return placeholder;
-    const months = [
-      '', 'Gen','Feb','Mar','Apr','Mag','Giu',
-      'Lug','Ago','Set','Ott','Nov','Dic'];
-    return '${d.day} ${months[d.month]} ${d.year}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onPick,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 13),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: color.withOpacity(0.2), width: 0.8)),
-            child: Row(children: [
-              Icon(icon, color: color.withOpacity(0.7), size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                  Text(label, style: TextStyle(
-                      color: Colors.white.withOpacity(0.4),
-                      fontSize: 10, fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3)),
-                  const SizedBox(height: 2),
-                  Text(_format(date), style: TextStyle(
-                      color: date != null
-                          ? Colors.white
-                          : Colors.white.withOpacity(0.3),
-                      fontSize: 13, fontWeight: FontWeight.w600)),
-                ])),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              Text(label, style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: 10, fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3)),
+              const SizedBox(height: 2),
+              Text(value, style: TextStyle(
+                  color: hasValue
+                      ? Colors.white : Colors.white.withOpacity(0.3),
+                  fontSize: 13, fontWeight: FontWeight.w600)),
+            ])),
+            if (onClear != null)
+              GestureDetector(
+                onTap: onClear,
+                child: Icon(Icons.close_rounded,
+                    color: Colors.white.withOpacity(0.3), size: 16))
+            else
               Icon(Icons.chevron_right_rounded,
                   color: Colors.white.withOpacity(0.25), size: 18),
-            ]),
-          ),
-        ),
-      ),
-    );
-  }
+          ])))));
 }
 
 // ─────────────────────────────────────────────────────────────
-// _SaveButton
+// _SaveBtn
 // ─────────────────────────────────────────────────────────────
 
-class _SaveButton extends StatelessWidget {
-  final bool isEditing, isSaving, canSave;
+class _SaveBtn extends StatelessWidget {
+  final bool isEditing, saving, canSave;
   final VoidCallback onSave;
-  const _SaveButton({
-    required this.isEditing, required this.isSaving,
-    required this.canSave, required this.onSave});
+  const _SaveBtn({required this.isEditing, required this.saving,
+      required this.canSave, required this.onSave});
 
   @override
   Widget build(BuildContext context) {
-    final active = canSave && !isSaving;
+    final active = canSave && !saving;
     return GestureDetector(
       onTap: active ? onSave : null,
       child: AnimatedContainer(
@@ -1096,8 +1096,7 @@ class _SaveButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 15),
         decoration: BoxDecoration(
           gradient: active
-              ? const LinearGradient(
-                  colors: [_teal, Color(0xFF00A880)])
+              ? const LinearGradient(colors: [_teal, _tealDk])
               : null,
           color: active ? null : Colors.white.withOpacity(0.04),
           borderRadius: BorderRadius.circular(16),
@@ -1106,74 +1105,58 @@ class _SaveButton extends StatelessWidget {
                 ? _teal.withOpacity(0.4)
                 : Colors.white.withOpacity(0.1),
             width: 1),
-          boxShadow: active
-              ? [BoxShadow(
-                  color: _teal.withOpacity(0.4), blurRadius: 16,
-                  offset: const Offset(0, 4))]
-              : null),
-        child: isSaving
-            ? Row(mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+          boxShadow: active ? [BoxShadow(
+              color: _teal.withOpacity(0.4), blurRadius: 16,
+              offset: const Offset(0, 4))] : null),
+        child: saving
+            ? Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 SizedBox(width: 16, height: 16,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2,
+                  child: CircularProgressIndicator(strokeWidth: 2,
                       color: Colors.white.withOpacity(0.7))),
                 const SizedBox(width: 10),
                 const Text('Salvataggio...',
                     style: TextStyle(color: Colors.white,
                         fontSize: 15, fontWeight: FontWeight.w600)),
               ])
-            : Row(mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+            : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Icon(isEditing
-                    ? Icons.update_rounded
-                    : Icons.add_circle_rounded,
-                  color: active
-                      ? Colors.white
-                      : Colors.white.withOpacity(0.25),
+                    ? Icons.update_rounded : Icons.add_circle_rounded,
+                  color: active ? Colors.white : Colors.white.withOpacity(0.25),
                   size: 18),
                 const SizedBox(width: 8),
-                Text(isEditing ? 'Aggiorna obiettivo' : 'Crea obiettivo',
-                    style: TextStyle(
-                        color: active
-                            ? Colors.white
-                            : Colors.white.withOpacity(0.25),
-                        fontSize: 15, fontWeight: FontWeight.w700)),
-              ]),
-      ),
-    );
+                Text(isEditing
+                    ? 'Aggiorna obiettivo' : 'Crea obiettivo',
+                  style: TextStyle(
+                      color: active
+                          ? Colors.white : Colors.white.withOpacity(0.25),
+                      fontSize: 15, fontWeight: FontWeight.w700)),
+              ])));
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GlassDatePickerDialog
-// Calendario Glass a 3 livelli: giorni → mesi → anni
+// _GlassDatePicker — calendario Glass a 3 livelli
 // ─────────────────────────────────────────────────────────────
 
-class _GlassDatePickerDialog extends StatefulWidget {
+class _GlassDatePicker extends StatefulWidget {
   final DateTime initialDate;
-  final DateTime? firstDate, lastDate;
+  final DateTime? firstDate;
   final ValueChanged<DateTime> onConfirm;
   final VoidCallback onCancel;
-
-  const _GlassDatePickerDialog({
+  const _GlassDatePicker({
     required this.initialDate, required this.onConfirm,
-    required this.onCancel, this.firstDate, this.lastDate});
-
+    required this.onCancel, this.firstDate});
   @override
-  State<_GlassDatePickerDialog> createState() =>
-      _GlassDatePickerDialogState();
+  State<_GlassDatePicker> createState() => _GlassDatePickerState();
 }
 
-enum _PickerView { days, months, years }
+enum _PkView { days, months, years }
 
-class _GlassDatePickerDialogState
-    extends State<_GlassDatePickerDialog> {
-  late DateTime _focus;
-  late DateTime _selected;
-  _PickerView _view = _PickerView.days;
+class _GlassDatePickerState extends State<_GlassDatePicker> {
+  late DateTime _focus, _selected;
+  _PkView _view = _PkView.days;
 
-  static const _dayNames = ['L','M','M','G','V','S','D'];
+  static const _dayLabels = ['L','M','M','G','V','S','D'];
   static const _monthShort = [
     'Gen','Feb','Mar','Apr','Mag','Giu',
     'Lug','Ago','Set','Ott','Nov','Dic'];
@@ -1184,57 +1167,47 @@ class _GlassDatePickerDialogState
   @override
   void initState() {
     super.initState();
-    _focus    = widget.initialDate;
-    _selected = widget.initialDate;
+    _focus = _selected = widget.initialDate;
   }
 
-  String get _headerLabel {
+  String get _header {
     switch (_view) {
-      case _PickerView.days:
+      case _PkView.days:
         return '${_monthFull[_focus.month - 1]} ${_focus.year}';
-      case _PickerView.months:
-        return '${_focus.year}';
-      case _PickerView.years:
-        final dec = (_focus.year ~/ 10) * 10;
-        return '$dec – ${dec + 9}';
+      case _PkView.months: return '${_focus.year}';
+      case _PkView.years:
+        final d = (_focus.year ~/ 10) * 10;
+        return '$d – ${d + 9}';
     }
   }
 
   void _prev() => setState(() {
     switch (_view) {
-      case _PickerView.days:
+      case _PkView.days:
         _focus = DateTime(_focus.year, _focus.month - 1); break;
-      case _PickerView.months:
+      case _PkView.months:
         _focus = DateTime(_focus.year - 1, _focus.month); break;
-      case _PickerView.years:
+      case _PkView.years:
         _focus = DateTime(_focus.year - 10, _focus.month); break;
     }
   });
 
   void _next() => setState(() {
     switch (_view) {
-      case _PickerView.days:
+      case _PkView.days:
         _focus = DateTime(_focus.year, _focus.month + 1); break;
-      case _PickerView.months:
+      case _PkView.months:
         _focus = DateTime(_focus.year + 1, _focus.month); break;
-      case _PickerView.years:
+      case _PkView.years:
         _focus = DateTime(_focus.year + 10, _focus.month); break;
     }
   });
 
-  bool _isDisabled(DateTime d) {
-    final norm = DateTime(d.year, d.month, d.day);
-    if (widget.firstDate != null) {
-      final fd = DateTime(widget.firstDate!.year,
-          widget.firstDate!.month, widget.firstDate!.day);
-      if (norm.isBefore(fd)) return true;
-    }
-    if (widget.lastDate != null) {
-      final ld = DateTime(widget.lastDate!.year,
-          widget.lastDate!.month, widget.lastDate!.day);
-      if (norm.isAfter(ld)) return true;
-    }
-    return false;
+  bool _disabled(DateTime d) {
+    if (widget.firstDate == null) return false;
+    final fd = DateTime(widget.firstDate!.year,
+        widget.firstDate!.month, widget.firstDate!.day);
+    return DateTime(d.year, d.month, d.day).isBefore(fd);
   }
 
   @override
@@ -1257,40 +1230,38 @@ class _GlassDatePickerDialogState
                   color: _teal.withOpacity(0.25), width: 1)),
             padding: const EdgeInsets.all(20),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              // Navigazione
+              // Nav
               Row(children: [
-                _NavBtn(icon: Icons.chevron_left_rounded, onTap: _prev),
+                _PkNavBtn(icon: Icons.chevron_left_rounded, onTap: _prev),
                 Expanded(
                   child: GestureDetector(
                     onTap: () => setState(() {
-                      _view = _view == _PickerView.days
-                          ? _PickerView.months
-                          : _view == _PickerView.months
-                              ? _PickerView.years
-                              : _PickerView.days;
+                      _view = _view == _PkView.days
+                          ? _PkView.months
+                          : _view == _PkView.months
+                              ? _PkView.years
+                              : _PkView.days;
                     }),
-                    child: Text(_headerLabel,
+                    child: Text(_header,
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: Colors.white,
                             fontSize: 15, fontWeight: FontWeight.w800)))),
-                _NavBtn(icon: Icons.chevron_right_rounded, onTap: _next),
+                _PkNavBtn(icon: Icons.chevron_right_rounded, onTap: _next),
               ]),
               const SizedBox(height: 12),
-              Container(height: 0.6,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [
-                    Colors.transparent,
-                    _teal.withOpacity(0.3),
-                    Colors.transparent]))),
+              Container(height: 0.6, decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [
+                  Colors.transparent,
+                  _teal.withOpacity(0.3),
+                  Colors.transparent]))),
               const SizedBox(height: 12),
-              // Griglia
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 child: KeyedSubtree(
                   key: ValueKey('${_view}_${_focus.year}_${_focus.month}'),
-                  child: _buildContent())),
-              // Azioni
+                  child: _buildGrid())),
               const SizedBox(height: 16),
+              // Azioni
               Row(children: [
                 Expanded(
                   child: GestureDetector(
@@ -1314,11 +1285,10 @@ class _GlassDatePickerDialogState
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                            colors: [_teal, Color(0xFF00A880)]),
+                            colors: [_teal, _tealDk]),
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [BoxShadow(
-                            color: _teal.withOpacity(0.4),
-                            blurRadius: 10)]),
+                            color: _teal.withOpacity(0.4), blurRadius: 10)]),
                       child: const Text('Conferma',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.white,
@@ -1331,26 +1301,24 @@ class _GlassDatePickerDialogState
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildGrid() {
     switch (_view) {
-      case _PickerView.days:    return _buildDays();
-      case _PickerView.months:  return _buildMonths();
-      case _PickerView.years:   return _buildYears();
+      case _PkView.days:   return _days();
+      case _PkView.months: return _months();
+      case _PkView.years:  return _years();
     }
   }
 
-  Widget _buildDays() {
-    final firstDay  = DateTime(_focus.year, _focus.month, 1);
-    final daysCount =
-        DateTime(_focus.year, _focus.month + 1, 0).day;
-    final offset    = (firstDay.weekday - 1) % 7;
-    final now       = DateTime.now();
-    final today     = DateTime(now.year, now.month, now.day);
-    final selNorm   = DateTime(
-        _selected.year, _selected.month, _selected.day);
+  Widget _days() {
+    final first = DateTime(_focus.year, _focus.month, 1);
+    final count = DateTime(_focus.year, _focus.month + 1, 0).day;
+    final off   = (first.weekday - 1) % 7;
+    final now   = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selN  = DateTime(_selected.year, _selected.month, _selected.day);
 
     return Column(children: [
-      Row(children: _dayNames.map((n) => Expanded(
+      Row(children: _dayLabels.map((n) => Expanded(
         child: Center(child: Text(n, style: TextStyle(
             color: _teal.withOpacity(0.6), fontSize: 11,
             fontWeight: FontWeight.w700))))).toList()),
@@ -1358,50 +1326,45 @@ class _GlassDatePickerDialogState
       GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        gridDelegate:
-            const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7, childAspectRatio: 1,
-                mainAxisSpacing: 4, crossAxisSpacing: 0),
-        itemCount: offset + daysCount,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7, childAspectRatio: 1,
+            mainAxisSpacing: 4),
+        itemCount: off + count,
         itemBuilder: (_, idx) {
-          if (idx < offset) return const SizedBox.shrink();
-          final day  = idx - offset + 1;
+          if (idx < off) return const SizedBox.shrink();
+          final day  = idx - off + 1;
           final date = DateTime(_focus.year, _focus.month, day);
           final norm = DateTime(date.year, date.month, date.day);
-          final isSel     = norm == selNorm;
-          final isToday   = norm == today;
-          final isDisabled = _isDisabled(date);
+          final isSel = norm == selN;
+          final isTd  = norm == today;
+          final isDis = _disabled(date);
           return GestureDetector(
-            onTap: isDisabled ? null : () =>
-                setState(() => _selected = date),
+            onTap: isDis ? null : () => setState(() => _selected = date),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 120),
               margin: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: isSel ? _teal
-                    : isToday ? _cyan.withOpacity(0.12)
+                    : isTd ? _cyan.withOpacity(0.12)
                     : Colors.transparent,
                 shape: BoxShape.circle,
-                border: isToday && !isSel
-                    ? Border.all(
-                        color: _cyan.withOpacity(0.45), width: 1)
+                border: isTd && !isSel
+                    ? Border.all(color: _cyan.withOpacity(0.45), width: 1)
                     : null,
                 boxShadow: isSel ? [BoxShadow(
-                    color: _teal.withOpacity(0.45), blurRadius: 8)]
-                    : null),
+                    color: _teal.withOpacity(0.45), blurRadius: 8)] : null),
               child: Center(child: Text('$day', style: TextStyle(
-                  color: isDisabled
-                      ? Colors.white.withOpacity(0.2)
+                  color: isDis ? Colors.white.withOpacity(0.2)
                       : isSel ? Colors.white
                       : Colors.white.withOpacity(0.8),
                   fontSize: 13,
-                  fontWeight: isSel || isToday
+                  fontWeight: isSel || isTd
                       ? FontWeight.w800 : FontWeight.w500)))));
         }),
     ]);
   }
 
-  Widget _buildMonths() {
+  Widget _months() {
     final now = DateTime.now();
     return GridView.builder(
       shrinkWrap: true,
@@ -1411,23 +1374,20 @@ class _GlassDatePickerDialogState
           mainAxisSpacing: 8, crossAxisSpacing: 8),
       itemCount: 12,
       itemBuilder: (_, i) {
-        final isCurrent =
-            _focus.year == now.year && i + 1 == now.month;
-        final isSel =
-            i + 1 == _selected.month &&
+        final isCur = _focus.year == now.year && i + 1 == now.month;
+        final isSel = i + 1 == _selected.month &&
             _focus.year == _selected.year;
         return GestureDetector(
           onTap: () => setState(() {
             _focus = DateTime(_focus.year, i + 1);
-            _view  = _PickerView.days;
+            _view  = _PkView.days;
           }),
-          child: _PickerCell(
-            label: _monthShort[i], color: _teal,
-            isSelected: isSel, isCurrent: isCurrent));
+          child: _PkCell(label: _monthShort[i],
+              isSelected: isSel, isCurrent: isCur));
       });
   }
 
-  Widget _buildYears() {
+  Widget _years() {
     final dec = (_focus.year ~/ 10) * 10;
     final now = DateTime.now();
     return GridView.builder(
@@ -1438,26 +1398,24 @@ class _GlassDatePickerDialogState
           mainAxisSpacing: 8, crossAxisSpacing: 8),
       itemCount: 12,
       itemBuilder: (_, i) {
-        final year   = dec - 1 + i;
-        final isCurrent = year == now.year;
-        final isSel  = year == _selected.year;
-        final isOut  = i == 0 || i == 11;
+        final yr   = dec - 1 + i;
+        final isCur = yr == now.year;
+        final isSel = yr == _selected.year;
+        final isOut = i == 0 || i == 11;
         return GestureDetector(
           onTap: () => setState(() {
-            _focus = DateTime(year, _focus.month);
-            _view  = _PickerView.months;
+            _focus = DateTime(yr, _focus.month);
+            _view  = _PkView.months;
           }),
-          child: _PickerCell(
-            label: '$year', color: _teal,
-            isSelected: isSel, isCurrent: isCurrent,
-            isOutOfRange: isOut));
+          child: _PkCell(label: '$yr', isSelected: isSel,
+              isCurrent: isCur, isOutOfRange: isOut));
       });
   }
 }
 
-class _NavBtn extends StatelessWidget {
+class _PkNavBtn extends StatelessWidget {
   final IconData icon; final VoidCallback onTap;
-  const _NavBtn({required this.icon, required this.onTap});
+  const _PkNavBtn({required this.icon, required this.onTap});
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
@@ -1465,40 +1423,35 @@ class _NavBtn extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.07),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.12), width: 0.8)),
+        border: Border.all(color: Colors.white.withOpacity(0.12), width: 0.8)),
       child: Icon(icon, color: Colors.white, size: 20)));
 }
 
-class _PickerCell extends StatelessWidget {
-  final String label; final Color color;
-  final bool isSelected, isCurrent, isOutOfRange;
-  const _PickerCell({
-    required this.label, required this.color,
-    this.isSelected = false, this.isCurrent = false,
-    this.isOutOfRange = false});
-
+class _PkCell extends StatelessWidget {
+  final String label; final bool isSelected, isCurrent, isOutOfRange;
+  const _PkCell({required this.label, this.isSelected = false,
+      this.isCurrent = false, this.isOutOfRange = false});
   @override
   Widget build(BuildContext context) => AnimatedContainer(
     duration: const Duration(milliseconds: 130),
     decoration: BoxDecoration(
-      color: isSelected ? color.withOpacity(0.2)
-          : isCurrent   ? color.withOpacity(0.07)
+      color: isSelected ? _teal.withOpacity(0.2)
+          : isCurrent   ? _teal.withOpacity(0.07)
           : Colors.white.withOpacity(isOutOfRange ? 0.02 : 0.04),
       borderRadius: BorderRadius.circular(10),
       border: Border.all(
-        color: isSelected ? color.withOpacity(0.6)
-            : isCurrent   ? color.withOpacity(0.3)
+        color: isSelected ? _teal.withOpacity(0.6)
+            : isCurrent   ? _teal.withOpacity(0.3)
             : Colors.white.withOpacity(isOutOfRange ? 0.05 : 0.1),
         width: isSelected ? 1.3 : 1),
       boxShadow: isSelected
-          ? [BoxShadow(color: color.withOpacity(0.2), blurRadius: 8)]
+          ? [BoxShadow(color: _teal.withOpacity(0.2), blurRadius: 8)]
           : null),
     child: Center(child: Text(label,
         textAlign: TextAlign.center,
         style: TextStyle(
             color: isOutOfRange ? Colors.white.withOpacity(0.25)
-                : isSelected ? color
+                : isSelected ? _teal
                 : Colors.white.withOpacity(0.75),
             fontSize: 12,
             fontWeight: isSelected || isCurrent
