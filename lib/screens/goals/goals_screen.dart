@@ -42,27 +42,23 @@ Color _colorFor(String cat) =>
 
 String _scheduleLabel(HiveGoal goal) {
   switch (goal.scheduleType) {
-    case 'daily':
-      return 'Ogni giorno';
+    case 'daily':    return 'Ogni giorno';
+    case 'weekdays': return 'Feriali';
+    case 'weekend':  return 'Weekend';
     case 'specificDays':
-      const names = ['', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+      const n = ['','Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
       final days = (goal.scheduleDaysOfWeek ?? [])
-          .map((d) => names[d.clamp(1, 7)])
+          .map((d) => n[d.clamp(1, 7)])
           .join(', ');
       return days.isEmpty ? 'Giorni specifici' : days;
-    case 'weekend':
-      return 'Weekend';
-    case 'weekdays':
-      return 'Giorni feriali';
     case 'dateRange':
       final s = goal.scheduleStartDate ?? '';
-      final e = goal.scheduleEndDate ?? '';
+      final e = goal.scheduleEndDate   ?? '';
       return 'Dal $s al $e';
     case 'customInterval':
       final n = goal.scheduleCustomInterval ?? 1;
       return 'Ogni $n giorni';
-    default:
-      return goal.scheduleType;
+    default: return goal.scheduleType;
   }
 }
 
@@ -107,7 +103,7 @@ class _GoalsScreenState extends State<GoalsScreen>
 
   List<HiveGoal> _filtered(List<HiveGoal> goals) {
     return goals.where((g) {
-      final catMatch = _selectedCategory == 'Tutti' ||
+      final catMatch    = _selectedCategory == 'Tutti' ||
           g.category == _selectedCategory;
       final searchMatch = _search.isEmpty ||
           g.title.toLowerCase().contains(_search.toLowerCase());
@@ -115,7 +111,19 @@ class _GoalsScreenState extends State<GoalsScreen>
     }).toList();
   }
 
-  Future<void> _deleteGoal(HiveGoal goal) async {
+  // ── CRUD ─────────────────────────────────────────────────────
+
+  Future<void> _navigateToEdit(HiveGoal goal) async {
+    await pushPage(context, NewGoalScreen(editGoal: goal));
+    if (mounted) context.read<GoalProvider>().loadGoals();
+  }
+
+  Future<void> _navigateToNew() async {
+    await pushPage(context, const NewGoalScreen());
+    if (mounted) context.read<GoalProvider>().loadGoals();
+  }
+
+  Future<void> _confirmDelete(HiveGoal goal) async {
     final ok = await showGlassDialog<bool>(
       context: context,
       accentColor: _red,
@@ -128,22 +136,55 @@ class _GoalsScreenState extends State<GoalsScreen>
               color: _red.withOpacity(0.2), blurRadius: 12)]),
         child: const Icon(Icons.delete_outline_rounded,
             color: _red, size: 22)),
-      title: 'Elimina obiettivo',
-      message:
-          'Vuoi eliminare "${goal.title}"?\nTutti i progressi verranno persi.',
+      title:   'Eliminare questo obiettivo?',
+      message: '"${goal.title}" — L\'operazione è irreversibile.',
       actions: [
         GlassDialogAction(
             label: 'Annulla',
-            onTap: () => Navigator.pop(context, false)),
+            onTap:  () => Navigator.pop(context, false)),
         GlassDialogAction(
-            label: 'Elimina',
-            isDestructive: true,
-            onTap: () => Navigator.pop(context, true)),
+            label: 'Elimina', isDestructive: true,
+            onTap:  () => Navigator.pop(context, true)),
       ],
     );
     if (ok == true && mounted) {
       await context.read<GoalProvider>().deleteGoal(goal.key);
     }
+  }
+
+  /// Menu contestuale (more_vert) — Glass action sheet
+  void _showGoalActions(HiveGoal goal) {
+    showModalBottomSheet(
+      context:         context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useSafeArea:     true,
+      builder: (ctx) => GlassSheetWrapper(
+        title:       goal.title,
+        subtitle:    goal.category.isNotEmpty ? goal.category : null,
+        accentColor: _colorFor(goal.category),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          _ContextMenuBtn(
+            icon:  Icons.edit_outlined,
+            label: 'Modifica',
+            color: _indigo,
+            onTap: () {
+              Navigator.pop(ctx);
+              _navigateToEdit(goal);
+            }),
+          const SizedBox(height: 8),
+          _ContextMenuBtn(
+            icon:  Icons.delete_outline_rounded,
+            label: 'Elimina',
+            color: _red,
+            onTap: () {
+              Navigator.pop(ctx);
+              _confirmDelete(goal);
+            }),
+          const SizedBox(height: 4),
+        ]),
+      ),
+    );
   }
 
   void _toggleGoal(HiveGoal goal, DateTime date) {
@@ -152,24 +193,22 @@ class _GoalsScreenState extends State<GoalsScreen>
     final sel   = DateTime(date.year, date.month, date.day);
     if (sel.isAfter(today)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Non puoi completare obiettivi futuri.',
+        content: const Text(
+            'Non puoi completare obiettivi futuri.',
             style: TextStyle(
                 color: Colors.white, fontWeight: FontWeight.w600)),
         backgroundColor: const Color(0xFF0D1117),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
+        shape:    RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
+        margin:   const EdgeInsets.all(16),
         duration: const Duration(seconds: 2)));
       return;
     }
     context.read<GoalProvider>().toggleCompletion(goal, date);
   }
 
-  Future<void> _navigateToNewGoal({HiveGoal? editGoal}) async {
-    await pushPage(context, NewGoalScreen(editGoal: editGoal));
-    if (mounted) context.read<GoalProvider>().loadGoals();
-  }
+  // ── Build ─────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -177,6 +216,7 @@ class _GoalsScreenState extends State<GoalsScreen>
     final goals = gp.goals;
     final today = DateTime.now();
 
+    // Categorie uniche
     final catSet = <String>{'Tutti'};
     for (final g in goals) {
       if (g.category.isNotEmpty) catSet.add(g.category);
@@ -184,6 +224,7 @@ class _GoalsScreenState extends State<GoalsScreen>
     final cats     = catSet.toList();
     final filtered = _filtered(goals);
 
+    // Stats header
     final completedToday =
         goals.where((g) => gp.isCompletedOn(g, today)).length;
     final totalStreak = goals.isEmpty
@@ -193,80 +234,96 @@ class _GoalsScreenState extends State<GoalsScreen>
         ? 0
         : goals.map((g) => g.bestStreak).reduce((a, b) => a > b ? a : b);
 
+    // FIX: resizeToAvoidBottomInset: false + viewInsets gestito
+    // manualmente → elimina il blocco bianco sopra la tastiera.
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor:         Colors.transparent,
+      resizeToAvoidBottomInset: false,
       body: CosmicBackground(
         child: SafeArea(
           child: FadeTransition(
             opacity: _fadeAnim,
             child: Column(children: [
 
-              // ── AppBar ─────────────────────────────────────
+              // ── AppBar ────────────────────────────────────────
               _GoalsAppBar(
                 onBack: () => Navigator.pop(context),
-                onAdd:  () => _navigateToNewGoal()),
+                onAdd:  _navigateToNew),
 
-              // ── Contenuto ──────────────────────────────────
+              // ── Contenuto ─────────────────────────────────────
               Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                child: goals.isEmpty
+                    // ── True empty: centrato verticalmente ───────
+                    ? Center(
+                        child: _EmptyState(
+                          hasGoals: false,
+                          onAdd:    _navigateToNew))
+                    // ── Ha goal: lista scrollabile ────────────────
+                    : SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(
+                          20, 10, 20,
+                          // FIX: aggiunge altezza tastiera al padding
+                          // inferiore quando la keyboard è aperta.
+                          40 + MediaQuery.of(context).viewInsets.bottom),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
 
-                      // Stats
-                      if (goals.isNotEmpty) ...[
-                        _StatsBar(
-                          total:          goals.length,
-                          completedToday: completedToday,
-                          totalStreak:    totalStreak,
-                          bestStreak:     bestStreak),
-                        const SizedBox(height: 14),
-                      ],
+                            // Stats
+                            _StatsBar(
+                              total:          goals.length,
+                              completedToday: completedToday,
+                              totalStreak:    totalStreak,
+                              bestStreak:     bestStreak),
+                            const SizedBox(height: 12),
 
-                      // Ricerca
-                      _GlassSearchField(
-                          onChanged: (v) => setState(() => _search = v)),
-                      const SizedBox(height: 10),
+                            // Ricerca
+                            _GlassSearchField(
+                                value:     _search,
+                                onChanged: (v) =>
+                                    setState(() => _search = v)),
+                            const SizedBox(height: 10),
 
-                      // Filtro categorie
-                      if (cats.length > 1) ...[
-                        _CategoryChips(
-                          categories: cats,
-                          selected:   _selectedCategory,
-                          onSelect: (c) =>
-                              setState(() => _selectedCategory = c)),
-                        const SizedBox(height: 14),
-                      ],
+                            // Filtro categorie
+                            if (cats.length > 1) ...[
+                              _CategoryChips(
+                                categories: cats,
+                                selected:   _selectedCategory,
+                                onSelect: (c) =>
+                                    setState(
+                                        () => _selectedCategory = c)),
+                              const SizedBox(height: 14),
+                            ],
 
-                      // Header lista
-                      _SectionHeader(
-                        icon:  Icons.track_changes_rounded,
-                        title: filtered.isEmpty
-                            ? 'Nessun risultato'
-                            : '${filtered.length} obiettiv${filtered.length == 1 ? 'o' : 'i'}',
-                        color: _orange),
-                      const SizedBox(height: 10),
+                            // Header lista
+                            _SectionHeader(
+                              icon:  Icons.track_changes_rounded,
+                              title: filtered.isEmpty
+                                  ? 'Nessun risultato'
+                                  : '${filtered.length} obiettiv${filtered.length == 1 ? 'o' : 'i'}',
+                              color: _orange),
+                            const SizedBox(height: 10),
 
-                      // Lista / empty state
-                      if (filtered.isEmpty)
-                        _EmptyState(
-                          hasGoals: goals.isNotEmpty,
-                          onAdd:    () => _navigateToNewGoal())
-                      else
-                        ...filtered.map((g) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _GoalCard(
-                            goal:     g,
-                            gp:       gp,
-                            today:    today,
-                            onToggle: () => _toggleGoal(g, today),
-                            onEdit:   () => _navigateToNewGoal(editGoal: g),
-                            onDelete: () => _deleteGoal(g)))),
-                    ],
-                  ),
-                ),
+                            // Lista o filtered-empty
+                            if (filtered.isEmpty)
+                              _EmptyState(
+                                hasGoals: true, onAdd: _navigateToNew)
+                            else
+                              ...filtered.map((g) => Padding(
+                                padding: const EdgeInsets.only(
+                                    bottom: 10),
+                                child: _GoalCard(
+                                  goal:      g,
+                                  gp:        gp,
+                                  today:     today,
+                                  onToggle:  () =>
+                                      _toggleGoal(g, today),
+                                  onActions: () =>
+                                      _showGoalActions(g)))),
+                          ],
+                        ),
+                      ),
               ),
             ]),
           ),
@@ -275,6 +332,65 @@ class _GoalsScreenState extends State<GoalsScreen>
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// _ContextMenuBtn — bottone nel glass action sheet
+// ─────────────────────────────────────────────────────────────
+
+class _ContextMenuBtn extends StatelessWidget {
+  final IconData icon;
+  final String   label;
+  final Color    color;
+  final VoidCallback onTap;
+
+  const _ContextMenuBtn({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color:         color.withOpacity(0.08),
+              borderRadius:  BorderRadius.circular(14),
+              border: Border.all(color: color.withOpacity(0.3), width: 1),
+              boxShadow: [
+                BoxShadow(color: color.withOpacity(0.1), blurRadius: 8),
+              ],
+            ),
+            child: Row(children: [
+              Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  color:        color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, color: color, size: 20)),
+              const SizedBox(width: 14),
+              Text(label,
+                  style: TextStyle(
+                      color: color, fontSize: 15,
+                      fontWeight: FontWeight.w700)),
+              const Spacer(),
+              Icon(Icons.arrow_forward_ios_rounded,
+                  size: 13, color: color.withOpacity(0.5)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 
 // ─────────────────────────────────────────────────────────────
 // _GoalsAppBar
@@ -304,19 +420,23 @@ class _GoalsAppBar extends StatelessWidget {
                   color: Colors.white.withOpacity(0.07),
                   borderRadius: BorderRadius.circular(11),
                   border: Border.all(
-                      color: Colors.white.withOpacity(0.12), width: 0.7)),
+                      color: Colors.white.withOpacity(0.12),
+                      width: 0.7)),
                 child: const Icon(Icons.arrow_back_ios_new_rounded,
                     size: 15, color: Colors.white))),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                 const Text('I miei obiettivi',
-                    style: TextStyle(color: Colors.white, fontSize: 17,
-                        fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                    style: TextStyle(color: Colors.white,
+                        fontSize: 17, fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3)),
                 Text('Monitora i tuoi progressi',
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.4), fontSize: 11)),
+                        color: Colors.white.withOpacity(0.4),
+                        fontSize: 11)),
               ])),
             GestureDetector(
               onTap: () { HapticFeedback.selectionClick(); onAdd(); },
@@ -331,10 +451,12 @@ class _GoalsAppBar extends StatelessWidget {
                       color: _teal.withOpacity(0.4), blurRadius: 10,
                       offset: const Offset(0, 3))]),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.add_rounded, color: Colors.white, size: 16),
+                  const Icon(Icons.add_rounded,
+                      color: Colors.white, size: 16),
                   const SizedBox(width: 5),
-                  const Text('Nuovo', style: TextStyle(color: Colors.white,
-                      fontSize: 12, fontWeight: FontWeight.w700)),
+                  const Text('Nuovo',
+                      style: TextStyle(color: Colors.white,
+                          fontSize: 12, fontWeight: FontWeight.w700)),
                 ]))),
           ]),
         ),
@@ -360,7 +482,8 @@ class _StatsBar extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(
+              vertical: 14, horizontal: 8),
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: [
               Colors.white.withOpacity(0.07),
@@ -369,13 +492,13 @@ class _StatsBar extends StatelessWidget {
             border: Border.all(
                 color: _cyan.withOpacity(0.15), width: 0.8)),
           child: Row(children: [
-            _StatItem(value: '$total', label: 'Totale', color: _teal),
-            _Divider(),
-            _StatItem(value: '$completedToday', label: 'Oggi', color: _green),
-            _Divider(),
-            _StatItem(value: '🔥 $totalStreak', label: 'Streak', color: _orange),
-            _Divider(),
-            _StatItem(value: '⭐ $bestStreak', label: 'Record', color: _cyan),
+            _Stat('$total',          'Totale',  _teal),
+            _StatDiv(),
+            _Stat('$completedToday', 'Oggi',    _green),
+            _StatDiv(),
+            _Stat('🔥 $totalStreak', 'Streak',  _orange),
+            _StatDiv(),
+            _Stat('⭐ $bestStreak',   'Record',  _cyan),
           ]),
         ),
       ),
@@ -383,15 +506,14 @@ class _StatsBar extends StatelessWidget {
   }
 }
 
-class _StatItem extends StatelessWidget {
+class _Stat extends StatelessWidget {
   final String value, label; final Color color;
-  const _StatItem(
-      {required this.value, required this.label, required this.color});
+  const _Stat(this.value, this.label, this.color);
   @override
   Widget build(BuildContext context) => Expanded(
     child: Column(children: [
       Text(value, style: TextStyle(
-          color: color, fontSize: 18, fontWeight: FontWeight.w800)),
+          color: color, fontSize: 17, fontWeight: FontWeight.w800)),
       const SizedBox(height: 2),
       Text(label, style: TextStyle(
           color: Colors.white.withOpacity(0.4), fontSize: 9,
@@ -399,11 +521,11 @@ class _StatItem extends StatelessWidget {
     ]));
 }
 
-class _Divider extends StatelessWidget {
+class _StatDiv extends StatelessWidget {
   @override
-  Widget build(BuildContext context) => Container(
-      width: 0.6, height: 32,
-      color: Colors.white.withOpacity(0.08));
+  Widget build(BuildContext context) =>
+      Container(width: 0.6, height: 28,
+          color: Colors.white.withOpacity(0.08));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -411,16 +533,30 @@ class _Divider extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 
 class _GlassSearchField extends StatefulWidget {
+  final String value;
   final ValueChanged<String> onChanged;
-  const _GlassSearchField({required this.onChanged});
+  const _GlassSearchField(
+      {required this.value, required this.onChanged});
+
   @override
-  State<_GlassSearchField> createState() => _GlassSearchFieldState();
+  State<_GlassSearchField> createState() =>
+      _GlassSearchFieldState();
 }
 
 class _GlassSearchFieldState extends State<_GlassSearchField> {
-  final _ctrl = TextEditingController();
+  late TextEditingController _ctrl;
+
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -437,6 +573,9 @@ class _GlassSearchFieldState extends State<_GlassSearchField> {
           child: TextField(
             controller: _ctrl,
             style: const TextStyle(color: Colors.white, fontSize: 14),
+            // FIX: dark keyboardAppearance → rimuove il background
+            // chiaro della tastiera che contribuisce al blocco bianco
+            keyboardAppearance: Brightness.dark,
             decoration: InputDecoration(
               hintText:   'Cerca obiettivo...',
               hintStyle:  TextStyle(
@@ -446,10 +585,13 @@ class _GlassSearchFieldState extends State<_GlassSearchField> {
               suffixIcon: _ctrl.text.isNotEmpty
                   ? GestureDetector(
                       onTap: () {
-                        _ctrl.clear(); widget.onChanged(''); setState(() {});
+                        _ctrl.clear();
+                        widget.onChanged('');
+                        setState(() {});
                       },
                       child: Icon(Icons.close_rounded,
-                          color: Colors.white.withOpacity(0.35), size: 16))
+                          color: Colors.white.withOpacity(0.35),
+                          size: 16))
                   : null,
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
@@ -467,7 +609,7 @@ class _GlassSearchFieldState extends State<_GlassSearchField> {
 
 class _CategoryChips extends StatelessWidget {
   final List<String> categories;
-  final String selected;
+  final String       selected;
   final ValueChanged<String> onSelect;
   const _CategoryChips({
     required this.categories, required this.selected,
@@ -503,15 +645,13 @@ class _CategoryChips extends StatelessWidget {
                   width: isSel ? 1.2 : 0.8),
                 boxShadow: isSel
                     ? [BoxShadow(
-                        color: color.withOpacity(0.2), blurRadius: 8)]
-                    : null),
+                        color: color.withOpacity(0.2),
+                        blurRadius: 8)] : null),
               child: Text(cat, style: TextStyle(
                   color: isSel ? color : Colors.white.withOpacity(0.5),
                   fontSize: 12,
-                  fontWeight:
-                      isSel ? FontWeight.w700 : FontWeight.w500)),
-            ),
-          );
+                  fontWeight: isSel
+                      ? FontWeight.w700 : FontWeight.w500))));
         }),
     );
   }
@@ -525,6 +665,7 @@ class _SectionHeader extends StatelessWidget {
   final IconData icon; final String title; final Color color;
   const _SectionHeader({
     required this.icon, required this.title, required this.color});
+
   @override
   Widget build(BuildContext context) => Row(children: [
     Container(width: 30, height: 30,
@@ -533,36 +674,31 @@ class _SectionHeader extends StatelessWidget {
           borderRadius: BorderRadius.circular(8)),
       child: Icon(icon, size: 15, color: color)),
     const SizedBox(width: 9),
-    Text(title, style: const TextStyle(color: Colors.white,
-        fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
+    Text(title, style: const TextStyle(
+        color: Colors.white, fontSize: 15,
+        fontWeight: FontWeight.w800, letterSpacing: -0.2)),
   ]);
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GoalCard
+// _GoalCard — CRUD tramite more_vert
 // ─────────────────────────────────────────────────────────────
 
-class _GoalCard extends StatefulWidget {
-  final HiveGoal goal;
+class _GoalCard extends StatelessWidget {
+  final HiveGoal     goal;
   final GoalProvider gp;
-  final DateTime today;
-  final VoidCallback onToggle, onEdit, onDelete;
+  final DateTime     today;
+  final VoidCallback onToggle, onActions;
+
   const _GoalCard({
     required this.goal, required this.gp, required this.today,
-    required this.onToggle, required this.onEdit, required this.onDelete});
-  @override
-  State<_GoalCard> createState() => _GoalCardState();
-}
-
-class _GoalCardState extends State<_GoalCard> {
-  bool _expanded = false;
+    required this.onToggle, required this.onActions});
 
   @override
   Widget build(BuildContext context) {
-    final goal      = widget.goal;
-    final completed = widget.gp.isCompletedOn(goal, widget.today);
-    final catColor  = _colorFor(goal.category);
-    final totalDone = widget.gp.completionsForGoal(goal.key)
+    final completed  = gp.isCompletedOn(goal, today);
+    final catColor   = _colorFor(goal.category);
+    final totalDone  = gp.completionsForGoal(goal.key)
         .where((c) => c.completed).length;
 
     return ClipRRect(
@@ -576,226 +712,127 @@ class _GoalCardState extends State<_GoalCard> {
               colors: [Colors.white.withOpacity(0.08),
                 Colors.white.withOpacity(0.02)]),
             borderRadius: BorderRadius.circular(18),
+            // Accent laterale colorato per categoria
             border: Border(
-              left:   BorderSide(color: catColor.withOpacity(0.6), width: 3),
+              left:   BorderSide(color: catColor.withOpacity(0.65), width: 3),
               top:    BorderSide(color: catColor.withOpacity(0.12), width: 0.8),
               right:  BorderSide(color: catColor.withOpacity(0.12), width: 0.8),
               bottom: BorderSide(color: catColor.withOpacity(0.12), width: 0.8))),
-          child: Column(children: [
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 13, 8, 13),
+            child: Row(children: [
 
-            // ── Header card ────────────────────────────────
-            GestureDetector(
-              onTap: () => setState(() => _expanded = !_expanded),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
-                child: Row(children: [
+              // ── Checkbox oggi ─────────────────────────────
+              GestureDetector(
+                onTap: onToggle,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  width: 26, height: 26,
+                  decoration: BoxDecoration(
+                    color: completed ? catColor : Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: completed
+                          ? catColor
+                          : Colors.white.withOpacity(0.25),
+                      width: 1.5),
+                    boxShadow: completed ? [BoxShadow(
+                        color: catColor.withOpacity(0.5), blurRadius: 8)]
+                        : null),
+                  child: completed
+                      ? const Icon(Icons.check_rounded,
+                          color: Colors.white, size: 14)
+                      : null)),
+              const SizedBox(width: 12),
 
-                  // Checkbox oggi
-                  GestureDetector(
-                    onTap: widget.onToggle,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 26, height: 26,
-                      decoration: BoxDecoration(
-                        color: completed ? catColor : Colors.transparent,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: completed
-                              ? catColor
-                              : Colors.white.withOpacity(0.25),
-                          width: 1.5),
-                        boxShadow: completed ? [BoxShadow(
-                            color: catColor.withOpacity(0.45),
-                            blurRadius: 8)] : null),
-                      child: completed
-                          ? const Icon(Icons.check_rounded,
-                              color: Colors.white, size: 14)
-                          : null)),
-                  const SizedBox(width: 12),
-
-                  // Info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                      Text(goal.title,
-                        style: TextStyle(
-                          color: completed
-                              ? Colors.white.withOpacity(0.4)
-                              : Colors.white,
-                          fontSize: 14, fontWeight: FontWeight.w700,
-                          decoration: completed
-                              ? TextDecoration.lineThrough : null,
-                          decorationColor:
-                              Colors.white.withOpacity(0.3)),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 4),
-                      Row(children: [
-                        // Chip categoria
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: catColor.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(
-                                color: catColor.withOpacity(0.3),
-                                width: 0.7)),
-                          child: Text(
-                            goal.category.isNotEmpty
-                                ? goal.category : 'Nessuna',
-                            style: TextStyle(color: catColor,
-                                fontSize: 10, fontWeight: FontWeight.w600))),
-                        const SizedBox(width: 6),
-                        // Chip pianificazione
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.06),
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(
-                                color: Colors.white.withOpacity(0.1),
-                                width: 0.7)),
-                          child: Text(_scheduleLabel(goal),
-                              style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500))),
-                      ]),
-                    ])),
-
-                  const SizedBox(width: 8),
-
-                  // Streak + chevron
-                  Column(crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                    if (goal.currentStreak > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: _orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(7),
-                          border: Border.all(
-                              color: _orange.withOpacity(0.3), width: 0.7)),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Text('🔥',
-                              style: TextStyle(fontSize: 10)),
-                          const SizedBox(width: 3),
-                          Text('${goal.currentStreak}',
-                              style: const TextStyle(color: _orange,
-                                  fontSize: 10, fontWeight: FontWeight.w700)),
-                        ])),
-                    const SizedBox(height: 6),
-                    Icon(
-                      _expanded
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_down_rounded,
-                      color: Colors.white.withOpacity(0.3), size: 16),
+              // ── Info ──────────────────────────────────────
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                  // Titolo
+                  Text(goal.title,
+                    style: TextStyle(
+                      color: completed
+                          ? Colors.white.withOpacity(0.4)
+                          : Colors.white,
+                      fontSize: 14, fontWeight: FontWeight.w700,
+                      decoration: completed
+                          ? TextDecoration.lineThrough : null,
+                      decorationColor: Colors.white.withOpacity(0.3)),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 5),
+                  // Chip categoria + pianificazione
+                  Wrap(spacing: 6, runSpacing: 4, children: [
+                    _MiniChip(
+                      text: goal.category.isNotEmpty
+                          ? goal.category : 'Nessuna',
+                      color: catColor),
+                    _MiniChip(
+                      text:  _scheduleLabel(goal),
+                      color: Colors.white.withOpacity(0.35)),
+                    if (totalDone > 0)
+                      _MiniChip(
+                        text:  '✓ $totalDone',
+                        color: _green.withOpacity(0.8)),
                   ]),
-                ]),
-              ),
-            ),
+                ])),
 
-            // ── Dettagli espansi ──────────────────────────
-            if (_expanded) ...[
-              Container(height: 0.6,
-                  margin: const EdgeInsets.symmetric(horizontal: 14),
-                  color: Colors.white.withOpacity(0.06)),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-                child: Column(children: [
-                  // Descrizione
-                  if (goal.description != null &&
-                      goal.description!.isNotEmpty) ...[
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(goal.description!,
-                          style: TextStyle(
-                              color: Colors.white.withOpacity(0.55),
-                              fontSize: 12, height: 1.5))),
-                    const SizedBox(height: 8),
-                  ],
-                  // Stats mini
-                  Row(children: [
-                    _InfoChip(icon: Icons.emoji_events_rounded,
-                        label: 'Record: ${goal.bestStreak}',
-                        color: _cyan),
-                    const SizedBox(width: 8),
-                    _InfoChip(icon: Icons.check_rounded,
-                        label: 'Completati: $totalDone',
-                        color: _green),
-                  ]),
-                  const SizedBox(height: 10),
-                  // Azioni
-                  Row(children: [
-                    Expanded(
-                      child: _ActionBtn(
-                          icon: Icons.edit_outlined, label: 'Modifica',
-                          color: _indigo, onTap: widget.onEdit)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _ActionBtn(
-                          icon: Icons.delete_outline_rounded,
-                          label: 'Elimina', color: _red,
-                          onTap: widget.onDelete)),
-                  ]),
-                ]),
-              ),
-            ],
-          ]),
+              // ── Streak badge ─────────────────────────────
+              if (goal.currentStreak > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(
+                        color: _orange.withOpacity(0.3), width: 0.7)),
+                  child: Column(children: [
+                    const Text('🔥', style: TextStyle(fontSize: 10)),
+                    Text('${goal.currentStreak}',
+                        style: const TextStyle(
+                            color: _orange, fontSize: 10,
+                            fontWeight: FontWeight.w700)),
+                  ])),
+              ],
+
+              // ── more_vert ─────────────────────────────────
+              GestureDetector(
+                onTap: onActions,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 4),
+                  child: Icon(Icons.more_vert_rounded,
+                      color: Colors.white.withOpacity(0.4),
+                      size: 20))),
+            ]),
+          ),
         ),
       ),
     );
   }
 }
 
-class _InfoChip extends StatelessWidget {
-  final IconData icon; final String label; final Color color;
-  const _InfoChip(
-      {required this.icon, required this.label, required this.color});
+class _MiniChip extends StatelessWidget {
+  final String text; final Color color;
+  const _MiniChip({required this.text, required this.color});
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: color.withOpacity(0.2), width: 0.7)),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 12, color: color),
-      const SizedBox(width: 5),
-      Text(label, style: TextStyle(
-          color: color.withOpacity(0.85), fontSize: 11,
-          fontWeight: FontWeight.w600)),
-    ]));
-}
-
-class _ActionBtn extends StatelessWidget {
-  final IconData icon; final String label;
-  final Color color; final VoidCallback onTap;
-  const _ActionBtn({
-    required this.icon, required this.label,
-    required this.color, required this.onTap});
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 9),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3), width: 0.8)),
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 6),
-        Text(label, style: TextStyle(
-            color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-      ])));
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(5),
+      border: Border.all(color: color.withOpacity(0.25), width: 0.7)),
+    child: Text(text, style: TextStyle(
+        color: color.withOpacity(0.9), fontSize: 10,
+        fontWeight: FontWeight.w600)));
 }
 
 // ─────────────────────────────────────────────────────────────
-// _EmptyState
+// _EmptyState — centrato verticalmente quando usato con Center()
 // ─────────────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
@@ -804,62 +841,83 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [
-              Colors.white.withOpacity(0.05),
-              Colors.white.withOpacity(0.02)]),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-                color: _orange.withOpacity(0.15), width: 0.8)),
-          child: Column(children: [
-            Container(width: 56, height: 56,
-              decoration: BoxDecoration(
-                  color: _orange.withOpacity(0.1), shape: BoxShape.circle),
-              child: const Icon(Icons.track_changes_rounded,
-                  color: _orange, size: 26)),
-            const SizedBox(height: 16),
-            Text(hasGoals
-                ? 'Nessun risultato trovato'
-                : 'Nessun obiettivo',
-              style: const TextStyle(color: Colors.white,
-                  fontSize: 16, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            Text(hasGoals
-                ? 'Prova a cambiare filtri o ricerca'
-                : 'Aggiungi il tuo primo obiettivo\ne inizia a tracciare i progressi',
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.4), fontSize: 13),
-              textAlign: TextAlign.center),
-            if (!hasGoals) ...[
-              const SizedBox(height: 20),
-              GestureDetector(
-                onTap: onAdd,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 11),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [_teal, _tealDk]),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [BoxShadow(
-                        color: _teal.withOpacity(0.4), blurRadius: 12,
-                        offset: const Offset(0, 3))]),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.add_rounded,
-                        color: Colors.white, size: 16),
-                    const SizedBox(width: 6),
-                    const Text('Nuovo obiettivo',
-                        style: TextStyle(color: Colors.white,
-                            fontSize: 13, fontWeight: FontWeight.w700)),
-                  ]))),
-            ],
-          ]),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.all(36),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [
+                Colors.white.withOpacity(0.06),
+                Colors.white.withOpacity(0.02)]),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                  color: _orange.withOpacity(0.18), width: 0.8)),
+            child: Column(
+              mainAxisSize:    MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+              // Icona
+              Container(
+                width: 64, height: 64,
+                decoration: BoxDecoration(
+                  color: _orange.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: _orange.withOpacity(0.2), width: 1)),
+                child: const Icon(Icons.track_changes_rounded,
+                    color: _orange, size: 30)),
+              const SizedBox(height: 18),
+              // Titolo
+              Text(
+                hasGoals
+                    ? 'Nessun risultato'
+                    : 'Nessun obiettivo',
+                style: const TextStyle(color: Colors.white,
+                    fontSize: 18, fontWeight: FontWeight.w700),
+                textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              // Descrizione
+              Text(
+                hasGoals
+                    ? 'Prova a cambiare filtri o ricerca'
+                    : 'Inizia aggiungendo il tuo\nprimo obiettivo',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.4),
+                    fontSize: 14, height: 1.5),
+                textAlign: TextAlign.center),
+              // CTA
+              if (!hasGoals) ...[
+                const SizedBox(height: 24),
+                GestureDetector(
+                  onTap: onAdd,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 22, vertical: 13),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                          colors: [_teal, _tealDk]),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [BoxShadow(
+                          color: _teal.withOpacity(0.45),
+                          blurRadius: 14,
+                          offset: const Offset(0, 4))]),
+                    child: Row(mainAxisSize: MainAxisSize.min,
+                      children: [
+                      const Icon(Icons.add_circle_rounded,
+                          color: Colors.white, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('Crea obiettivo',
+                          style: TextStyle(color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700)),
+                    ]))),
+              ],
+            ]),
+          ),
         ),
       ),
     );
