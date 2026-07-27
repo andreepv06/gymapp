@@ -274,59 +274,76 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
   Widget build(BuildContext context) {
     final sp = context.watch<SessionProvider>();
     final workouts = context.watch<WorkoutProvider>().workouts;
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: CosmicBackground(
-        child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Allenamenti',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.5)),
-                          const SizedBox(height: 4),
-                          Text('Il tuo spazio fitness',
-                              style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
-                                  fontSize: 14)),
-                        ],
-                      ),
+  
+    return CosmicBackground(
+      child: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            24,
+            20,
+            88 + MediaQuery.of(context).viewPadding.bottom,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Allenamenti',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Il tuo spazio fitness',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    _GestioneEserciziPill(
-                      onLibrary: () => pushPage(
-                          context, const ExercisesScreen()),
-                      onNewExercise: _showNewExerciseSheet,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-                if (sp.hasActiveSession) ...[
-                  _ActiveRecoveryBanner(sp: sp),
-                  const SizedBox(height: 16),
-                ],
-                if (sp.hasPausedSessions) ...[
-                  _SectionLabel(
-                    label: 'PAUSED SESSION',
-                    color: _orange,
-                    icon: Icons.pause_circle_filled_rounded,
                   ),
-                  const SizedBox(height: 10),
-                  ...sp.pausedSessions.map((data) => Padding(
+                  const SizedBox(width: 12),
+                  _GestioneEserciziPill(
+                    onLibrary: () => pushPage(
+                      context,
+                      const ExercisesScreen(),
+                    ),
+                    onNewExercise: _showNewExerciseSheet,
+                  ),
+                ],
+              ),
+  
+              const SizedBox(height: 28),
+  
+              if (sp.hasActiveSession) ...[
+                _ActiveRecoveryBanner(sp: sp),
+                const SizedBox(height: 16),
+              ],
+  
+              if (sp.hasPausedSessions) ...[
+                _SectionLabel(
+                  label: 'PAUSED SESSION',
+                  color: _orange,
+                  icon: Icons.pause_circle_filled_rounded,
+                ),
+                const SizedBox(height: 10),
+  
+                ...sp.pausedSessions.map(
+                  (data) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _PausedSessionPanel(
                       data: data,
@@ -334,48 +351,68 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                       onResume: () async {
                         final id = data['id'] as String?;
                         if (id == null) return;
+  
                         await sp.resumePausedSession(id);
+  
                         if (!mounted) return;
+  
                         final wk = data['workoutKey'];
                         if (wk == null) return;
+  
                         try {
-                          final workout = HiveDatabase
-                              .instance
+                          final workout = HiveDatabase.instance
                               .getWorkouts()
                               .firstWhere((w) => w.key == wk);
+  
                           pushPage(
-                              context,
-                              ActiveSessionScreen(
-                                  workout: workout));
+                            context,
+                            ActiveSessionScreen(
+                              workout: workout,
+                            ),
+                          );
                         } catch (_) {}
                       },
-                      // Mod 9: showGlassDialog di conferma prima di eliminare
+  
                       onDelete: () async {
                         final id = data['id'] as String?;
+  
                         if (id != null) {
                           await sp.deletePausedSession(id);
                         }
                       },
                     ),
-                  )),
-                  const SizedBox(height: 8),
-                ],
-                _NuovaSessionePanel(
-                  workouts: workouts,
-                  currentPage: _currentPage,
-                  pageController: _pageController,
-                  onPageChanged: (i) =>
-                      setState(() => _currentPage = i),
-                  onPlay: (w) => _handlePlayTap(context, w),
-                  onEdit: _handleEditTap,
-                  onDelete: _deleteWorkout,
-                  onViewAll: () =>
-                      pushPage(context, const WorkoutsScreen()),
-                  onCreateNew: _showCreateWorkoutSheet,
-                  sp: sp,
+                  ),
                 ),
+  
+                const SizedBox(height: 8),
               ],
-            ),
+  
+              _NuovaSessionePanel(
+                workouts: workouts,
+                currentPage: _currentPage,
+                pageController: _pageController,
+  
+                onPageChanged: (i) =>
+                    setState(() => _currentPage = i),
+  
+                onPlay: (w) =>
+                    _handlePlayTap(context, w),
+  
+                onEdit: _handleEditTap,
+  
+                onDelete: _deleteWorkout,
+  
+                onViewAll: () =>
+                    pushPage(
+                      context,
+                      const WorkoutsScreen(),
+                    ),
+  
+                onCreateNew: _showCreateWorkoutSheet,
+  
+                sp: sp,
+              ),
+            ],
           ),
         ),
       ),

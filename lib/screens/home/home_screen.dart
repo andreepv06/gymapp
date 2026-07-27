@@ -21,7 +21,7 @@ import '../goals/goals_screen.dart';
 import '../session/active_session_screen.dart';
 import '../workouts/workout_detail_screen.dart';
 
-// ── Design tokens — identici ad AllenamentiScreen ────────────
+// ── Design tokens ─────────────────────────────────────────────
 const _cyan       = Color(0xFF00E5FF);
 const _teal       = Color(0xFF00D4AA);
 const _tealDk     = Color(0xFF00A880);
@@ -35,10 +35,25 @@ const _purple     = Color(0xFF8A2BE2);
 
 // ─────────────────────────────────────────────────────────────
 // HomeScreen
+//
+// FIX ARCHITETTURALE NAVBAR CLIPPING:
+// Non usa un Scaffold proprio. Essendo una tab dell'IndexedStack
+// dentro MainShell (che ha Scaffold + extendBody:true), aggiungere
+// un secondo Scaffold farebbe sì che quest'ultimo leggesse
+// MediaQuery.padding.bottom = systemBottom + navBarHeight e
+// riducesse il proprio body, creando un clip rettangolare netto.
+//
+// Senza Scaffold:
+// • Il body si estende fino al fondo dello schermo inclusa l'area
+//   dietro la navbar floating.
+// • Il BackdropFilter della navbar sfuma il contenuto che scorre
+//   dietro di essa esattamente come le app native iOS.
+// • ScaffoldMessenger.of(context) risale al MainShell → SnackBar ok.
 // ─────────────────────────────────────────────────────────────
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -53,7 +68,8 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _ringCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1400));
+        vsync: this,
+        duration: const Duration(milliseconds: 1400));
     _ringAnim = CurvedAnimation(
         parent: _ringCtrl, curve: Curves.easeOutCubic);
     Future.microtask(() {
@@ -71,6 +87,8 @@ class _HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
+  // ── Helpers ───────────────────────────────────────────────────
+
   String _greeting() {
     final h = DateTime.now().hour;
     if (h < 12) return 'Buongiorno';
@@ -79,21 +97,27 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   String _formattedDate() {
-    const days = ['Lunedì','Martedì','Mercoledì','Giovedì',
-        'Venerdì','Sabato','Domenica'];
-    const months = ['gennaio','febbraio','marzo','aprile','maggio',
-        'giugno','luglio','agosto','settembre','ottobre',
-        'novembre','dicembre'];
+    const days = [
+      'Lunedì','Martedì','Mercoledì','Giovedì',
+      'Venerdì','Sabato','Domenica',
+    ];
+    const months = [
+      'gennaio','febbraio','marzo','aprile','maggio','giugno',
+      'luglio','agosto','settembre','ottobre','novembre','dicembre',
+    ];
     final now = DateTime.now();
     return '${days[now.weekday - 1]} ${now.day} ${months[now.month - 1]}';
   }
 
   String _fmt(int s) {
-    final h = s ~/ 3600; final m = (s % 3600) ~/ 60;
+    final h = s ~/ 3600;
+    final m = (s % 3600) ~/ 60;
     if (h > 0) return '${h}h ${m}m';
     if (m > 0) return '${m}min';
     return '${s}s';
   }
+
+  // ── Navigazione ───────────────────────────────────────────────
 
   void _goToAllenamenti() =>
       context.read<NavigationNotifier>().navigateTo(1);
@@ -106,7 +130,8 @@ class _HomeScreenState extends State<HomeScreen>
     if (sp.hasActiveSession &&
         sp.currentWorkout?.key == workout.key) {
       final result = await showGlassDialog<String>(
-        context: context, accentColor: _blue,
+        context: context,
+        accentColor: _blue,
         icon: Container(
           width: 44, height: 44,
           decoration: BoxDecoration(
@@ -140,14 +165,16 @@ class _HomeScreenState extends State<HomeScreen>
     if (sp.hasPausedSessionForWorkout(workout.key)) {
       final paused = sp.getMostRecentPausedForWorkout(workout.key);
       final result = await showGlassDialog<String>(
-        context: context, accentColor: _orange,
+        context: context,
+        accentColor: _orange,
         icon: Container(
           width: 44, height: 44,
           decoration: BoxDecoration(
             color: _orange.withOpacity(0.12), shape: BoxShape.circle,
             border: Border.all(color: _orange.withOpacity(0.4)),
-            boxShadow: [BoxShadow(
-                color: _orange.withOpacity(0.2), blurRadius: 12)]),
+            boxShadow: [
+              BoxShadow(color: _orange.withOpacity(0.2), blurRadius: 12)
+            ]),
           child: const Icon(Icons.pause_circle_outline_rounded,
               color: _orange, size: 22)),
         title: 'Sessione in pausa',
@@ -185,7 +212,8 @@ class _HomeScreenState extends State<HomeScreen>
         _selectedDate.year, _selectedDate.month, _selectedDate.day);
     if (sel.isAfter(today)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Non puoi completare obiettivi futuri.',
+        content: const Text(
+            'Non puoi completare obiettivi futuri.',
             style: TextStyle(
                 color: Colors.white, fontWeight: FontWeight.w600)),
         backgroundColor: const Color(0xFF0D1117),
@@ -220,19 +248,18 @@ class _HomeScreenState extends State<HomeScreen>
               color: Colors.white, fontWeight: FontWeight.w600)),
       backgroundColor: const Color(0xFF0D1117),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.all(16),
       duration: const Duration(seconds: 2)));
   }
 
   @override
   Widget build(BuildContext context) {
-    final sp        = context.watch<SessionProvider>();
-    final wp        = context.watch<WorkoutProvider>();
-    final ep        = context.watch<ExerciseProvider>();
-    final gp        = context.watch<GoalProvider>();
-    final profile   = context.watch<ProfileProvider>();
+    final sp      = context.watch<SessionProvider>();
+    final wp      = context.watch<WorkoutProvider>();
+    final ep      = context.watch<ExerciseProvider>();
+    final gp      = context.watch<GoalProvider>();
+    final profile = context.watch<ProfileProvider>();
 
     final workouts    = wp.workouts;
     final exCount     = ep.exercises.length;
@@ -242,111 +269,125 @@ class _HomeScreenState extends State<HomeScreen>
     final goalsForDay = gp.goalsForDate(_selectedDate);
     final dayProgress = gp.completionPercentageForDate(_selectedDate);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: CosmicBackground(
-        child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            // padding bottom 120 → contenuto non coperto da navbar
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+    // FIX: viewPadding.bottom = altezza home indicator di sistema,
+    // SENZA l'altezza della navbar (che fa parte del layout floating).
+    // Usiamo questo valore per il padding inferiore del scroll view,
+    // aggiungendo 88px per liberare l'area della glass pill (68px)
+    // + il suo margine inferiore (14px) + buffer di 6px.
+    final sysBottom = MediaQuery.of(context).viewPadding.bottom;
 
-                // ─── 1. Header ─────────────────────────────────
-                _HomeHeader(
-                  greeting: _greeting(),
-                  date: _formattedDate(),
-                  profileImagePath: profile.imagePath,
-                ),
-                const SizedBox(height: 14),
+    // FIX ARCHITETTURALE: nessun Scaffold qui.
+    // CosmicBackground riempie tutto lo spazio disponibile del body
+    // di MainShell (che ha extendBody:true), inclusa l'area dietro
+    // la navbar floating. Il contenuto scorre fisicamente dietro il
+    // BackdropFilter della navbar che lo sfuma in tempo reale.
+    return CosmicBackground(
+      child: SafeArea(
+        // bottom: false → non consumare l'inset inferiore qui.
+        // Lo gestiamo manualmente con il padding del scroll view.
+        bottom: false,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          // 88 = glass pill (68) + margine bottom (14) + buffer (6)
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 88 + sysBottom),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
 
-                // ─── 2. Banner sessioni in pausa ───────────────
-                if (sp.hasPausedSessions && !sp.hasActiveSession) ...[
-                  _PausedSessionsBanner(
-                    sp: sp, fmt: _fmt,
+              // ─── 1. Header ─────────────────────────────────────
+              _HomeHeader(
+                greeting: _greeting(),
+                date: _formattedDate(),
+                profileImagePath: profile.imagePath),
+              const SizedBox(height: 14),
+
+              // ─── 2. Sessioni in pausa ──────────────────────────
+              if (sp.hasPausedSessions && !sp.hasActiveSession) ...[
+                _PausedSessionsBanner(
+                    sp: sp,
+                    fmt: _fmt,
                     onGoToAllenamenti: _goToAllenamenti),
-                  const SizedBox(height: 12),
-                ],
+                const SizedBox(height: 12),
+              ],
 
-                // ─── Banner sessione attiva ─────────────────────
-                if (sp.hasActiveSession) ...[
-                  _ActiveSessionBanner(sp: sp, fmt: _fmt),
-                  const SizedBox(height: 12),
-                ],
+              // ─── Banner sessione attiva ────────────────────────
+              if (sp.hasActiveSession) ...[
+                _ActiveSessionBanner(sp: sp, fmt: _fmt),
+                const SizedBox(height: 12),
+              ],
 
-                // ─── 3. Calendario settimana ───────────────────
-                _WeekCalendarSection(
-                  selectedDate:   _selectedDate,
-                  onDateSelected: (d) =>
-                      setState(() => _selectedDate = d),
-                  onCalendarOpen: _showCalendarPopup),
-                const SizedBox(height: 14),
+              // ─── 3. Calendario settimana ───────────────────────
+              _WeekCalendarSection(
+                selectedDate:   _selectedDate,
+                onDateSelected: (d) =>
+                    setState(() => _selectedDate = d),
+                onCalendarOpen: _showCalendarPopup),
+              const SizedBox(height: 14),
 
-                // ─── 4. Obiettivi del giorno ───────────────────
-                _GoalsDaySection(
-                  goals:        goalsForDay,
-                  selectedDate: _selectedDate,
-                  dayProgress:  dayProgress,
-                  isCompleted:  (g) =>
-                      gp.isCompletedOn(g, _selectedDate),
-                  onToggle:  _handleGoalToggle,
-                  onManage: () =>
-                      pushPage(context, const GoalsScreen())),
-                const SizedBox(height: 14),
+              // ─── 4. Obiettivi del giorno ───────────────────────
+              _GoalsDaySection(
+                goals:        goalsForDay,
+                selectedDate: _selectedDate,
+                dayProgress:  dayProgress,
+                isCompleted:  (g) =>
+                    gp.isCompletedOn(g, _selectedDate),
+                onToggle:  _handleGoalToggle,
+                onManage: () =>
+                    pushPage(context, const GoalsScreen())),
+              const SizedBox(height: 14),
 
-                // ─── 5. Progresso giornaliero ──────────────────
-                _DailyProgressCard(
-                  ringAnim:      _ringAnim,
-                  progress:      sp.hasActiveSession ? progress : 0,
-                  completedSets: completed,
-                  totalSets:     total,
-                  elapsedSec:    sp.elapsedSeconds,
-                  workoutCount:  workouts.length,
-                  exerciseCount: exCount,
-                  hasActive:     sp.hasActiveSession,
-                  fmt:           _fmt),
-                const SizedBox(height: 14),
+              // ─── 5. Progresso giornaliero ──────────────────────
+              _DailyProgressCard(
+                ringAnim:      _ringAnim,
+                progress:      sp.hasActiveSession ? progress : 0,
+                completedSets: completed,
+                totalSets:     total,
+                elapsedSec:    sp.elapsedSeconds,
+                workoutCount:  workouts.length,
+                exerciseCount: exCount,
+                hasActive:     sp.hasActiveSession,
+                fmt:           _fmt),
+              const SizedBox(height: 14),
 
-                // ─── 6. Avvio rapido ───────────────────────────
-                _SectionHeader(
+              // ─── 6. Avvio rapido ───────────────────────────────
+              _SectionHeader(
                   icon: Icons.bolt_rounded,
                   title: 'Avvio rapido',
                   color: _teal),
-                const SizedBox(height: 10),
-                _QuickStartGrid(
-                  onPalestra: _goToAllenamenti,
-                  onRunning:  () => _showComingSoon('Running'),
-                  onCiclismo: () => _showComingSoon('Ciclismo'),
-                  onNuoto:    () => _showComingSoon('Nuoto')),
-                const SizedBox(height: 14),
+              const SizedBox(height: 10),
+              _QuickStartGrid(
+                onPalestra: _goToAllenamenti,
+                onRunning:  () => _showComingSoon('Running'),
+                onCiclismo: () => _showComingSoon('Ciclismo'),
+                onNuoto:    () => _showComingSoon('Nuoto')),
+              const SizedBox(height: 14),
 
-                // ─── 7. Le tue schede ──────────────────────────
-                if (workouts.isNotEmpty) ...[
-                  _SectionHeader(
-                    icon:          Icons.fitness_center_rounded,
-                    title:         'Le tue schede',
-                    color:         _indigo,
-                    trailingLabel: workouts.length > 2
-                        ? 'Vedi tutte' : null,
-                    onTrailing: _goToAllenamenti),
-                  const SizedBox(height: 10),
-                  ...workouts.take(2).map((w) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _WorkoutMiniCard(
-                      workout: w, sp: sp,
-                      onEdit: () {
-                        context.read<WorkoutProvider>()
-                            .loadWorkoutExercises(w.key);
-                        pushPage(context, WorkoutDetailScreen(
+              // ─── 7. Le tue schede ──────────────────────────────
+              if (workouts.isNotEmpty) ...[
+                _SectionHeader(
+                  icon:          Icons.fitness_center_rounded,
+                  title:         'Le tue schede',
+                  color:         _indigo,
+                  trailingLabel: workouts.length > 2
+                      ? 'Vedi tutte' : null,
+                  onTrailing: _goToAllenamenti),
+                const SizedBox(height: 10),
+                ...workouts.take(2).map((w) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _WorkoutMiniCard(
+                    workout: w,
+                    sp:      sp,
+                    onEdit: () {
+                      context
+                          .read<WorkoutProvider>()
+                          .loadWorkoutExercises(w.key);
+                      pushPage(context, WorkoutDetailScreen(
                           workoutId:   w.key,
                           workoutName: w.name));
-                      },
-                      onPlay: () => _handleWorkoutPlay(w)))),
-                ],
+                    },
+                    onPlay: () => _handleWorkoutPlay(w)))),
               ],
-            ),
+            ],
           ),
         ),
       ),
@@ -355,7 +396,7 @@ class _HomeScreenState extends State<HomeScreen>
 }
 
 // ─────────────────────────────────────────────────────────────
-// _HomeHeader — con avatar profilo integrato
+// _HomeHeader
 // ─────────────────────────────────────────────────────────────
 
 class _HomeHeader extends StatelessWidget {
@@ -379,7 +420,8 @@ class _HomeHeader extends StatelessWidget {
 
   String get _phrase {
     final d = DateTime.now()
-        .difference(DateTime(DateTime.now().year)).inDays;
+        .difference(DateTime(DateTime.now().year))
+        .inDays;
     return _phrases[d % _phrases.length];
   }
 
@@ -393,9 +435,12 @@ class _HomeHeader extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
-              colors: [Colors.white.withOpacity(0.09),
-                Colors.white.withOpacity(0.03)]),
+              begin: Alignment.topLeft,
+              end:   Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.09),
+                Colors.white.withOpacity(0.03),
+              ]),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
                 color: _cyan.withOpacity(0.2), width: 0.8),
@@ -408,27 +453,32 @@ class _HomeHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Container(width: 7, height: 7,
-                      decoration: BoxDecoration(color: _teal,
-                        shape: BoxShape.circle,
+                    Container(
+                      width: 7, height: 7,
+                      decoration: BoxDecoration(
+                        color: _teal, shape: BoxShape.circle,
                         boxShadow: [BoxShadow(
                             color: _teal.withOpacity(0.7),
-                            blurRadius: 5)])),
+                            blurRadius: 5)]),
+                    ),
                     const SizedBox(width: 7),
-                    Text('MARKFIT', style: TextStyle(
-                        color: _teal, fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.8)),
+                    Text('MARKFIT',
+                        style: TextStyle(
+                            color: _teal, fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.8)),
                   ]),
                   const SizedBox(height: 10),
-                  Text(greeting, style: const TextStyle(
-                      color: Colors.white, fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5)),
+                  Text(greeting,
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5)),
                   const SizedBox(height: 3),
-                  Text(date, style: TextStyle(
-                      color: Colors.white.withOpacity(0.4),
-                      fontSize: 12)),
+                  Text(date,
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 12)),
                   const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -438,16 +488,16 @@ class _HomeHeader extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                           color: _teal.withOpacity(0.18), width: 0.7)),
-                    child: Text(_phrase, style: TextStyle(
-                        color: _teal.withOpacity(0.85), fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        fontStyle: FontStyle.italic)),
+                    child: Text(_phrase,
+                        style: TextStyle(
+                            color: _teal.withOpacity(0.85),
+                            fontSize: 11, fontWeight: FontWeight.w500,
+                            fontStyle: FontStyle.italic)),
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 16),
-            // ── Avatar profilo Glass ────────────────────────
             _ProfileAvatar(imagePath: profileImagePath),
           ]),
         ),
@@ -458,7 +508,6 @@ class _HomeHeader extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────
 // _ProfileAvatar
-// Mostra immagine profilo se disponibile, altrimenti icona default.
 // ─────────────────────────────────────────────────────────────
 
 class _ProfileAvatar extends StatelessWidget {
@@ -467,9 +516,7 @@ class _ProfileAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasImage =
-        imagePath != null && imagePath!.isNotEmpty;
-
+    final hasImage = imagePath != null && imagePath!.isNotEmpty;
     return Container(
       width: 56, height: 56,
       decoration: BoxDecoration(
@@ -477,18 +524,17 @@ class _ProfileAvatar extends StatelessWidget {
           begin: Alignment.topLeft, end: Alignment.bottomRight,
           colors: [_teal.withOpacity(0.3), _cyan.withOpacity(0.1)]),
         shape: BoxShape.circle,
-        border: Border.all(
-            color: _teal.withOpacity(0.6), width: 1.5),
+        border: Border.all(color: _teal.withOpacity(0.6), width: 1.5),
         boxShadow: [BoxShadow(
             color: _teal.withOpacity(0.3),
             blurRadius: 16, spreadRadius: 1)]),
       child: ClipOval(
         child: hasImage
-            ? Image.file(File(imagePath!),
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Icon(
-                    Icons.person_rounded,
-                    color: Colors.white, size: 28))
+            ? Image.file(
+                File(imagePath!), fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    const Icon(Icons.person_rounded,
+                        color: Colors.white, size: 28))
             : const Icon(Icons.person_rounded,
                 color: Colors.white, size: 28),
       ),
@@ -505,8 +551,10 @@ class _PausedSessionsBanner extends StatelessWidget {
   final String Function(int) fmt;
   final VoidCallback onGoToAllenamenti;
   const _PausedSessionsBanner({
-    required this.sp, required this.fmt,
-    required this.onGoToAllenamenti});
+    required this.sp,
+    required this.fmt,
+    required this.onGoToAllenamenti,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -526,8 +574,9 @@ class _PausedSessionsBanner extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft, end: Alignment.bottomRight,
-              colors: [_orange.withOpacity(0.18),
-                _orangeWarm.withOpacity(0.08)]),
+              colors: [
+                _orange.withOpacity(0.18), _orangeWarm.withOpacity(0.08)
+              ]),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
                 color: _orange.withOpacity(0.45), width: 1.3),
@@ -539,8 +588,8 @@ class _PausedSessionsBanner extends StatelessWidget {
               width: 46, height: 46,
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: [
-                  _orange.withOpacity(0.3),
-                  _orangeWarm.withOpacity(0.15)]),
+                  _orange.withOpacity(0.3), _orangeWarm.withOpacity(0.15)
+                ]),
                 shape: BoxShape.circle,
                 border: Border.all(
                     color: _orange.withOpacity(0.5), width: 1.2),
@@ -553,38 +602,44 @@ class _PausedSessionsBanner extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                Row(children: [
-                  Container(width: 6, height: 6,
-                    decoration: BoxDecoration(color: _orange,
-                      shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(
-                          color: _orange.withOpacity(0.7),
-                          blurRadius: 4)])),
-                  const SizedBox(width: 6),
-                  Text(
-                    count == 1 ? 'SESSIONE IN PAUSA'
-                        : '$count SESSIONI IN PAUSA',
-                    style: TextStyle(color: _orange, fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1)),
-                ]),
-                const SizedBox(height: 4),
-                Text(name,
-                  style: const TextStyle(color: Colors.white,
-                      fontSize: 14, fontWeight: FontWeight.w700),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-                if (elapsed > 0) ...[
-                  const SizedBox(height: 3),
                   Row(children: [
-                    Icon(Icons.timer_outlined, size: 11,
-                        color: _orange.withOpacity(0.7)),
-                    const SizedBox(width: 4),
-                    Text(fmt(elapsed), style: TextStyle(
-                        color: _orange.withOpacity(0.8),
-                        fontSize: 11, fontWeight: FontWeight.w600)),
+                    Container(
+                      width: 6, height: 6,
+                      decoration: BoxDecoration(
+                        color: _orange, shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(
+                            color: _orange.withOpacity(0.7),
+                            blurRadius: 4)]),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      count == 1
+                          ? 'SESSIONE IN PAUSA'
+                          : '$count SESSIONI IN PAUSA',
+                      style: TextStyle(
+                          color: _orange, fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.1)),
                   ]),
+                  const SizedBox(height: 4),
+                  Text(name,
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 14,
+                          fontWeight: FontWeight.w700),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  if (elapsed > 0) ...[
+                    const SizedBox(height: 3),
+                    Row(children: [
+                      Icon(Icons.timer_outlined,
+                          size: 11, color: _orange.withOpacity(0.7)),
+                      const SizedBox(width: 4),
+                      Text(fmt(elapsed), style: TextStyle(
+                          color: _orange.withOpacity(0.8),
+                          fontSize: 11, fontWeight: FontWeight.w600)),
+                    ]),
+                  ],
                 ],
-              ]),
+              ),
             ),
             const SizedBox(width: 10),
             GestureDetector(
@@ -598,7 +653,8 @@ class _PausedSessionsBanner extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [BoxShadow(
                       color: _orange.withOpacity(0.45),
-                      blurRadius: 12, offset: const Offset(0, 3))]),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3))]),
                 child: const Text('Riprendi',
                     style: TextStyle(color: Colors.white,
                         fontSize: 12, fontWeight: FontWeight.w700))),
@@ -630,17 +686,18 @@ class _ActiveSessionBanner extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: [
-              _blue.withOpacity(0.25), _blue.withOpacity(0.07)]),
+              _blue.withOpacity(0.25), _blue.withOpacity(0.07)
+            ]),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
                 color: _blue.withOpacity(0.45), width: 1.2),
             boxShadow: [BoxShadow(
                 color: _blue.withOpacity(0.2), blurRadius: 22)]),
           child: Row(children: [
-            Container(width: 44, height: 44,
+            Container(
+              width: 44, height: 44,
               decoration: BoxDecoration(
-                  color: _blue.withOpacity(0.2),
-                  shape: BoxShape.circle),
+                  color: _blue.withOpacity(0.2), shape: BoxShape.circle),
               child: const Icon(Icons.sports_gymnastics_rounded,
                   color: Color(0xFF60A5FA), size: 23)),
             const SizedBox(width: 12),
@@ -655,7 +712,7 @@ class _ActiveSessionBanner extends StatelessWidget {
                   Text(name, style: const TextStyle(
                       color: Colors.white, fontSize: 14,
                       fontWeight: FontWeight.w700),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 5),
                   Row(children: [
                     _MiniStat(icon: Icons.timer_rounded,
@@ -705,21 +762,24 @@ class _WeekCalendarSection extends StatelessWidget {
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDateSelected;
   final VoidCallback onCalendarOpen;
+
   const _WeekCalendarSection({
     required this.selectedDate,
     required this.onDateSelected,
-    required this.onCalendarOpen});
+    required this.onCalendarOpen,
+  });
 
   static String _monthLabel(DateTime d) {
     const months = [
       'Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
-      'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+      'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre',
+    ];
     return '${months[d.month - 1]} ${d.year}';
   }
 
   @override
   Widget build(BuildContext context) {
-    const names = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+    const names  = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
     final now    = DateTime.now();
     final today  = DateTime(now.year, now.month, now.day);
     final selDay = DateTime(
@@ -735,7 +795,8 @@ class _WeekCalendarSection extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: [
               Colors.white.withOpacity(0.07),
-              Colors.white.withOpacity(0.02)]),
+              Colors.white.withOpacity(0.02),
+            ]),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
                 color: _cyan.withOpacity(0.15), width: 0.8)),
@@ -814,7 +875,8 @@ class _WeekCalendarSection extends StatelessWidget {
                           shape: BoxShape.circle),
                         child: Center(
                           child: Text('${day.day}', style: TextStyle(
-                              color: isSel ? Colors.white
+                              color: isSel
+                                  ? Colors.white
                                   : Colors.white.withOpacity(0.7),
                               fontSize: 13,
                               fontWeight: isSel || isToday
@@ -824,13 +886,16 @@ class _WeekCalendarSection extends StatelessWidget {
                       Container(
                         width: 4, height: 4,
                         decoration: BoxDecoration(
-                          color: isToday ? _cyan
-                              : isPast ? _teal.withOpacity(0.4)
-                              : Colors.transparent,
+                          color: isToday
+                              ? _cyan
+                              : isPast
+                                  ? _teal.withOpacity(0.4)
+                                  : Colors.transparent,
                           shape: BoxShape.circle,
-                          boxShadow: isToday ? [BoxShadow(
-                              color: _cyan.withOpacity(0.6),
-                              blurRadius: 3)] : null)),
+                          boxShadow: isToday
+                              ? [BoxShadow(
+                                  color: _cyan.withOpacity(0.6),
+                                  blurRadius: 3)] : null)),
                     ]),
                   ),
                 );
@@ -844,14 +909,17 @@ class _WeekCalendarSection extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GlassCalendarDialog
+// _GlassCalendarDialog — 4 livelli: giorni → mesi → anni → decenni
 // ─────────────────────────────────────────────────────────────
 
 class _GlassCalendarDialog extends StatefulWidget {
   final DateTime initialDate;
   final ValueChanged<DateTime> onDateSelected;
   const _GlassCalendarDialog({
-    required this.initialDate, required this.onDateSelected});
+    required this.initialDate,
+    required this.onDateSelected,
+  });
+
   @override
   State<_GlassCalendarDialog> createState() =>
       _GlassCalendarDialogState();
@@ -867,10 +935,12 @@ class _GlassCalendarDialogState
   static const _dayNames = ['L','M','M','G','V','S','D'];
   static const _monthNames = [
     'Gen','Feb','Mar','Apr','Mag','Giu',
-    'Lug','Ago','Set','Ott','Nov','Dic'];
+    'Lug','Ago','Set','Ott','Nov','Dic',
+  ];
   static const _monthNamesFull = [
     'Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
-    'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+    'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre',
+  ];
 
   @override
   void initState() {
@@ -942,7 +1012,7 @@ class _GlassCalendarDialogState
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+                end:   Alignment.bottomRight,
                 colors: [Color(0xFF0D1117), Color(0xFF060B14)]),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
@@ -953,8 +1023,8 @@ class _GlassCalendarDialogState
             padding: const EdgeInsets.all(20),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Row(children: [
-                _CalNavBtn(icon: Icons.chevron_left_rounded,
-                    onTap: _prev),
+                _CalNavBtn(
+                    icon: Icons.chevron_left_rounded, onTap: _prev),
                 Expanded(
                   child: GestureDetector(
                     onTap: _drillUp,
@@ -963,13 +1033,12 @@ class _GlassCalendarDialogState
                           vertical: 8, horizontal: 4),
                       child: Text(_headerLabel,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 15,
-                              fontWeight: FontWeight.w800))),
+                          style: const TextStyle(color: Colors.white,
+                              fontSize: 15, fontWeight: FontWeight.w800))),
                   ),
                 ),
-                _CalNavBtn(icon: Icons.chevron_right_rounded,
-                    onTap: _next),
+                _CalNavBtn(
+                    icon: Icons.chevron_right_rounded, onTap: _next),
               ]),
               const SizedBox(height: 12),
               Container(height: 0.7,
@@ -977,15 +1046,15 @@ class _GlassCalendarDialogState
                   gradient: LinearGradient(colors: [
                     Colors.transparent,
                     _cyan.withOpacity(0.3),
-                    Colors.transparent]))),
+                    Colors.transparent,
+                  ]))),
               const SizedBox(height: 12),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 child: KeyedSubtree(
                   key: ValueKey(
                       '${_view}_${_focus.year}_${_focus.month}'),
-                  child: _buildGrid()),
-              ),
+                  child: _buildGrid())),
             ]),
           ),
         ),
@@ -1047,16 +1116,16 @@ class _GlassCalendarDialogState
                     ? Border.all(
                         color: _cyan.withOpacity(0.5), width: 1)
                     : null,
-                boxShadow: isSel ? [BoxShadow(
-                    color: _teal.withOpacity(0.4), blurRadius: 8)]
+                boxShadow: isSel
+                    ? [BoxShadow(
+                        color: _teal.withOpacity(0.4), blurRadius: 8)]
                     : null),
               child: Center(child: Text('$day', style: TextStyle(
                   color: isSel ? Colors.white
                       : Colors.white.withOpacity(0.8),
                   fontSize: 13,
                   fontWeight: isSel || isToday
-                      ? FontWeight.w800 : FontWeight.w500)))),
-          );
+                      ? FontWeight.w800 : FontWeight.w500)))));
         }),
     ]);
   }
@@ -1071,8 +1140,7 @@ class _GlassCalendarDialogState
           mainAxisSpacing: 8, crossAxisSpacing: 8),
       itemCount: 12,
       itemBuilder: (_, i) {
-        final isCurrent = _focus.year == now.year &&
-            i + 1 == now.month;
+        final isCurrent = _focus.year == now.year && i + 1 == now.month;
         final isSel = i + 1 == widget.initialDate.month &&
             _focus.year == widget.initialDate.year;
         return GestureDetector(
@@ -1122,8 +1190,8 @@ class _GlassCalendarDialogState
       itemCount: 12,
       itemBuilder: (_, i) {
         final decStart = cent - 10 + (i * 10);
-        final isCurrent = now.year >= decStart &&
-            now.year < decStart + 10;
+        final isCurrent =
+            now.year >= decStart && now.year < decStart + 10;
         final isSel = widget.initialDate.year >= decStart &&
             widget.initialDate.year < decStart + 10;
         final isOut = i == 0 || i == 11;
@@ -1159,8 +1227,9 @@ class _CalCell extends StatelessWidget {
   final String label;
   final bool isSelected, isCurrent, isOutOfRange;
   const _CalCell({required this.label,
-    this.isSelected = false, this.isCurrent = false,
-    this.isOutOfRange = false});
+      this.isSelected = false, this.isCurrent = false,
+      this.isOutOfRange = false});
+
   @override
   Widget build(BuildContext context) => AnimatedContainer(
     duration: const Duration(milliseconds: 140),
@@ -1174,9 +1243,11 @@ class _CalCell extends StatelessWidget {
             : isCurrent   ? _cyan.withOpacity(0.35)
             : Colors.white.withOpacity(isOutOfRange ? 0.06 : 0.12),
         width: isSelected ? 1.3 : 1),
-      boxShadow: isSelected ? [BoxShadow(
-          color: _teal.withOpacity(0.25), blurRadius: 8)] : null),
-    child: Center(child: Text(label, textAlign: TextAlign.center,
+      boxShadow: isSelected
+          ? [BoxShadow(color: _teal.withOpacity(0.25), blurRadius: 8)]
+          : null),
+    child: Center(child: Text(label,
+        textAlign: TextAlign.center,
         style: TextStyle(
             color: isOutOfRange ? Colors.white.withOpacity(0.3)
                 : isSelected ? _teal
@@ -1201,13 +1272,14 @@ class _GoalsDaySection extends StatelessWidget {
   const _GoalsDaySection({
     required this.goals, required this.selectedDate,
     required this.dayProgress, required this.isCompleted,
-    required this.onToggle, required this.onManage});
+    required this.onToggle, required this.onManage,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final now     = DateTime.now();
-    final today   = DateTime(now.year, now.month, now.day);
-    final sel     = DateTime(
+    final now      = DateTime.now();
+    final today    = DateTime(now.year, now.month, now.day);
+    final sel      = DateTime(
         selectedDate.year, selectedDate.month, selectedDate.day);
     final isFuture = sel.isAfter(today);
 
@@ -1219,7 +1291,8 @@ class _GoalsDaySection extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: [
               Colors.white.withOpacity(0.07),
-              Colors.white.withOpacity(0.02)]),
+              Colors.white.withOpacity(0.02),
+            ]),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
                 color: _orange.withOpacity(0.18), width: 0.8)),
@@ -1270,7 +1343,8 @@ class _GoalsDaySection extends StatelessWidget {
                       : 'Nessun obiettivo pianificato',
                       style: TextStyle(
                           color: Colors.white.withOpacity(0.4),
-                          fontSize: 13))]))
+                          fontSize: 13)),
+                ]))
             else
               ...goals.asMap().entries.map((e) {
                 final i    = e.key;
@@ -1302,9 +1376,10 @@ class _GoalTileGlass extends StatelessWidget {
   final VoidCallback onToggle;
   const _GoalTileGlass({
     required this.goal, required this.completed,
-    required this.isFuture, required this.onToggle});
+    required this.isFuture, required this.onToggle,
+  });
 
-  static const _catColors = {
+  static const _catColors = <String, Color>{
     'Studio':        Color(0xFF6366F1),
     'Sport':         Color(0xFF00D4AA),
     'Salute':        Color(0xFF22C55E),
@@ -1313,6 +1388,7 @@ class _GoalTileGlass extends StatelessWidget {
     'Benessere':     Color(0xFFEC4899),
     'Produttività':  Color(0xFF8B5CF6),
     'Hobby':         Color(0xFFF59E0B),
+    'Tempo libero':  Color(0xFF06B6D4),
     'Finanze':       Color(0xFF10B981),
     'Lettura':       Color(0xFF6B7280),
     'Meditazione':   Color(0xFF8A2BE2),
@@ -1329,8 +1405,8 @@ class _GoalTileGlass extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(children: [
         Container(width: 8, height: 8,
-          decoration: BoxDecoration(color: _catColor,
-            shape: BoxShape.circle,
+          decoration: BoxDecoration(
+            color: _catColor, shape: BoxShape.circle,
             boxShadow: [BoxShadow(
                 color: _catColor.withOpacity(0.5), blurRadius: 4)])),
         const SizedBox(width: 10),
@@ -1346,12 +1422,13 @@ class _GoalTileGlass extends StatelessWidget {
             children: [
             Text(goal.title, style: TextStyle(
                 color: completed
-                    ? Colors.white.withOpacity(0.35) : Colors.white,
+                    ? Colors.white.withOpacity(0.35)
+                    : Colors.white,
                 fontSize: 13, fontWeight: FontWeight.w600,
                 decoration: completed
                     ? TextDecoration.lineThrough : null,
                 decorationColor: Colors.white.withOpacity(0.3)),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
             if (goal.category.isNotEmpty)
               Text(goal.category, style: TextStyle(
                   color: _catColor.withOpacity(0.7), fontSize: 10,
@@ -1370,9 +1447,9 @@ class _GoalTileGlass extends StatelessWidget {
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Text('🔥', style: TextStyle(fontSize: 10)),
               const SizedBox(width: 3),
-              Text('${goal.currentStreak}',
-                  style: const TextStyle(color: _orange,
-                      fontSize: 10, fontWeight: FontWeight.w700)),
+              Text('${goal.currentStreak}', style: const TextStyle(
+                  color: _orange, fontSize: 10,
+                  fontWeight: FontWeight.w700)),
             ])),
           const SizedBox(width: 8),
         ],
@@ -1385,13 +1462,13 @@ class _GoalTileGlass extends StatelessWidget {
               color: completed ? _catColor : Colors.transparent,
               shape: BoxShape.circle,
               border: Border.all(
-                color: isFuture
-                    ? Colors.white.withOpacity(0.12)
+                color: isFuture ? Colors.white.withOpacity(0.12)
                     : completed ? _catColor
                     : Colors.white.withOpacity(0.25),
                 width: 1.5),
-              boxShadow: completed ? [BoxShadow(
-                  color: _catColor.withOpacity(0.45), blurRadius: 8)]
+              boxShadow: completed
+                  ? [BoxShadow(
+                      color: _catColor.withOpacity(0.45), blurRadius: 8)]
                   : null),
             child: completed
                 ? const Icon(Icons.check_rounded,
@@ -1407,33 +1484,34 @@ class _MiniProgressRing extends StatelessWidget {
   const _MiniProgressRing(
       {required this.progress, required this.color});
   @override
-  Widget build(BuildContext context) {
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Text('${(progress * 100).round()}%', style: TextStyle(
-          color: color, fontSize: 11, fontWeight: FontWeight.w700)),
-      const SizedBox(width: 6),
-      SizedBox(width: 28, height: 28,
-        child: CustomPaint(painter: _MiniRingPainter(
-            progress: progress, color: color))),
-    ]);
-  }
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+    Text('${(progress * 100).round()}%', style: TextStyle(
+        color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+    const SizedBox(width: 6),
+    SizedBox(width: 28, height: 28,
+      child: CustomPaint(painter: _MiniRingPainter(
+          progress: progress, color: color))),
+  ]);
 }
 
 class _MiniRingPainter extends CustomPainter {
   final double progress; final Color color;
-  const _MiniRingPainter(
-      {required this.progress, required this.color});
+  const _MiniRingPainter({required this.progress, required this.color});
   @override
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
     final r = size.width / 2 - 3;
     canvas.drawCircle(c, r,
-      Paint()..color = Colors.white.withOpacity(0.07)
+      Paint()
+        ..color = Colors.white.withOpacity(0.07)
         ..style = PaintingStyle.stroke ..strokeWidth = 3);
     if (progress > 0) {
       canvas.drawArc(Rect.fromCircle(center: c, radius: r),
         -math.pi / 2, 2 * math.pi * progress, false,
-        Paint()..color = color ..style = PaintingStyle.stroke
+        Paint()
+          ..color = color ..style = PaintingStyle.stroke
           ..strokeWidth = 3 ..strokeCap = StrokeCap.round);
     }
   }
@@ -1459,12 +1537,14 @@ class _DailyProgressCard extends StatelessWidget {
     required this.completedSets, required this.totalSets,
     required this.elapsedSec, required this.workoutCount,
     required this.exerciseCount, required this.hasActive,
-    required this.fmt});
+    required this.fmt,
+  });
 
   @override
   Widget build(BuildContext context) {
     final ringColor = hasActive ? _teal : _cyan.withOpacity(0.4);
     final glowColor = hasActive ? _teal : _cyan;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -1487,29 +1567,30 @@ class _DailyProgressCard extends StatelessWidget {
             children: [
             Row(children: [
               Container(width: 7, height: 7,
-                decoration: BoxDecoration(color: _cyan,
-                  shape: BoxShape.circle,
+                decoration: BoxDecoration(
+                  color: _cyan, shape: BoxShape.circle,
                   boxShadow: [BoxShadow(
                       color: _cyan.withOpacity(0.6), blurRadius: 4)])),
               const SizedBox(width: 8),
-              Text(hasActive ? 'SESSIONE IN CORSO'
+              Text(hasActive
+                  ? 'SESSIONE IN CORSO'
                   : 'PROGRESSO GIORNALIERO',
                 style: TextStyle(color: _cyan, fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2)),
+                    fontWeight: FontWeight.w800, letterSpacing: 1.2)),
             ]),
             const SizedBox(height: 20),
             Row(children: [
               _NeonProgressRing(
-                animation: ringAnim, targetProgress: progress,
-                ringColor: ringColor, glowColor: glowColor,
-                size: 118,
+                animation:      ringAnim,
+                targetProgress: progress,
+                ringColor:      ringColor,
+                glowColor:      glowColor,
+                size:           118,
                 centerLabel: hasActive ? 'Serie' : 'Pronto'),
               const SizedBox(width: 18),
               Expanded(child: Column(children: [
                 _StatMicroCard(
-                  icon: Icons.fitness_center_rounded,
-                  label: 'Schede',
+                  icon: Icons.fitness_center_rounded, label: 'Schede',
                   value: hasActive
                       ? '$completedSets/$totalSets'
                       : '$workoutCount',
@@ -1545,7 +1626,8 @@ class _NeonProgressRing extends StatelessWidget {
   const _NeonProgressRing({
     required this.animation, required this.targetProgress,
     required this.ringColor, required this.glowColor,
-    required this.size, required this.centerLabel});
+    required this.size, required this.centerLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1561,14 +1643,14 @@ class _NeonProgressRing extends StatelessWidget {
             child: Center(child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('${(p * 100).round()}%', style: TextStyle(
-                    color: ringColor, fontSize: size * 0.21,
-                    fontWeight: FontWeight.w800, letterSpacing: -1)),
-                Text(centerLabel, style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
-                    fontSize: size * 0.09,
-                    fontWeight: FontWeight.w500)),
-              ]))));
+              Text('${(p * 100).round()}%', style: TextStyle(
+                  color: ringColor, fontSize: size * 0.21,
+                  fontWeight: FontWeight.w800, letterSpacing: -1)),
+              Text(centerLabel, style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: size * 0.09,
+                  fontWeight: FontWeight.w500)),
+            ]))));
       });
   }
 }
@@ -1594,8 +1676,7 @@ class _RingPainter extends CustomPainter {
       Paint()..color = glowColor.withOpacity(0.22)
         ..style = PaintingStyle.stroke ..strokeWidth = 20
         ..strokeCap = StrokeCap.round
-        ..maskFilter =
-            const MaskFilter.blur(BlurStyle.normal, 9));
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9));
     canvas.drawArc(Rect.fromCircle(center: center, radius: radius),
       start, sweep, false,
       Paint()..color = ringColor ..style = PaintingStyle.stroke
@@ -1605,23 +1686,20 @@ class _RingPainter extends CustomPainter {
       Paint()..color = Colors.white.withOpacity(0.55)
         ..style = PaintingStyle.stroke ..strokeWidth = 2.5
         ..strokeCap = StrokeCap.round
-        ..maskFilter =
-            const MaskFilter.blur(BlurStyle.normal, 1.5));
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5));
     if (sweep > 0.05) {
       final ex = center.dx + radius * math.cos(start + sweep);
       final ey = center.dy + radius * math.sin(start + sweep);
       canvas.drawCircle(Offset(ex, ey), 5,
         Paint()..color = ringColor
-          ..maskFilter =
-              const MaskFilter.blur(BlurStyle.normal, 3));
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
       canvas.drawCircle(
           Offset(ex, ey), 3, Paint()..color = Colors.white);
     }
   }
 
   @override
-  bool shouldRepaint(_RingPainter old) =>
-      old.progress != progress;
+  bool shouldRepaint(_RingPainter old) => old.progress != progress;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1629,24 +1707,21 @@ class _RingPainter extends CustomPainter {
 // ─────────────────────────────────────────────────────────────
 
 class _StatMicroCard extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  final Color color;
+  final IconData icon; final String label, value; final Color color;
   const _StatMicroCard({required this.icon, required this.label,
       required this.value, required this.color});
+
   @override
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(12),
     child: BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
       child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 11, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
         decoration: BoxDecoration(
           color: color.withOpacity(0.07),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: color.withOpacity(0.2), width: 0.8)),
+          border: Border.all(color: color.withOpacity(0.2), width: 0.8)),
         child: Row(children: [
           Container(width: 28, height: 28,
             decoration: BoxDecoration(
@@ -1657,12 +1732,12 @@ class _StatMicroCard extends StatelessWidget {
           Expanded(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            Text(value, style: TextStyle(color: color,
-                fontSize: 14, fontWeight: FontWeight.w800),
+            Text(value, style: TextStyle(color: color, fontSize: 14,
+                fontWeight: FontWeight.w800),
                 maxLines: 1, overflow: TextOverflow.ellipsis),
             Text(label, style: TextStyle(
-                color: Colors.white.withOpacity(0.38),
-                fontSize: 9, fontWeight: FontWeight.w500)),
+                color: Colors.white.withOpacity(0.38), fontSize: 9,
+                fontWeight: FontWeight.w500)),
           ])),
         ]))));
 }
@@ -1676,16 +1751,17 @@ class _SectionHeader extends StatelessWidget {
   final String? trailingLabel; final VoidCallback? onTrailing;
   const _SectionHeader({required this.icon, required this.title,
       required this.color, this.trailingLabel, this.onTrailing});
+
   @override
   Widget build(BuildContext context) => Row(children: [
     Container(width: 32, height: 32,
-      decoration: BoxDecoration(color: color.withOpacity(0.12),
+      decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
           borderRadius: BorderRadius.circular(9)),
       child: Icon(icon, size: 16, color: color)),
     const SizedBox(width: 10),
     Text(title, style: const TextStyle(color: Colors.white,
-        fontSize: 16, fontWeight: FontWeight.w800,
-        letterSpacing: -0.2)),
+        fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
     const Spacer(),
     if (trailingLabel != null && onTrailing != null)
       GestureDetector(
@@ -1699,8 +1775,7 @@ class _SectionHeader extends StatelessWidget {
             border: Border.all(
                 color: color.withOpacity(0.3), width: 0.8)),
           child: Text(trailingLabel!, style: TextStyle(
-              color: color, fontSize: 11,
-              fontWeight: FontWeight.w700)))),
+              color: color, fontSize: 11, fontWeight: FontWeight.w700)))),
   ]);
 }
 
@@ -1710,28 +1785,26 @@ class _SectionHeader extends StatelessWidget {
 
 class _QuickStartGrid extends StatelessWidget {
   final VoidCallback onPalestra, onRunning, onCiclismo, onNuoto;
-  const _QuickStartGrid({required this.onPalestra,
-      required this.onRunning, required this.onCiclismo,
-      required this.onNuoto});
+  const _QuickStartGrid({
+    required this.onPalestra, required this.onRunning,
+    required this.onCiclismo, required this.onNuoto,
+  });
+
   @override
   Widget build(BuildContext context) => GridView.count(
     shrinkWrap: true,
     physics: const NeverScrollableScrollPhysics(),
-    crossAxisCount: 2, mainAxisSpacing: 12,
-    crossAxisSpacing: 12, childAspectRatio: 1.35,
+    crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12,
+    childAspectRatio: 1.35,
     children: [
-      _QuickCard(icon: Icons.fitness_center_rounded,
-          label: 'Palestra', sublabel: 'Pesi e circuiti',
-          color: _purple, onTap: onPalestra),
-      _QuickCard(icon: Icons.directions_run_rounded,
-          label: 'Running', sublabel: 'Corsa e sprint',
-          color: _orange, onTap: onRunning),
-      _QuickCard(icon: Icons.directions_bike_rounded,
-          label: 'Ciclismo', sublabel: 'Bici e cardio',
-          color: _green, onTap: onCiclismo),
-      _QuickCard(icon: Icons.pool_rounded,
-          label: 'Nuoto', sublabel: 'Vasche e tecnica',
-          color: _blue, onTap: onNuoto),
+      _QuickCard(icon: Icons.fitness_center_rounded, label: 'Palestra',
+          sublabel: 'Pesi e circuiti', color: _purple, onTap: onPalestra),
+      _QuickCard(icon: Icons.directions_run_rounded, label: 'Running',
+          sublabel: 'Corsa e sprint', color: _orange, onTap: onRunning),
+      _QuickCard(icon: Icons.directions_bike_rounded, label: 'Ciclismo',
+          sublabel: 'Bici e cardio', color: _green, onTap: onCiclismo),
+      _QuickCard(icon: Icons.pool_rounded, label: 'Nuoto',
+          sublabel: 'Vasche e tecnica', color: _blue, onTap: onNuoto),
     ]);
 }
 
@@ -1739,8 +1812,8 @@ class _QuickCard extends StatelessWidget {
   final IconData icon; final String label, sublabel;
   final Color color; final VoidCallback onTap;
   const _QuickCard({required this.icon, required this.label,
-      required this.sublabel, required this.color,
-      required this.onTap});
+      required this.sublabel, required this.color, required this.onTap});
+
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
@@ -1755,36 +1828,33 @@ class _QuickCard extends StatelessWidget {
               colors: [color.withOpacity(0.15),
                 Colors.white.withOpacity(0.02)]),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-                color: color.withOpacity(0.35), width: 1),
+            border: Border.all(color: color.withOpacity(0.35), width: 1),
             boxShadow: [BoxShadow(
-                color: color.withOpacity(0.14),
-                blurRadius: 18, spreadRadius: 1)]),
+                color: color.withOpacity(0.14), blurRadius: 18,
+                spreadRadius: 1)]),
           child: Padding(
             padding: const EdgeInsets.all(15),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(width: 40, height: 40,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.18),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [BoxShadow(
-                        color: color.withOpacity(0.3),
-                        blurRadius: 10)]),
-                  child: Icon(icon, color: color, size: 22)),
-                Column(crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                  Text(label, style: const TextStyle(
-                      color: Colors.white, fontSize: 14,
-                      fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 2),
-                  Text(sublabel, style: TextStyle(
-                      color: Colors.white.withOpacity(0.38),
-                      fontSize: 10)),
-                ]),
-              ]))))));
+              Container(width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [BoxShadow(
+                      color: color.withOpacity(0.3), blurRadius: 10)]),
+                child: Icon(icon, color: color, size: 22)),
+              Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                Text(label, style: const TextStyle(
+                    color: Colors.white, fontSize: 14,
+                    fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text(sublabel, style: TextStyle(
+                    color: Colors.white.withOpacity(0.38), fontSize: 10)),
+              ]),
+            ]))))));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1807,8 +1877,8 @@ class _WorkoutMiniCard extends StatelessWidget {
     final exercises =
         HiveDatabase.instance.getWorkoutExercises(workout.key);
     final free     = exercises.where((e) => !e.isInCircuit).length;
-    final circuits =
-        HiveDatabase.instance.getCircuits(workout.key);
+    final circuits = HiveDatabase.instance.getCircuits(workout.key);
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
@@ -1818,7 +1888,8 @@ class _WorkoutMiniCard extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: [
               Colors.white.withOpacity(0.08),
-              Colors.white.withOpacity(0.02)]),
+              Colors.white.withOpacity(0.02),
+            ]),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: indicator != null
@@ -1901,11 +1972,12 @@ class _MiniStat extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Icon(icon, size: 11, color: color.withOpacity(0.8)),
-      const SizedBox(width: 4),
-      Text(label, style: TextStyle(
-          color: color.withOpacity(0.9), fontSize: 11,
-          fontWeight: FontWeight.w600))]);
+    Icon(icon, size: 11, color: color.withOpacity(0.8)),
+    const SizedBox(width: 4),
+    Text(label, style: TextStyle(
+        color: color.withOpacity(0.9), fontSize: 11,
+        fontWeight: FontWeight.w600)),
+  ]);
 }
 
 class _TinyPill extends StatelessWidget {
