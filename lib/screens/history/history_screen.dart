@@ -1,57 +1,74 @@
+// ─────────────────────────────────────────────────────────────
+// history_screen.dart — Glass UI / Jarvis HUD
+//
+// FIX ARCHITETTURALE NAVBAR:
+// Nessun Scaffold proprio — tab dentro MainShell con extendBody.
+// Un Scaffold annidato ridurrebbe il body di navBarHeight,
+// creando il clip rettangolare netto visibile in Home/Allenamenti.
+// ─────────────────────────────────────────────────────────────
+
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
+import '../../core/navigation/app_router.dart';
 import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
 import '../../models/sport_models.dart';
 import '../../providers/exercise_provider.dart';
 import '../../providers/goal_provider.dart';
 import '../../providers/sport_provider.dart';
+import '../../widgets/cosmic_background.dart';
+import '../../widgets/shared_sheets.dart';
+import '../../widgets/workout_icon.dart';
+import '../../main.dart';
 import 'session_detail_screen.dart';
 import 'exercise_progress_screen.dart';
-import '../../main.dart';
-import '../../widgets/glass_action_buttons.dart';
-import '../../widgets/glass_bottom_sheet.dart';
-import '../../widgets/glass_card.dart';
-import '../../widgets/workout_icon.dart';
-import '../dashboard/widgets/streak_badge.dart';
+import '../../models/goal_models.dart';
+
+// ── Design tokens ─────────────────────────────────────────────
+const _cyan   = Color(0xFF00E5FF);
+const _teal   = Color(0xFF00D4AA);
+const _tealDk = Color(0xFF00A880);
+const _indigo = Color(0xFF6366F1);
+const _orange = Color(0xFFFF8C00);
+const _red    = Color(0xFFFF3B30);
+const _green  = Color(0xFF22C55E);
+const _blue   = Color(0xFF3B82F6);
+
+// ─────────────────────────────────────────────────────────────
+// Data models
+// ─────────────────────────────────────────────────────────────
 
 enum _EntryKind { gym, sport }
 
 class _HistoryEntry {
-  final _EntryKind kind;
-  final dynamic key;
-  final String title;
-  final DateTime date;
-  final int? durationSeconds;
-  final double? distanceKm;
-  final HiveSession? gymSession;
+  final _EntryKind     kind;
+  final dynamic        key;
+  final String         title;
+  final DateTime       date;
+  final int?           durationSeconds;
+  final double?        distanceKm;
+  final HiveSession?   gymSession;
   final HiveSportSession? sportSession;
-  final SportType? sportType;
+  final SportType?     sportType;
 
   _HistoryEntry.fromGym(HiveSession s)
-      : kind = _EntryKind.gym,
-        key = s.key,
-        title = s.workoutName,
+      : kind = _EntryKind.gym, key = s.key, title = s.workoutName,
         date = DateTime.tryParse(s.date) ?? DateTime.now(),
-        durationSeconds = s.durationSeconds,
-        distanceKm = null,
-        gymSession = s,
-        sportSession = null,
-        sportType = null;
+        durationSeconds = s.durationSeconds, distanceKm = null,
+        gymSession = s, sportSession = null, sportType = null;
 
   _HistoryEntry.fromSport(HiveSportSession s)
-      : kind = _EntryKind.sport,
-        key = s.key,
+      : kind = _EntryKind.sport, key = s.key,
         title = SportTypeX.fromId(s.sportType).label,
         date = DateTime.tryParse(s.date) ?? DateTime.now(),
-        durationSeconds = s.durationSeconds,
-        distanceKm = s.distanceKm,
-        gymSession = null,
-        sportSession = s,
+        durationSeconds = s.durationSeconds, distanceKm = s.distanceKm,
+        gymSession = null, sportSession = s,
         sportType = SportTypeX.fromId(s.sportType);
 }
 
-// Dichiarato UNA SOLA VOLTA — include tutti i tipi di sport
 enum _SportFilter { all, gym, running, cycling, swimming, walking, hiking }
 
 extension _SportFilterExt on _SportFilter {
@@ -67,22 +84,25 @@ extension _SportFilterExt on _SportFilter {
     }
   }
 
-  bool matches(_HistoryEntry entry) {
+  bool matches(_HistoryEntry e) {
     switch (this) {
       case _SportFilter.all:      return true;
-      case _SportFilter.gym:      return entry.kind == _EntryKind.gym;
-      case _SportFilter.running:  return entry.sportType == SportType.running;
-      case _SportFilter.cycling:  return entry.sportType == SportType.cycling;
-      case _SportFilter.swimming: return entry.sportType == SportType.swimming;
-      case _SportFilter.walking:  return entry.sportType == SportType.walking;
-      case _SportFilter.hiking:   return entry.sportType == SportType.hiking;
+      case _SportFilter.gym:      return e.kind == _EntryKind.gym;
+      case _SportFilter.running:  return e.sportType == SportType.running;
+      case _SportFilter.cycling:  return e.sportType == SportType.cycling;
+      case _SportFilter.swimming: return e.sportType == SportType.swimming;
+      case _SportFilter.walking:  return e.sportType == SportType.walking;
+      case _SportFilter.hiking:   return e.sportType == SportType.hiking;
     }
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// HistoryScreen
+// ─────────────────────────────────────────────────────────────
+
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
-
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
@@ -90,15 +110,14 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
-  List<HiveSession> _sessions = [];
-  DateTime _focusedMonth = DateTime.now();
-  bool _loading = true;
+  List<HiveSession>              _sessions       = [];
+  DateTime                       _focusedMonth   = DateTime.now();
+  bool                           _loading        = true;
   Map<String, List<HiveSession>> _sessionsByDate = {};
-  Map<int, HiveWorkout> _workoutsCache = {};
-  int _lastIndex = -1;
-  String _calendarMode = 'day';
-  _SportFilter _sportFilter = _SportFilter.all;
+  Map<int, HiveWorkout>          _workoutsCache  = {};
+  int                            _lastIndex      = -1;
+  String                         _calendarMode   = 'day';
+  _SportFilter                   _sportFilter    = _SportFilter.all;
 
   @override
   void initState() {
@@ -120,1409 +139,1462 @@ class _HistoryScreenState extends State<HistoryScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final currentIndex = context.watch<NavigationNotifier>().currentIndex;
-    if (currentIndex == 2 && _lastIndex != 2) _loadData();
-    _lastIndex = currentIndex;
+    final idx = context.watch<NavigationNotifier>().currentIndex;
+    if (idx == 2 && _lastIndex != 2) _loadData();
+    _lastIndex = idx;
   }
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
     final sessions = HiveDatabase.instance.getSessions();
-    final Map<String, List<HiveSession>> byDate = {};
+    final byDate   = <String, List<HiveSession>>{};
     for (final s in sessions) {
-      final dateStr = s.date.substring(0, 10);
-      byDate.putIfAbsent(dateStr, () => []).add(s);
+      byDate.putIfAbsent(s.date.substring(0, 10), () => []).add(s);
     }
-
     final workouts = HiveDatabase.instance.getWorkouts();
-    final Map<int, HiveWorkout> wCache = {};
-    for (final w in workouts) {
-      wCache[w.key as int] = w;
-    }
-
+    final wCache   = <int, HiveWorkout>{};
+    for (final w in workouts) { wCache[w.key as int] = w; }
     if (mounted) context.read<SportProvider>().loadSessions();
-
     setState(() {
-      _sessions = sessions;
+      _sessions       = sessions;
       _sessionsByDate = byDate;
-      _workoutsCache = wCache;
-      _loading = false;
+      _workoutsCache  = wCache;
+      _loading        = false;
     });
   }
 
-  HiveWorkout? _getWorkout(int workoutKey) => _workoutsCache[workoutKey];
+  HiveWorkout? _getWorkout(int key) => _workoutsCache[key];
 
-  List<_HistoryEntry> _allEntriesUnfiltered(BuildContext context) {
-    final sportSessions = context.watch<SportProvider>().sessions;
+  List<_HistoryEntry> _allEntries(BuildContext context) {
+    final sport   = context.watch<SportProvider>().sessions;
     final entries = <_HistoryEntry>[
-      ..._sessions.map((s) => _HistoryEntry.fromGym(s)),
-      ...sportSessions.map((s) => _HistoryEntry.fromSport(s)),
+      ..._sessions.map(_HistoryEntry.fromGym),
+      ...sport.map(_HistoryEntry.fromSport),
     ];
     entries.sort((a, b) => b.date.compareTo(a.date));
     return entries;
   }
 
-  List<_HistoryEntry> _buildFilteredEntries(List<_HistoryEntry> all) =>
+  List<_HistoryEntry> _filtered(List<_HistoryEntry> all) =>
       all.where((e) => _sportFilter.matches(e)).toList();
 
   int _computeStreak(List<DateTime> dates) {
     if (dates.isEmpty) return 0;
-    final now = DateTime.now();
-    final currentWeekStart = now.subtract(Duration(days: now.weekday - 1));
-    int streak = 0;
-    DateTime weekStart = DateTime(
-        currentWeekStart.year, currentWeekStart.month, currentWeekStart.day);
+    final now    = DateTime.now();
+    final wStart = now.subtract(Duration(days: now.weekday - 1));
+    int streak   = 0;
+    DateTime ws  = DateTime(wStart.year, wStart.month, wStart.day);
     while (true) {
-      final weekEnd = weekStart.add(const Duration(days: 6));
-      final hasActivity = dates.any((d) =>
-          !d.isBefore(weekStart) &&
-          d.isBefore(weekEnd.add(const Duration(days: 1))));
-      if (!hasActivity) break;
+      final we = ws.add(const Duration(days: 6));
+      if (!dates.any((d) =>
+          !d.isBefore(ws) && d.isBefore(we.add(const Duration(days: 1))))) {
+        break;
+      }
       streak++;
-      weekStart = weekStart.subtract(const Duration(days: 7));
+      ws = ws.subtract(const Duration(days: 7));
       if (streak > 200) break;
     }
     return streak;
   }
 
   List<bool> _currentWeekDays(List<DateTime> dates) {
-    final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
-    final dateStrs = dates
-        .map((d) =>
-            '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}')
-        .toSet();
+    final now    = DateTime.now();
+    final wStart = now.subtract(Duration(days: now.weekday - 1));
+    final strs   = dates.map((d) =>
+        '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}').toSet();
     return List.generate(7, (i) {
-      final day = weekStart.add(Duration(days: i));
-      final s =
-          '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-      return dateStrs.contains(s);
+      final day = wStart.add(Duration(days: i));
+      return strs.contains(
+          '${day.year}-${day.month.toString().padLeft(2,'0')}-${day.day.toString().padLeft(2,'0')}');
     });
   }
 
-  Future<void> _confirmDeleteSession(
-      BuildContext ctx, HiveSession session) async {
-    final dt = DateTime.tryParse(session.date);
-    final timeStr = dt != null
-        ? '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} alle ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
-        : session.date;
-
-    final confirm = await showGlassDialog<bool>(
-      context: ctx,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(children: [
-              Icon(Icons.delete_outline, color: Colors.red, size: 22),
-              SizedBox(width: 10),
-              Text('Elimina sessione',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-            ]),
-            const SizedBox(height: 12),
-            Text('Eliminare "${session.workoutName}" del $timeStr?'),
-            const SizedBox(height: 24),
-            GlassDialogActions(
-              cancelLabel: 'Annulla',
-              confirmLabel: 'Elimina',
-              confirmColor: Colors.red,
-              onCancel: () => Navigator.pop(ctx, false),
-              onConfirm: () => Navigator.pop(ctx, true),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirm == true) {
-      await HiveDatabase.instance.deleteSession(session.key);
+  Future<void> _confirmDeleteSession(HiveSession s) async {
+    final dt = DateTime.tryParse(s.date);
+    final ts = dt != null
+        ? '${dt.day.toString().padLeft(2,'0')}/${dt.month.toString().padLeft(2,'0')}/${dt.year}'
+        : s.date;
+    final ok = await showGlassDialog<bool>(
+      context: context, accentColor: _red,
+      icon: Container(width: 44, height: 44,
+        decoration: BoxDecoration(color: _red.withOpacity(0.12),
+          shape: BoxShape.circle,
+          border: Border.all(color: _red.withOpacity(0.4)),
+          boxShadow: [BoxShadow(color: _red.withOpacity(0.2), blurRadius: 12)]),
+        child: const Icon(Icons.delete_outline_rounded, color: _red, size: 22)),
+      title: 'Elimina sessione',
+      message: 'Vuoi eliminare "${s.workoutName}" del $ts?\nL\'operazione è irreversibile.',
+      actions: [
+        GlassDialogAction(label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+        GlassDialogAction(label: 'Elimina', isDestructive: true,
+            onTap: () => Navigator.pop(context, true)),
+      ]);
+    if (ok == true) {
+      await HiveDatabase.instance.deleteSession(s.key);
       await _loadData();
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Sessione eliminata')));
-      }
+      if (mounted) _showSnack('Sessione eliminata');
     }
   }
 
-  Future<void> _confirmDeleteSportSession(HiveSportSession session) async {
-    final confirm = await showGlassDialog<bool>(
+  Future<void> _confirmDeleteSportSession(HiveSportSession s) async {
+    final ok = await showGlassDialog<bool>(
+      context: context, accentColor: _red,
+      icon: Container(width: 44, height: 44,
+        decoration: BoxDecoration(color: _red.withOpacity(0.12),
+          shape: BoxShape.circle,
+          border: Border.all(color: _red.withOpacity(0.4))),
+        child: const Icon(Icons.delete_outline_rounded, color: _red, size: 22)),
+      title: 'Elimina sessione sport',
+      message:
+          'Vuoi eliminare questa sessione di ${SportTypeX.fromId(s.sportType).label}?',
+      actions: [
+        GlassDialogAction(label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+        GlassDialogAction(label: 'Elimina', isDestructive: true,
+            onTap: () => Navigator.pop(context, true)),
+      ]);
+    if (ok == true) {
+      await context.read<SportProvider>().deleteSession(s.key);
+      if (mounted) _showSnack('Sessione eliminata');
+    }
+  }
+
+  void _showSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+      backgroundColor: const Color(0xFF0D1117),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.all(16)));
+  }
+
+  void _showDayDetail(String dateStr, List<HiveSession> sessions) {
+    if (sessions.isEmpty) return;
+    showModalBottomSheet(
       context: context,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(children: [
-              Icon(Icons.delete_outline, color: Colors.red, size: 22),
-              SizedBox(width: 10),
-              Text('Elimina sessione',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-            ]),
-            const SizedBox(height: 12),
-            Text(
-                'Eliminare questa sessione di ${SportTypeX.fromId(session.sportType).label}?'),
-            const SizedBox(height: 24),
-            GlassDialogActions(
-              cancelLabel: 'Annulla',
-              confirmLabel: 'Elimina',
-              confirmColor: Colors.red,
-              onCancel: () => Navigator.pop(context, false),
-              onConfirm: () => Navigator.pop(context, true),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirm == true) {
-      await context.read<SportProvider>().deleteSession(session.key);
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Sessione eliminata')));
-      }
-    }
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => _GlassDayDetailSheet(
+        dateStr:       dateStr,
+        sessions:      sessions,
+        workoutsCache: _workoutsCache,
+        onDelete: (s) {
+          Navigator.pop(ctx);
+          _confirmDeleteSession(s);
+        },
+        onOpen: (s) {
+          Navigator.pop(ctx);
+          pushPage(context, SessionDetailScreen(
+              sessionKey: s.key, workoutName: s.workoutName, date: s.date));
+        }));
   }
+
+  // ── Build ─────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      backgroundColor: cs.surface,
-      appBar: AppBar(
-        backgroundColor: cs.surface,
-        title: const Text('Storico'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Allenamenti'),
-            Tab(text: 'Obiettivi'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildWorkoutsTab(context),
-          _buildGoalsTab(context),
-        ],
+    final sysBottom = MediaQuery.of(context).viewPadding.bottom;
+    return CosmicBackground(
+      child: SafeArea(
+        bottom: false,
+        child: Column(children: [
+          _HistoryAppBar(tabController: _tabController),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildWorkoutsTab(context, sysBottom),
+                _buildGoalsTab(context, sysBottom),
+              ])),
+        ]),
       ),
     );
   }
 
-  Widget _buildWorkoutsTab(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+  // ── Tab Allenamenti ────────────────────────────────────────────
 
-    final allEntries = _allEntriesUnfiltered(context);
-    final allDates = allEntries.map((e) => e.date).toList();
-    final totalActivities = allEntries.length;
-    final streak = _computeStreak(allDates);
-    final weekDays = _currentWeekDays(allDates);
-    final filteredEntries = _buildFilteredEntries(allEntries);
+  Widget _buildWorkoutsTab(BuildContext context, double sysBottom) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(
+          color: _teal, strokeWidth: 2));
+    }
+    final allEntries = _allEntries(context);
+    final allDates   = allEntries.map((e) => e.date).toList();
+    final streak     = _computeStreak(allDates);
+    final weekDays   = _currentWeekDays(allDates);
+    final filtered   = _filtered(allEntries);
 
     return RefreshIndicator(
-      onRefresh: _loadData,
+      onRefresh:       _loadData,
+      color:           _teal,
+      backgroundColor: const Color(0xFF0D1117),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+        physics: const BouncingScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(16, 12, 16, 88 + sysBottom),
         children: [
+
+          // Stats bar
+          if (allEntries.isNotEmpty) ...[
+            _GlassStatsBar(
+                totalSessions: allEntries.length,
+                streak:        streak,
+                weekDays:      weekDays),
+            const SizedBox(height: 12),
+          ],
+
+          // Progressi button
           Align(
             alignment: Alignment.centerRight,
-            child: IconButton(
-              tooltip: 'Progressi per esercizio',
-              icon: const Icon(Icons.show_chart),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ChangeNotifierProvider.value(
+            child: GestureDetector(
+              onTap: () => pushPage(context,
+                  ChangeNotifierProvider.value(
                     value: context.read<ExerciseProvider>(),
-                    child: const ExerciseProgressScreen(),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          if (allEntries.isNotEmpty)
-            _CompactStatsBar(
-              totalSessions: totalActivities,
-              streak: streak,
-              weekDays: weekDays,
-            ),
-          if (allEntries.isNotEmpty) const SizedBox(height: 14),
-          _AdvancedCalendar(
-            focusedMonth: _focusedMonth,
+                    child: const ExerciseProgressScreen())),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: _indigo.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: _indigo.withOpacity(0.3), width: 0.8)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.show_chart, color: _indigo, size: 15),
+                  const SizedBox(width: 6),
+                  const Text('Progressi', style: TextStyle(
+                      color: _indigo, fontSize: 12,
+                      fontWeight: FontWeight.w600)),
+                ])))),
+          const SizedBox(height: 10),
+
+          // Calendar
+          _GlassCalendar(
+            focusedMonth:   _focusedMonth,
             sessionsByDate: _sessionsByDate,
-            calendarMode: _calendarMode,
-            onModeChanged: (mode) => setState(() => _calendarMode = mode),
-            onMonthChanged: (month) => setState(() => _focusedMonth = month),
-            onDayTapped: (dateStr, sessions) =>
-                _showDayDetail(context, dateStr, sessions),
-          ),
-          const SizedBox(height: 16),
+            calendarMode:   _calendarMode,
+            onModeChanged:  (m) => setState(() => _calendarMode = m),
+            onMonthChanged: (m) => setState(() => _focusedMonth = m),
+            onDayTapped:    _showDayDetail),
+          const SizedBox(height: 12),
+
+          // Filter chips
           SizedBox(
-            height: 36,
+            height: 34,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: _SportFilter.values.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
               itemBuilder: (_, i) {
-                final f = _SportFilter.values[i];
-                return ChoiceChip(
-                  label: Text(f.label),
-                  selected: _sportFilter == f,
-                  onSelected: (_) => setState(() => _sportFilter = f),
-                  visualDensity: VisualDensity.compact,
-                );
-              },
-            ),
-          ),
+                final f   = _SportFilter.values[i];
+                final sel = _sportFilter == f;
+                return GestureDetector(
+                  onTap: () => setState(() => _sportFilter = f),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: sel
+                          ? _cyan.withOpacity(0.18)
+                          : Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: sel
+                            ? _cyan.withOpacity(0.55)
+                            : Colors.white.withOpacity(0.1),
+                        width: sel ? 1.2 : 0.8)),
+                    child: Text(f.label, style: TextStyle(
+                        color: sel ? _cyan : Colors.white.withOpacity(0.5),
+                        fontSize: 12,
+                        fontWeight: sel
+                            ? FontWeight.w700 : FontWeight.w500))));
+              })),
           const SizedBox(height: 12),
-          if (filteredEntries.isNotEmpty) ...[
-            Text('Sessioni recenti',
-                style: Theme.of(context).textTheme.titleMedium),
+
+          // Session list
+          if (filtered.isNotEmpty) ...[
+            _SectionHeader(
+                icon: Icons.history_rounded,
+                title:
+                    'Sessioni recenti (${filtered.length})',
+                color: _teal),
             const SizedBox(height: 8),
-            ...filteredEntries.take(30).map((entry) {
+            ...filtered.take(30).map((entry) {
               if (entry.kind == _EntryKind.gym) {
                 final s = entry.gymSession!;
-                final workout = _getWorkout(s.workoutKey);
-                return _SessionTile(
-                  session: s,
-                  workout: workout,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SessionDetailScreen(
-                        sessionKey: s.key,
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _GymSessionTile(
+                    session: s,
+                    workout: _getWorkout(s.workoutKey),
+                    onTap: () => pushPage(context, SessionDetailScreen(
+                        sessionKey:  s.key,
                         workoutName: s.workoutName,
-                        date: s.date,
-                      ),
-                    ),
-                  ),
-                  onDelete: () => _confirmDeleteSession(context, s),
-                );
+                        date:        s.date)),
+                    onDelete: () => _confirmDeleteSession(s)));
               } else {
-                return _SportSessionTile(
-                  entry: entry,
-                  onDelete: () =>
-                      _confirmDeleteSportSession(entry.sportSession!),
-                );
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _SportSessionTile(
+                    entry:    entry,
+                    onDelete: () => _confirmDeleteSportSession(
+                        entry.sportSession!)));
               }
             }),
           ] else
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  children: [
-                    Icon(Icons.history,
-                        size: 48,
-                        color: Theme.of(context).colorScheme.outline),
-                    const SizedBox(height: 12),
-                    Text('Nessuna sessione ancora',
-                        style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 4),
-                    Text('Completa il tuo primo allenamento!',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.outline)),
-                  ],
-                ),
-              ),
-            ),
+            _EmptyWorkouts(),
         ],
       ),
     );
   }
 
-  void _showDayDetail(
-      BuildContext context, String dateStr, List<HiveSession> sessions) {
-    if (sessions.isEmpty) return;
-    showGlassDialog(
-      context: context,
-      child: _DayDetailDialog(
-        dateStr: dateStr,
-        sessions: sessions,
-        workoutsCache: _workoutsCache,
-        onDelete: (s) {
-          Navigator.pop(context);
-          _confirmDeleteSession(context, s);
-        },
-        onOpen: (s) {
-          Navigator.pop(context);
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => SessionDetailScreen(
-                sessionKey: s.key,
-                workoutName: s.workoutName,
-                date: s.date,
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  // ── Tab Obiettivi ──────────────────────────────────────────────
 
-  Widget _buildGoalsTab(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final goalProvider = context.watch<GoalProvider>();
-    final goals = goalProvider.goals;
-
+  Widget _buildGoalsTab(BuildContext context, double sysBottom) {
+    final gp    = context.watch<GoalProvider>();
+    final goals = gp.goals;
     if (goals.isEmpty) {
-      return Center(
-        child: Text('Nessun obiettivo creato ancora',
-            style: TextStyle(color: cs.outline)),
-      );
+      return Center(child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: _EmptyGoals()));
     }
-
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 88 + sysBottom),
       itemCount: goals.length,
       itemBuilder: (_, i) {
-        final g = goals[i];
-        final completions = goalProvider.completionsForGoal(g.key)
-          ..sort((a, b) => b.date.compareTo(a.date));
-        final totalDone = completions.where((c) => c.completed).length;
-
+        final g         = goals[i];
+        final totalDone = gp.completionsForGoal(g.key)
+            .where((c) => c.completed).length;
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: GlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(g.title,
-                          style: const TextStyle(fontWeight: FontWeight.w700)),
-                    ),
-                    StreakBadge(streak: g.currentStreak),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                    'Miglior streak: ${g.bestStreak} · Totale completamenti: $totalDone',
-                    style: TextStyle(fontSize: 12, color: cs.outline)),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+          child: _GoalHistoryCard(
+              goal: g, totalDone: totalDone));
+      });
   }
 }
 
-class _SportSessionTile extends StatelessWidget {
-  final _HistoryEntry entry;
-  final VoidCallback onDelete;
+// ─────────────────────────────────────────────────────────────
+// _HistoryAppBar
+// ─────────────────────────────────────────────────────────────
 
-  const _SportSessionTile({required this.entry, required this.onDelete});
-
-  IconData get _icon {
-    switch (entry.sportType) {
-      case SportType.running:  return Icons.directions_run;
-      case SportType.cycling:  return Icons.directions_bike;
-      case SportType.swimming: return Icons.pool;
-      case SportType.walking:  return Icons.directions_walk;
-      case SportType.hiking:   return Icons.terrain;
-      default:                 return Icons.sports;
-    }
-  }
-
-  String _formatDate(DateTime dt) {
-    const months = [
-      '',
-      'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu',
-      'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
-    ];
-    return '${dt.day} ${months[dt.month]} ${dt.year} '
-        '${dt.hour.toString().padLeft(2, '0')}:'
-        '${dt.minute.toString().padLeft(2, '0')}';
-  }
-
-  String _formatDuration(int? seconds) {
-    if (seconds == null) return '';
-    final m = seconds ~/ 60;
-    if (m == 0) return '${seconds}s';
-    return '${m}min';
-  }
+class _HistoryAppBar extends StatelessWidget {
+  final TabController tabController;
+  const _HistoryAppBar({required this.tabController});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: cs.primaryContainer,
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Icon(_icon, color: cs.onPrimaryContainer, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(entry.title,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 14)),
-                  const SizedBox(height: 2),
-                  Text(_formatDate(entry.date),
-                      style: TextStyle(fontSize: 11, color: cs.outline)),
-                  if (entry.distanceKm != null && entry.distanceKm! > 0) ...[
-                    const SizedBox(height: 4),
-                    Text('${entry.distanceKm!.toStringAsFixed(1)} km',
-                        style: TextStyle(fontSize: 11, color: cs.outline)),
-                  ],
-                ],
-              ),
-            ),
-            Column(
-              children: [
-                if (entry.durationSeconds != null)
-                  Text(_formatDuration(entry.durationSeconds),
-                      style: TextStyle(fontSize: 11, color: cs.outline)),
-                const SizedBox(height: 4),
-                GestureDetector(
-                  onTap: onDelete,
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            border: Border(bottom: BorderSide(
+                color: _cyan.withOpacity(0.12), width: 0.6))),
+          child: Column(children: [
+            // Title row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(children: [
+                Container(width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: _teal.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(9)),
+                  child: const Icon(Icons.bar_chart_rounded,
+                      size: 16, color: _teal)),
+                const SizedBox(width: 10),
+                const Text('Storico', style: TextStyle(
+                    color: Colors.white, fontSize: 17,
+                    fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                Expanded(child: Text('Attività e progressi',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.35),
+                        fontSize: 11))),
+              ])),
+            // Glass TabBar
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                   child: Container(
-                    padding: const EdgeInsets.all(6),
+                    height: 36,
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border:
-                          Border.all(color: Colors.red.withOpacity(0.3), width: 1),
-                    ),
-                    child: const Icon(Icons.delete_outline,
-                        color: Colors.red, size: 16),
-                  ),
-                ),
-              ],
-            ),
-          ],
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.1), width: 0.8)),
+                    child: TabBar(
+                      controller: tabController,
+                      indicator: BoxDecoration(
+                        color: _teal.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: _teal.withOpacity(0.5), width: 1),
+                        boxShadow: [BoxShadow(
+                            color: _teal.withOpacity(0.15), blurRadius: 6)]),
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      dividerColor: Colors.transparent,
+                      labelColor: _teal,
+                      unselectedLabelColor: Colors.white.withOpacity(0.45),
+                      labelStyle: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w700),
+                      unselectedLabelStyle: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w500),
+                      padding: const EdgeInsets.all(3),
+                      tabs: const [
+                        Tab(text: 'Allenamenti'),
+                        Tab(text: 'Obiettivi'),
+                      ])))),)
+          ]),
         ),
       ),
     );
   }
 }
 
-class _DayDetailDialog extends StatefulWidget {
-  final String dateStr;
-  final List<HiveSession> sessions;
-  final Map<int, HiveWorkout> workoutsCache;
-  final void Function(HiveSession) onDelete;
-  final void Function(HiveSession) onOpen;
+// ─────────────────────────────────────────────────────────────
+// _GlassStatsBar
+// ─────────────────────────────────────────────────────────────
 
-  const _DayDetailDialog({
-    required this.dateStr,
-    required this.sessions,
-    required this.workoutsCache,
-    required this.onDelete,
-    required this.onOpen,
-  });
-
-  @override
-  State<_DayDetailDialog> createState() => _DayDetailDialogState();
-}
-
-class _DayDetailDialogState extends State<_DayDetailDialog> {
-  final Set<dynamic> _expanded = {};
-
-  String _formatDateLabel(String dateStr) {
-    final dt = DateTime.parse(dateStr);
-    const months = [
-      '',
-      'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-      'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
-    ];
-    return '${dt.day} ${months[dt.month]} ${dt.year}';
-  }
+class _GlassStatsBar extends StatelessWidget {
+  final int totalSessions, streak;
+  final List<bool> weekDays;
+  const _GlassStatsBar({
+    required this.totalSessions,
+    required this.streak,
+    required this.weekDays});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(_formatDateLabel(widget.dateStr),
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 12),
-          ...widget.sessions.map((s) {
-            final dt = DateTime.tryParse(s.date);
-            final timeStr = dt != null
-                ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
-                : '';
-            final isExpanded = _expanded.contains(s.key);
-            final sets = HiveDatabase.instance.getSessionSets(s.key);
-            final completedSets = sets.where((ss) => ss.completed).toList();
-            final Map<String, HiveSessionSet> topByExercise = {};
-            for (final ss in completedSets) {
-              topByExercise.putIfAbsent(ss.exerciseName, () => ss);
-            }
-
-            final workout = widget.workoutsCache[s.workoutKey];
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cs.outlineVariant.withOpacity(0.4)),
-              ),
-              child: Column(
-                children: [
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    child: Row(
-                      children: [
-                        WorkoutAvatar(
-                          iconId: workout?.iconId,
-                          iconColorIndex: workout?.iconColorIndex,
-                          customImagePath: workout?.customImagePath,
-                          size: 32,
-                          iconSize: 16,
-                          borderRadius: 8,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(s.workoutName,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600, fontSize: 14)),
-                              if (timeStr.isNotEmpty)
-                                Text(timeStr,
-                                    style:
-                                        TextStyle(fontSize: 11, color: cs.outline)),
-                            ],
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () => setState(() {
-                            if (isExpanded) {
-                              _expanded.remove(s.key);
-                            } else {
-                              _expanded.add(s.key);
-                            }
-                          }),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: cs.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              isExpanded ? Icons.expand_less : Icons.expand_more,
-                              size: 18,
-                              color: cs.primary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        GestureDetector(
-                          onTap: () => widget.onOpen(s),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: cs.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(Icons.arrow_forward_ios,
-                                size: 14, color: cs.primary),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        GestureDetector(
-                          onTap: () => widget.onDelete(s),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(Icons.delete_outline,
-                                size: 14, color: Colors.red),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (isExpanded && topByExercise.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Divider(color: cs.outlineVariant.withOpacity(0.5)),
-                          ...topByExercise.values.map((ss) => Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 2),
-                                child: Text(
-                                  '• ${ss.exerciseName}: ${ss.weight > 0 ? '${ss.weight % 1 == 0 ? ss.weight.toInt() : ss.weight} kg × ' : ''}${ss.reps} reps',
-                                  style:
-                                      TextStyle(fontSize: 12, color: cs.outline),
-                                ),
-                              )),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            );
-          }),
-          const SizedBox(height: 8),
-          GlassOutlinedButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Chiudi'),
-          ),
-        ],
+    const dl = ['L','M','M','G','V','S','D'];
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [
+              Colors.white.withOpacity(0.07),
+              Colors.white.withOpacity(0.02)]),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+                color: _cyan.withOpacity(0.15), width: 0.8)),
+          child: Row(children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('$totalSessions', style: TextStyle(
+                  fontSize: 22, fontWeight: FontWeight.w800,
+                  color: _teal, height: 1)),
+              Text('attività', style: TextStyle(
+                  fontSize: 9, color: Colors.white.withOpacity(0.4))),
+            ]),
+            const SizedBox(width: 10),
+            Container(width: 0.6, height: 30,
+                color: Colors.white.withOpacity(0.08)),
+            const SizedBox(width: 10),
+            const Text('🔥', style: TextStyle(fontSize: 16)),
+            const SizedBox(width: 4),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('$streak', style: TextStyle(
+                  fontSize: 22, fontWeight: FontWeight.w800,
+                  color: _orange, height: 1)),
+              Text(streak == 1 ? 'sett.' : 'sett.',
+                  style: TextStyle(
+                      fontSize: 9, color: Colors.white.withOpacity(0.4))),
+            ]),
+            const SizedBox(width: 10),
+            Container(width: 0.6, height: 30,
+                color: Colors.white.withOpacity(0.08)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: List.generate(7, (i) {
+                  final done = weekDays[i];
+                  return Column(children: [
+                    Text(dl[i], style: TextStyle(
+                        fontSize: 8, fontWeight: FontWeight.w600,
+                        color: Colors.white.withOpacity(0.35))),
+                    const SizedBox(height: 3),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 16, height: 16,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: done ? _teal : Colors.white.withOpacity(0.07),
+                        boxShadow: done ? [BoxShadow(
+                            color: _teal.withOpacity(0.4), blurRadius: 4)]
+                            : null),
+                      child: done
+                          ? const Icon(Icons.check_rounded,
+                              size: 10, color: Colors.white)
+                          : null),
+                  ]);
+                })),
+            ),
+          ]),
+        ),
       ),
     );
   }
 }
 
-class _AdvancedCalendar extends StatelessWidget {
-  final DateTime focusedMonth;
-  final Map<String, List<HiveSession>> sessionsByDate;
-  final String calendarMode;
-  final void Function(String) onModeChanged;
-  final void Function(DateTime) onMonthChanged;
+// ─────────────────────────────────────────────────────────────
+// _GlassCalendar — 3 livelli (day / month / year)
+// ─────────────────────────────────────────────────────────────
+
+class _GlassCalendar extends StatelessWidget {
+  final DateTime                             focusedMonth;
+  final Map<String, List<HiveSession>>       sessionsByDate;
+  final String                               calendarMode;
+  final void Function(String)                onModeChanged;
+  final void Function(DateTime)              onMonthChanged;
   final void Function(String, List<HiveSession>) onDayTapped;
 
-  const _AdvancedCalendar({
+  const _GlassCalendar({
     required this.focusedMonth,
     required this.sessionsByDate,
     required this.calendarMode,
     required this.onModeChanged,
     required this.onMonthChanged,
-    required this.onDayTapped,
-  });
+    required this.onDayTapped});
 
-  static const _monthNames = [
-    '',
-    'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu',
-    'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
-  ];
-  static const _monthNamesFull = [
-    '',
-    'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
-  ];
+  static const _mShort = ['','Gen','Feb','Mar','Apr','Mag','Giu',
+      'Lug','Ago','Set','Ott','Nov','Dic'];
+  static const _mFull  = ['','Gennaio','Febbraio','Marzo','Aprile',
+      'Maggio','Giugno','Luglio','Agosto','Settembre',
+      'Ottobre','Novembre','Dicembre'];
+
+  String get _titleText {
+    if (calendarMode == 'day') {
+      return '${_mFull[focusedMonth.month]} ${focusedMonth.year}';
+    } else if (calendarMode == 'month') {
+      return '${focusedMonth.year}';
+    } else {
+      final dec = (focusedMonth.year ~/ 10) * 10;
+      return '$dec – ${dec + 9}';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [
+              Colors.white.withOpacity(0.07),
+              Colors.white.withOpacity(0.02)]),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+                color: _cyan.withOpacity(0.15), width: 0.8)),
+          child: Column(children: [
             _buildHeader(context),
-            const SizedBox(height: 8),
-            if (calendarMode == 'day')
-              _buildDayView(context)
-            else if (calendarMode == 'month')
-              _buildMonthView(context)
-            else
-              _buildYearView(context),
-          ],
+            const SizedBox(height: 10),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: KeyedSubtree(
+                key: ValueKey('${calendarMode}_${focusedMonth.year}_${focusedMonth.month}'),
+                child: calendarMode == 'day'
+                    ? _buildDayView(context)
+                    : calendarMode == 'month'
+                        ? _buildMonthView(context)
+                        : _buildYearView(context))),
+          ]),
         ),
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    String titleText;
-    if (calendarMode == 'day') {
-      titleText = '${_monthNamesFull[focusedMonth.month]} ${focusedMonth.year}';
-    } else if (calendarMode == 'month') {
-      titleText = '${focusedMonth.year}';
-    } else {
-      final decade = (focusedMonth.year ~/ 10) * 10;
-      titleText = '$decade – ${decade + 9}';
-    }
-
-    return Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.chevron_left),
-          onPressed: () {
-            if (calendarMode == 'day') {
-              onMonthChanged(
-                  DateTime(focusedMonth.year, focusedMonth.month - 1));
-            } else if (calendarMode == 'month') {
-              onMonthChanged(
-                  DateTime(focusedMonth.year - 1, focusedMonth.month));
-            } else {
-              onMonthChanged(
-                  DateTime(focusedMonth.year - 10, focusedMonth.month));
-            }
+    return Row(children: [
+      _CalBtn(icon: Icons.chevron_left_rounded, onTap: () {
+        if (calendarMode == 'day') {
+          onMonthChanged(DateTime(focusedMonth.year, focusedMonth.month - 1));
+        } else if (calendarMode == 'month') {
+          onMonthChanged(DateTime(focusedMonth.year - 1, focusedMonth.month));
+        } else {
+          onMonthChanged(DateTime(focusedMonth.year - 10, focusedMonth.month));
+        }
+      }),
+      Expanded(
+        child: GestureDetector(
+          onTap: () {
+            if (calendarMode == 'day')        onModeChanged('month');
+            else if (calendarMode == 'month') onModeChanged('year');
+            else                              onModeChanged('day');
           },
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          iconSize: 22,
-        ),
-        Expanded(
-          child: GestureDetector(
-            onTap: () {
-              if (calendarMode == 'day') {
-                onModeChanged('month');
-              } else if (calendarMode == 'month') {
-                onModeChanged('year');
-              } else {
-                onModeChanged('day');
-              }
-            },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(titleText,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(width: 4),
-                Icon(Icons.unfold_more, size: 16, color: cs.outline),
-              ],
-            ),
-          ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.chevron_right),
-          onPressed: () {
-            if (calendarMode == 'day') {
-              onMonthChanged(
-                  DateTime(focusedMonth.year, focusedMonth.month + 1));
-            } else if (calendarMode == 'month') {
-              onMonthChanged(
-                  DateTime(focusedMonth.year + 1, focusedMonth.month));
-            } else {
-              onMonthChanged(
-                  DateTime(focusedMonth.year + 10, focusedMonth.month));
-            }
-          },
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          iconSize: 22,
-        ),
-      ],
-    );
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(_titleText, style: const TextStyle(
+                color: Colors.white, fontSize: 14,
+                fontWeight: FontWeight.w700)),
+            const SizedBox(width: 4),
+            Icon(Icons.unfold_more_rounded,
+                size: 16, color: _cyan.withOpacity(0.6)),
+          ]))),
+      _CalBtn(icon: Icons.chevron_right_rounded, onTap: () {
+        if (calendarMode == 'day') {
+          onMonthChanged(DateTime(focusedMonth.year, focusedMonth.month + 1));
+        } else if (calendarMode == 'month') {
+          onMonthChanged(DateTime(focusedMonth.year + 1, focusedMonth.month));
+        } else {
+          onMonthChanged(DateTime(focusedMonth.year + 10, focusedMonth.month));
+        }
+      }),
+    ]);
   }
 
   Widget _buildDayView(BuildContext context) {
-    final firstDay = DateTime(focusedMonth.year, focusedMonth.month, 1);
-    final daysInMonth =
-        DateTime(focusedMonth.year, focusedMonth.month + 1, 0).day;
-    final startOffset = (firstDay.weekday - 1) % 7;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cellSize = constraints.maxWidth / 7;
-        final circleSize = (cellSize * 0.72).clamp(28.0, 52.0);
-        final fontSize = (circleSize * 0.38).clamp(10.0, 18.0);
-
-        return Column(
-          children: [
-            Row(
-              children: ['L', 'M', 'M', 'G', 'V', 'S', 'D']
-                  .map((d) => SizedBox(
-                        width: cellSize,
-                        height: cellSize * 0.45,
-                        child: Center(
-                          child: Text(d,
-                              style: TextStyle(
-                                fontSize: fontSize * 0.85,
-                                fontWeight: FontWeight.bold,
-                                color:
-                                    Theme.of(context).colorScheme.outline,
-                              )),
-                        ),
-                      ))
-                  .toList(),
-            ),
-            const SizedBox(height: 4),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                childAspectRatio: 1,
-                mainAxisSpacing: 4,
-                crossAxisSpacing: 0,
-              ),
-              itemCount: startOffset + daysInMonth,
-              itemBuilder: (_, index) {
-                if (index < startOffset) return const SizedBox.shrink();
-                final day = index - startOffset + 1;
-                final date =
-                    DateTime(focusedMonth.year, focusedMonth.month, day);
-                final dateStr =
-                    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-                final sessions = sessionsByDate[dateStr] ?? [];
-                final hasSession = sessions.isNotEmpty;
-                final isToday = date.year == DateTime.now().year &&
-                    date.month == DateTime.now().month &&
-                    date.day == DateTime.now().day;
-
-                return _DayCell(
-                  day: day,
-                  hasSession: hasSession,
-                  isToday: isToday,
-                  sessions: sessions,
-                  circleSize: circleSize,
-                  fontSize: fontSize,
-                  onTap: hasSession ? () => onDayTapped(dateStr, sessions) : null,
-                );
-              },
-            ),
-          ],
-        );
-      },
-    );
+    final first     = DateTime(focusedMonth.year, focusedMonth.month, 1);
+    final daysCount = DateTime(focusedMonth.year, focusedMonth.month + 1, 0).day;
+    final offset    = (first.weekday - 1) % 7;
+    return LayoutBuilder(builder: (ctx, constraints) {
+      final cellSize   = constraints.maxWidth / 7;
+      final circleSize = (cellSize * 0.72).clamp(28.0, 52.0);
+      final fontSize   = (circleSize * 0.38).clamp(10.0, 18.0);
+      return Column(children: [
+        Row(children: ['L','M','M','G','V','S','D'].map((d) =>
+          SizedBox(width: cellSize, height: cellSize * 0.45,
+            child: Center(child: Text(d, style: TextStyle(
+                fontSize: fontSize * 0.82, fontWeight: FontWeight.w700,
+                color: _cyan.withOpacity(0.55)))))).toList()),
+        const SizedBox(height: 4),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7, childAspectRatio: 1,
+              mainAxisSpacing: 4, crossAxisSpacing: 0),
+          itemCount: offset + daysCount,
+          itemBuilder: (_, idx) {
+            if (idx < offset) return const SizedBox.shrink();
+            final day      = idx - offset + 1;
+            final date     = DateTime(focusedMonth.year, focusedMonth.month, day);
+            final dateStr  =
+                '${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
+            final sessions = sessionsByDate[dateStr] ?? [];
+            final isToday  = date.year == DateTime.now().year &&
+                date.month == DateTime.now().month &&
+                date.day == DateTime.now().day;
+            return _GlassDayCell(
+              day:        day,
+              hasSessions: sessions.isNotEmpty,
+              isToday:    isToday,
+              sessions:   sessions,
+              circleSize: circleSize,
+              fontSize:   fontSize,
+              onTap: sessions.isNotEmpty
+                  ? () => onDayTapped(dateStr, sessions) : null);
+          }),
+      ]);
+    });
   }
 
   Widget _buildMonthView(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final now = DateTime.now();
-
-    final sessionsByMonth = <int, int>{};
-    for (final entry in sessionsByDate.entries) {
-      final dt = DateTime.tryParse(entry.key);
+    final now          = DateTime.now();
+    final byMonth      = <int, int>{};
+    for (final e in sessionsByDate.entries) {
+      final dt = DateTime.tryParse(e.key);
       if (dt != null && dt.year == focusedMonth.year) {
-        sessionsByMonth[dt.month] =
-            (sessionsByMonth[dt.month] ?? 0) + entry.value.length;
+        byMonth[dt.month] = (byMonth[dt.month] ?? 0) + e.value.length;
       }
     }
-
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 1.8,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-      ),
+          crossAxisCount: 3, childAspectRatio: 1.8,
+          mainAxisSpacing: 8, crossAxisSpacing: 8),
       itemCount: 12,
       itemBuilder: (_, i) {
-        final month = i + 1;
-        final isCurrentMonth =
-            focusedMonth.year == now.year && month == now.month;
-        final isSelected = month == focusedMonth.month;
-        final count = sessionsByMonth[month] ?? 0;
-
+        final month   = i + 1;
+        final isCur   = focusedMonth.year == now.year && month == now.month;
+        final isSel   = month == focusedMonth.month;
+        final count   = byMonth[month] ?? 0;
         return GestureDetector(
           onTap: () {
             onMonthChanged(DateTime(focusedMonth.year, month));
             onModeChanged('day');
           },
-          child: Container(
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? cs.primary.withOpacity(0.15)
-                  : isCurrentMonth
-                      ? cs.primaryContainer.withOpacity(0.3)
-                      : cs.surfaceContainerHighest.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isSelected
-                    ? cs.primary
-                    : isCurrentMonth
-                        ? cs.primary.withOpacity(0.3)
-                        : cs.outlineVariant.withOpacity(0.3),
-                width: isSelected ? 2 : 1,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(_monthNames[month],
-                    style: TextStyle(
-                      fontWeight: isSelected || isCurrentMonth
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                      fontSize: 13,
-                      color: isSelected ? cs.primary : cs.onSurface,
-                    )),
-                if (count > 0)
-                  Text('$count',
-                      style: TextStyle(
-                          fontSize: 10,
-                          color: cs.primary,
-                          fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+          child: _CalCell(
+            label:       _mShort[month],
+            subLabel:    count > 0 ? '$count' : null,
+            isSelected:  isSel,
+            isCurrent:   isCur));
+      });
   }
 
   Widget _buildYearView(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final now = DateTime.now();
-    final decade = (focusedMonth.year ~/ 10) * 10;
-
-    final sessionsByYear = <int, int>{};
-    for (final entry in sessionsByDate.entries) {
-      final dt = DateTime.tryParse(entry.key);
-      if (dt != null) {
-        sessionsByYear[dt.year] =
-            (sessionsByYear[dt.year] ?? 0) + entry.value.length;
-      }
+    final dec    = (focusedMonth.year ~/ 10) * 10;
+    final now    = DateTime.now();
+    final byYear = <int, int>{};
+    for (final e in sessionsByDate.entries) {
+      final dt = DateTime.tryParse(e.key);
+      if (dt != null) byYear[dt.year] = (byYear[dt.year] ?? 0) + e.value.length;
     }
-
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 1.8,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-      ),
+          crossAxisCount: 3, childAspectRatio: 1.8,
+          mainAxisSpacing: 8, crossAxisSpacing: 8),
       itemCount: 12,
       itemBuilder: (_, i) {
-        final year = decade - 1 + i;
-        final isCurrentYear = year == now.year;
-        final isSelected = year == focusedMonth.year;
-        final count = sessionsByYear[year] ?? 0;
-        final isOutOfRange = i == 0 || i == 11;
-
+        final year  = dec - 1 + i;
+        final isCur = year == now.year;
+        final isSel = year == focusedMonth.year;
+        final isOut = i == 0 || i == 11;
+        final count = byYear[year] ?? 0;
         return GestureDetector(
           onTap: () {
             onMonthChanged(DateTime(year, focusedMonth.month));
             onModeChanged('month');
           },
-          child: Container(
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? cs.primary.withOpacity(0.15)
-                  : isCurrentYear
-                      ? cs.primaryContainer.withOpacity(0.3)
-                      : isOutOfRange
-                          ? cs.surfaceContainerHighest.withOpacity(0.15)
-                          : cs.surfaceContainerHighest.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isSelected
-                    ? cs.primary
-                    : cs.outlineVariant
-                        .withOpacity(isOutOfRange ? 0.15 : 0.3),
-                width: isSelected ? 2 : 1,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('$year',
-                    style: TextStyle(
-                      fontWeight: isSelected || isCurrentYear
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                      fontSize: 13,
-                      color: isOutOfRange
-                          ? cs.outline.withOpacity(0.4)
-                          : isSelected
-                              ? cs.primary
-                              : cs.onSurface,
-                    )),
-                if (count > 0)
-                  Text('$count',
-                      style: TextStyle(
-                          fontSize: 10,
-                          color: cs.primary,
-                          fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+          child: _CalCell(
+            label:        '$year',
+            subLabel:     count > 0 ? '$count' : null,
+            isSelected:   isSel,
+            isCurrent:    isCur,
+            isOutOfRange: isOut));
+      });
   }
 }
 
-class _CompactStatsBar extends StatelessWidget {
-  final int totalSessions;
-  final int streak;
-  final List<bool> weekDays;
-
-  const _CompactStatsBar({
-    required this.totalSessions,
-    required this.streak,
-    required this.weekDays,
-  });
-
+class _CalBtn extends StatelessWidget {
+  final IconData icon; final VoidCallback onTap;
+  const _CalBtn({required this.icon, required this.onTap});
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    const dayLabels = ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(width: 34, height: 34,
       decoration: BoxDecoration(
-        color: cs.surfaceContainer,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('$totalSessions',
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: cs.primary,
-                      height: 1)),
-              Text('attività',
-                  style: TextStyle(fontSize: 10, color: cs.outline)),
-            ],
-          ),
-          const SizedBox(width: 12),
-          Container(width: 1, height: 36, color: cs.outlineVariant),
-          const SizedBox(width: 12),
-          const Text('🔥', style: TextStyle(fontSize: 18)),
-          const SizedBox(width: 4),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('$streak',
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: cs.primary,
-                      height: 1)),
-              Text(streak == 1 ? 'settimana' : 'settimane',
-                  style: TextStyle(fontSize: 10, color: cs.outline)),
-            ],
-          ),
-          const SizedBox(width: 12),
-          Container(width: 1, height: 36, color: cs.outlineVariant),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(7, (i) {
-                final done = weekDays[i];
-                return Column(
-                  children: [
-                    Text(dayLabels[i],
-                        style: TextStyle(
-                            fontSize: 8,
-                            color: cs.outline,
-                            fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 3),
-                    Container(
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: done ? cs.primary : cs.outlineVariant,
-                      ),
-                      child: done
-                          ? Icon(Icons.check, size: 10, color: cs.onPrimary)
-                          : null,
-                    ),
-                  ],
-                );
-              }),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+            color: Colors.white.withOpacity(0.1), width: 0.8)),
+      child: Icon(icon, color: Colors.white, size: 18)));
 }
 
-class _DayCell extends StatefulWidget {
-  final int day;
-  final bool hasSession;
-  final bool isToday;
-  final List<HiveSession> sessions;
-  final VoidCallback? onTap;
-  final double circleSize;
-  final double fontSize;
-
-  const _DayCell({
-    required this.day,
-    required this.hasSession,
-    required this.isToday,
-    required this.sessions,
-    required this.circleSize,
-    required this.fontSize,
-    this.onTap,
-  });
-
+class _CalCell extends StatelessWidget {
+  final String   label;
+  final String?  subLabel;
+  final bool     isSelected, isCurrent, isOutOfRange;
+  const _CalCell({required this.label, this.subLabel,
+      this.isSelected = false, this.isCurrent = false,
+      this.isOutOfRange = false});
   @override
-  State<_DayCell> createState() => _DayCellState();
+  Widget build(BuildContext context) => AnimatedContainer(
+    duration: const Duration(milliseconds: 140),
+    decoration: BoxDecoration(
+      color: isSelected ? _teal.withOpacity(0.2)
+          : isCurrent   ? _cyan.withOpacity(0.08)
+          : Colors.white.withOpacity(isOutOfRange ? 0.02 : 0.05),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(
+        color: isSelected ? _teal.withOpacity(0.6)
+            : isCurrent   ? _cyan.withOpacity(0.3)
+            : Colors.white.withOpacity(isOutOfRange ? 0.05 : 0.1),
+        width: isSelected ? 1.3 : 1),
+      boxShadow: isSelected ? [BoxShadow(
+          color: _teal.withOpacity(0.2), blurRadius: 8)] : null),
+    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Text(label, style: TextStyle(
+          color: isOutOfRange ? Colors.white.withOpacity(0.25)
+              : isSelected ? _teal : Colors.white.withOpacity(0.8),
+          fontSize: 12,
+          fontWeight: isSelected || isCurrent
+              ? FontWeight.w700 : FontWeight.w500),
+          textAlign: TextAlign.center),
+      if (subLabel != null)
+        Text(subLabel!, style: TextStyle(
+            fontSize: 9, color: _teal,
+            fontWeight: FontWeight.w600)),
+    ]));
 }
 
-class _DayCellState extends State<_DayCell> {
-  bool _hovered = false;
-  OverlayEntry? _overlayEntry;
+// ─────────────────────────────────────────────────────────────
+// _GlassDayCell
+// ─────────────────────────────────────────────────────────────
 
-  void _showPreview(BuildContext context) {
-    if (!widget.hasSession) return;
-    final box = context.findRenderObject() as RenderBox;
+class _GlassDayCell extends StatefulWidget {
+  final int              day;
+  final bool             hasSessions, isToday;
+  final List<HiveSession> sessions;
+  final VoidCallback?    onTap;
+  final double           circleSize, fontSize;
+  const _GlassDayCell({
+    required this.day, required this.hasSessions,
+    required this.isToday, required this.sessions,
+    required this.circleSize, required this.fontSize,
+    this.onTap});
+  @override
+  State<_GlassDayCell> createState() => _GlassDayCellState();
+}
+
+class _GlassDayCellState extends State<_GlassDayCell> {
+  bool         _hovered = false;
+  OverlayEntry? _overlay;
+
+  void _showPreview(BuildContext ctx) {
+    if (!widget.hasSessions) return;
+    final box    = ctx.findRenderObject() as RenderBox;
     final offset = box.localToGlobal(Offset.zero);
-    _overlayEntry = OverlayEntry(
-      builder: (ctx) => Positioned(
-        left: (offset.dx - 60).clamp(8.0, double.infinity),
-        top: offset.dy + box.size.height + 4,
-        child: Material(
-          elevation: 6,
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            constraints: const BoxConstraints(maxWidth: 200),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: widget.sessions
-                  .map((s) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 3),
-                        child: Row(
-                          children: [
-                            Icon(Icons.fitness_center,
-                                size: 13,
-                                color: Theme.of(ctx).colorScheme.primary),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(s.workoutName,
-                                  style: const TextStyle(fontSize: 13),
-                                  overflow: TextOverflow.ellipsis),
-                            ),
-                          ],
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ),
-        ),
-      ),
-    );
-    Overlay.of(context).insert(_overlayEntry!);
+    _overlay = OverlayEntry(builder: (_) => Positioned(
+      left: (offset.dx - 60).clamp(8.0, double.infinity),
+      top:  offset.dy + box.size.height + 4,
+      child: Material(
+        elevation: 6, borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          constraints: const BoxConstraints(maxWidth: 200),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D1117),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _cyan.withOpacity(0.2))),
+          child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: widget.sessions.map((s) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(children: [
+                Icon(Icons.fitness_center_rounded,
+                    size: 11, color: _teal),
+                const SizedBox(width: 6),
+                Flexible(child: Text(s.workoutName,
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 12),
+                    overflow: TextOverflow.ellipsis)),
+              ]))).toList())))));
+    Overlay.of(ctx).insert(_overlay!);
   }
 
   void _hidePreview() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
+    _overlay?.remove();
+    _overlay = null;
   }
 
   @override
-  void dispose() {
-    _hidePreview();
-    super.dispose();
-  }
+  void dispose() { _hidePreview(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final hoverSize = widget.circleSize * 1.12;
-
-    if (!widget.hasSession && !widget.isToday) {
-      return Center(
-        child: Text('${widget.day}',
-            style: TextStyle(
-                fontSize: widget.fontSize,
-                color: cs.onSurface.withOpacity(0.6))),
-      );
+    if (!widget.hasSessions && !widget.isToday) {
+      return Center(child: Text('${widget.day}', style: TextStyle(
+          fontSize: widget.fontSize,
+          color: Colors.white.withOpacity(0.55))));
     }
-
+    final hoverSize = widget.circleSize * 1.1;
     return MouseRegion(
-      cursor: widget.hasSession
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
-      onEnter: (_) {
-        setState(() => _hovered = true);
-        _showPreview(context);
-      },
-      onExit: (_) {
-        setState(() => _hovered = false);
-        _hidePreview();
-      },
+      cursor: widget.hasSessions
+          ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) { setState(() => _hovered = true); _showPreview(context); },
+      onExit:  (_) { setState(() => _hovered = false); _hidePreview(); },
       child: GestureDetector(
         onTap: widget.onTap,
         child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            width: _hovered ? hoverSize : widget.circleSize,
+            width:  _hovered ? hoverSize : widget.circleSize,
             height: _hovered ? hoverSize : widget.circleSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: widget.hasSession
-                  ? _hovered
-                      ? cs.primary.withOpacity(0.8)
-                      : cs.primary
-                  : cs.primaryContainer,
-              border: widget.isToday && !widget.hasSession
-                  ? Border.all(color: cs.primary, width: 1.5)
+              color: widget.hasSessions
+                  ? _hovered ? _teal.withOpacity(0.8) : _teal
+                  : _cyan.withOpacity(0.12),
+              border: widget.isToday && !widget.hasSessions
+                  ? Border.all(color: _cyan.withOpacity(0.7), width: 1.5)
                   : null,
-              boxShadow: _hovered && widget.hasSession
-                  ? [
-                      BoxShadow(
-                          color: cs.primary.withOpacity(0.4),
-                          blurRadius: 8,
-                          spreadRadius: 2)
-                    ]
-                  : null,
-            ),
-            child: Center(
-              child: Text('${widget.day}',
-                  style: TextStyle(
-                    fontSize: widget.fontSize,
-                    fontWeight: FontWeight.bold,
-                    color:
-                        widget.hasSession ? cs.onPrimary : cs.primary,
-                  )),
-            ),
-          ),
-        ),
-      ),
-    );
+              boxShadow: _hovered && widget.hasSessions
+                  ? [BoxShadow(color: _teal.withOpacity(0.45),
+                      blurRadius: 10, spreadRadius: 1)]
+                  : widget.hasSessions
+                      ? [BoxShadow(color: _teal.withOpacity(0.2),
+                          blurRadius: 6)]
+                      : null),
+            child: Center(child: Text('${widget.day}', style: TextStyle(
+                fontSize: widget.fontSize,
+                fontWeight: FontWeight.w700,
+                color: widget.hasSessions
+                    ? Colors.white : _cyan)))))));
   }
 }
 
-class _SessionTile extends StatelessWidget {
-  final HiveSession session;
+// ─────────────────────────────────────────────────────────────
+// Session tiles
+// ─────────────────────────────────────────────────────────────
+
+class _GymSessionTile extends StatelessWidget {
+  final HiveSession  session;
   final HiveWorkout? workout;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
+  final VoidCallback onTap, onDelete;
+  const _GymSessionTile({
+    required this.session, required this.workout,
+    required this.onTap,   required this.onDelete});
 
-  const _SessionTile({
-    required this.session,
-    required this.workout,
-    required this.onTap,
-    required this.onDelete,
-  });
-
-  String _formatDate(String iso) {
+  String _fmtDate(String iso) {
     final dt = DateTime.parse(iso);
-    const months = [
-      '',
-      'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu',
-      'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
-    ];
-    return '${dt.day} ${months[dt.month]} ${dt.year} '
-        '${dt.hour.toString().padLeft(2, '0')}:'
-        '${dt.minute.toString().padLeft(2, '0')}';
+    const m  = ['','Gen','Feb','Mar','Apr','Mag','Giu',
+        'Lug','Ago','Set','Ott','Nov','Dic'];
+    return '${dt.day} ${m[dt.month]} ${dt.year}  '
+        '${dt.hour.toString().padLeft(2,'0')}:'
+        '${dt.minute.toString().padLeft(2,'0')}';
   }
 
-  String _formatDuration(int? seconds) {
-    if (seconds == null) return '';
-    final m = seconds ~/ 60;
-    if (m == 0) return '${seconds}s';
-    return '${m}min';
+  String _fmtDur(int? s) {
+    if (s == null) return '';
+    final m = s ~/ 60;
+    return m == 0 ? '${s}s' : '${m}min';
   }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final sets = HiveDatabase.instance.getSessionSets(session.key);
-    final topSets = sets
-        .where((s) => s.completed)
+    final top  = sets.where((s) => s.completed)
         .fold<Map<String, HiveSessionSet>>(
             {}, (map, s) => map..putIfAbsent(s.exerciseName, () => s))
-        .values
-        .take(2)
-        .toList();
+        .values.take(2).toList();
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [
+                Colors.white.withOpacity(0.08),
+                Colors.white.withOpacity(0.02)]),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                  color: _teal.withOpacity(0.18), width: 0.8)),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              WorkoutAvatar(
+                iconId:          workout?.iconId,
+                iconColorIndex:  workout?.iconColorIndex,
+                customImagePath: workout?.customImagePath,
+                size: 44, iconSize: 22, borderRadius: 11),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                Text(session.workoutName, style: const TextStyle(
+                    color: Colors.white, fontSize: 14,
+                    fontWeight: FontWeight.w700),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text(_fmtDate(session.date), style: TextStyle(
+                    fontSize: 11, color: Colors.white.withOpacity(0.4))),
+                if (top.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  ...top.map((s) => Text(
+                    '• ${s.exerciseName}: '
+                    '${s.weight > 0 ? '${s.weight % 1 == 0 ? s.weight.toInt() : s.weight} kg × ' : ''}'
+                    '${s.reps} reps',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.white.withOpacity(0.4)))),
+                ],
+              ])),
+              Column(children: [
+                if (session.durationSeconds != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _cyan.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                          color: _cyan.withOpacity(0.2), width: 0.7)),
+                    child: Text(_fmtDur(session.durationSeconds),
+                        style: TextStyle(
+                            color: _cyan.withOpacity(0.8), fontSize: 10,
+                            fontWeight: FontWeight.w600))),
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: onDelete,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: _red.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: _red.withOpacity(0.3), width: 0.7)),
+                    child: const Icon(Icons.delete_outline_rounded,
+                        color: _red, size: 14))),
+              ]),
+            ])))));
+  }
+}
+
+class _SportSessionTile extends StatelessWidget {
+  final _HistoryEntry entry;
+  final VoidCallback  onDelete;
+  const _SportSessionTile({required this.entry, required this.onDelete});
+
+  IconData get _icon {
+    switch (entry.sportType) {
+      case SportType.running:  return Icons.directions_run_rounded;
+      case SportType.cycling:  return Icons.directions_bike_rounded;
+      case SportType.swimming: return Icons.pool_rounded;
+      case SportType.walking:  return Icons.directions_walk_rounded;
+      case SportType.hiking:   return Icons.terrain_rounded;
+      default:                 return Icons.sports_rounded;
+    }
+  }
+
+  Color get _color {
+    switch (entry.sportType) {
+      case SportType.running:  return _orange;
+      case SportType.cycling:  return _green;
+      case SportType.swimming: return _blue;
+      case SportType.walking:  return _teal;
+      case SportType.hiking:   return _indigo;
+      default:                 return _cyan;
+    }
+  }
+
+  String _fmtDate(DateTime dt) {
+    const m = ['','Gen','Feb','Mar','Apr','Mag','Giu',
+        'Lug','Ago','Set','Ott','Nov','Dic'];
+    return '${dt.day} ${m[dt.month]} ${dt.year}  '
+        '${dt.hour.toString().padLeft(2,'0')}:'
+        '${dt.minute.toString().padLeft(2,'0')}';
+  }
+
+  String _fmtDur(int? s) {
+    if (s == null) return '';
+    final m = s ~/ 60;
+    return m == 0 ? '${s}s' : '${m}min';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _color;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
           padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [
+              c.withOpacity(0.1), Colors.white.withOpacity(0.02)]),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: c.withOpacity(0.3), width: 0.8)),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              WorkoutAvatar(
-                iconId: workout?.iconId,
-                iconColorIndex: workout?.iconColorIndex,
-                customImagePath: workout?.customImagePath,
-                size: 44,
-                iconSize: 22,
-                borderRadius: 11,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(session.workoutName,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 14)),
-                    const SizedBox(height: 2),
-                    Text(_formatDate(session.date),
-                        style: TextStyle(fontSize: 11, color: cs.outline)),
-                    if (topSets.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      ...topSets.map((s) => Text(
-                            '• ${s.exerciseName}: ${s.weight > 0 ? '${s.weight % 1 == 0 ? s.weight.toInt() : s.weight} kg × ' : ''}${s.reps} reps',
-                            style:
-                                TextStyle(fontSize: 11, color: cs.outline),
-                          )),
-                    ],
-                  ],
-                ),
-              ),
-              Column(
-                children: [
-                  if (session.durationSeconds != null)
-                    Text(_formatDuration(session.durationSeconds),
-                        style: TextStyle(fontSize: 11, color: cs.outline)),
-                  const SizedBox(height: 4),
-                  GestureDetector(
-                    onTap: onDelete,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: Colors.red.withOpacity(0.3), width: 1),
-                      ),
-                      child: const Icon(Icons.delete_outline,
-                          color: Colors.red, size: 16),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+            Container(width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: c.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(color: c.withOpacity(0.3))),
+              child: Icon(_icon, color: c, size: 22)),
+            const SizedBox(width: 12),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              Text(entry.title, style: const TextStyle(
+                  color: Colors.white, fontSize: 14,
+                  fontWeight: FontWeight.w700),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 2),
+              Text(_fmtDate(entry.date), style: TextStyle(
+                  fontSize: 11, color: Colors.white.withOpacity(0.4))),
+              if (entry.distanceKm != null && entry.distanceKm! > 0) ...[
+                const SizedBox(height: 3),
+                Row(children: [
+                  Icon(Icons.straighten_rounded,
+                      size: 11, color: c.withOpacity(0.7)),
+                  const SizedBox(width: 4),
+                  Text('${entry.distanceKm!.toStringAsFixed(1)} km',
+                      style: TextStyle(
+                          fontSize: 11, color: c.withOpacity(0.8),
+                          fontWeight: FontWeight.w600)),
+                ]),
+              ],
+            ])),
+            Column(children: [
+              if (entry.durationSeconds != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: c.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                        color: c.withOpacity(0.2), width: 0.7)),
+                  child: Text(_fmtDur(entry.durationSeconds),
+                      style: TextStyle(color: c.withOpacity(0.9),
+                          fontSize: 10, fontWeight: FontWeight.w600))),
+              const SizedBox(height: 6),
+              GestureDetector(
+                onTap: onDelete,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: _red.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: _red.withOpacity(0.3), width: 0.7)),
+                  child: const Icon(Icons.delete_outline_rounded,
+                      color: _red, size: 14))),
+            ]),
+          ]))));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _GlassDayDetailSheet — popup giorno
+// ─────────────────────────────────────────────────────────────
+
+class _GlassDayDetailSheet extends StatefulWidget {
+  final String                    dateStr;
+  final List<HiveSession>         sessions;
+  final Map<int, HiveWorkout>     workoutsCache;
+  final void Function(HiveSession) onDelete, onOpen;
+  const _GlassDayDetailSheet({
+    required this.dateStr,    required this.sessions,
+    required this.workoutsCache,
+    required this.onDelete,   required this.onOpen});
+  @override
+  State<_GlassDayDetailSheet> createState() => _GlassDayDetailSheetState();
+}
+
+class _GlassDayDetailSheetState extends State<_GlassDayDetailSheet> {
+  final Set<dynamic> _expanded = {};
+
+  String _fmtDateLabel(String s) {
+    final dt = DateTime.parse(s);
+    const m  = ['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+        'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+    return '${dt.day} ${m[dt.month]} ${dt.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassSheetWrapper(
+      title:      _fmtDateLabel(widget.dateStr),
+      subtitle:   '${widget.sessions.length} session${widget.sessions.length == 1 ? 'e' : 'i'}',
+      accentColor: _teal,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ...widget.sessions.map((s) {
+          final dt       = DateTime.tryParse(s.date);
+          final timeStr  = dt != null
+              ? '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}'
+              : '';
+          final isExp    = _expanded.contains(s.key);
+          final sets     = HiveDatabase.instance.getSessionSets(s.key);
+          final compSets = sets.where((ss) => ss.completed).toList();
+          final topMap   = <String, HiveSessionSet>{};
+          for (final ss in compSets) {
+            topMap.putIfAbsent(ss.exerciseName, () => ss);
+          }
+          final workout  = widget.workoutsCache[s.workoutKey];
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: _teal.withOpacity(0.2), width: 0.7)),
+                  child: Column(children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      child: Row(children: [
+                        WorkoutAvatar(
+                          iconId:          workout?.iconId,
+                          iconColorIndex:  workout?.iconColorIndex,
+                          customImagePath: workout?.customImagePath,
+                          size: 34, iconSize: 17, borderRadius: 9),
+                        const SizedBox(width: 10),
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                          Text(s.workoutName, style: const TextStyle(
+                              color: Colors.white, fontSize: 13,
+                              fontWeight: FontWeight.w700),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          if (timeStr.isNotEmpty)
+                            Text(timeStr, style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.white.withOpacity(0.4))),
+                        ])),
+                        // Expand
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            if (isExp) _expanded.remove(s.key);
+                            else       _expanded.add(s.key);
+                          }),
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: _teal.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(7)),
+                            child: Icon(
+                              isExp ? Icons.expand_less : Icons.expand_more,
+                              size: 16, color: _teal))),
+                        const SizedBox(width: 6),
+                        // Open
+                        GestureDetector(
+                          onTap: () => widget.onOpen(s),
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: _cyan.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(7)),
+                            child: const Icon(Icons.arrow_forward_ios_rounded,
+                                size: 12, color: _cyan))),
+                        const SizedBox(width: 6),
+                        // Delete
+                        GestureDetector(
+                          onTap: () => widget.onDelete(s),
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: _red.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(7)),
+                            child: const Icon(Icons.delete_outline_rounded,
+                                size: 12, color: _red))),
+                      ])),
+                    if (isExp && topMap.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                          Divider(height: 0, thickness: 0.5,
+                              color: Colors.white.withOpacity(0.06)),
+                          const SizedBox(height: 8),
+                          ...topMap.values.map((ss) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Text(
+                              '• ${ss.exerciseName}: '
+                              '${ss.weight > 0 ? '${ss.weight % 1 == 0 ? ss.weight.toInt() : ss.weight} kg × ' : ''}'
+                              '${ss.reps} reps',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white.withOpacity(0.55))))),
+                        ])),
+                  ])),
+              )));
+        }),
+        const SizedBox(height: 4),
+        GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.12))),
+            child: const Text('Chiudi', textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white,
+                    fontSize: 14, fontWeight: FontWeight.w600)))),
+      ]),
     );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _GoalHistoryCard
+// ─────────────────────────────────────────────────────────────
+
+class _GoalHistoryCard extends StatelessWidget {
+  final HiveGoal goal;
+  final int      totalDone;
+  const _GoalHistoryCard({required this.goal, required this.totalDone});
+
+  static const _catColors = <String, Color>{
+    'Studio': Color(0xFF6366F1), 'Sport': Color(0xFF00D4AA),
+    'Salute': Color(0xFF22C55E), 'Lavoro': Color(0xFF3B82F6),
+    'Alimentazione': Color(0xFFFF8C00), 'Benessere': Color(0xFFEC4899),
+    'Produttività': Color(0xFF8B5CF6), 'Hobby': Color(0xFFF59E0B),
+    'Finanze': Color(0xFF10B981), 'Lettura': Color(0xFF6B7280),
+    'Meditazione': Color(0xFF8A2BE2), 'Personale': Color(0xFFFF6B6B),
+    'Altro': Color(0xFF9CA3AF),
+  };
+
+  Color get _catColor =>
+      _catColors[goal.category] ?? const Color(0xFF9CA3AF);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _catColor;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [
+              Colors.white.withOpacity(0.07),
+              Colors.white.withOpacity(0.02)]),
+            borderRadius: BorderRadius.circular(16),
+            border: Border(
+              left:   BorderSide(color: c.withOpacity(0.6), width: 3),
+              top:    BorderSide(color: c.withOpacity(0.12), width: 0.7),
+              right:  BorderSide(color: c.withOpacity(0.12), width: 0.7),
+              bottom: BorderSide(color: c.withOpacity(0.12), width: 0.7))),
+          child: Row(children: [
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              Text(goal.title, style: const TextStyle(
+                  color: Colors.white, fontSize: 14,
+                  fontWeight: FontWeight.w700),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 4),
+              Row(children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: c.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                        color: c.withOpacity(0.25), width: 0.7)),
+                  child: Text(
+                    goal.category.isNotEmpty ? goal.category : 'Nessuna',
+                    style: TextStyle(color: c, fontSize: 10,
+                        fontWeight: FontWeight.w600))),
+                const SizedBox(width: 8),
+                Text('Completati: $totalDone',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.white.withOpacity(0.4))),
+              ]),
+              if (goal.bestStreak > 0) ...[
+                const SizedBox(height: 4),
+                Text('Record streak: ${goal.bestStreak}',
+                    style: TextStyle(
+                        fontSize: 11, color: _cyan.withOpacity(0.7),
+                        fontWeight: FontWeight.w500)),
+              ],
+            ])),
+            if (goal.currentStreak > 0) ...[
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(
+                      color: _orange.withOpacity(0.3), width: 0.7)),
+                child: Column(children: [
+                  const Text('🔥', style: TextStyle(fontSize: 14)),
+                  Text('${goal.currentStreak}', style: const TextStyle(
+                      color: _orange, fontSize: 12,
+                      fontWeight: FontWeight.w800)),
+                ])),
+            ],
+          ]))));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// _SectionHeader
+// ─────────────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  final IconData icon; final String title; final Color color;
+  const _SectionHeader({required this.icon, required this.title,
+      required this.color});
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Container(width: 30, height: 30,
+      decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(8)),
+      child: Icon(icon, size: 15, color: color)),
+    const SizedBox(width: 9),
+    Text(title, style: const TextStyle(
+        color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800,
+        letterSpacing: -0.2)),
+  ]);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Empty states
+// ─────────────────────────────────────────────────────────────
+
+class _EmptyWorkouts extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 56, height: 56,
+            decoration: BoxDecoration(
+              color: _teal.withOpacity(0.08), shape: BoxShape.circle),
+            child: const Icon(Icons.history_rounded, color: _teal, size: 26)),
+          const SizedBox(height: 14),
+          const Text('Nessuna sessione ancora',
+              style: TextStyle(color: Colors.white,
+                  fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text('Completa il tuo primo allenamento!',
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.4), fontSize: 13)),
+        ])));
+  }
+}
+
+class _EmptyGoals extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [
+                Colors.white.withOpacity(0.06),
+                Colors.white.withOpacity(0.02)]),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: _orange.withOpacity(0.15), width: 0.8)),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 56, height: 56,
+                decoration: BoxDecoration(
+                  color: _orange.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.track_changes_rounded,
+                    color: _orange, size: 26)),
+              const SizedBox(height: 14),
+              const Text('Nessun obiettivo ancora',
+                  style: TextStyle(color: Colors.white,
+                      fontSize: 15, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              Text('Crea i tuoi obiettivi dalla sezione Home',
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.4), fontSize: 13),
+                  textAlign: TextAlign.center),
+            ]))))
+        );
   }
 }
