@@ -9,11 +9,11 @@ import '../../db/hive_database.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/cosmic_background.dart';
+import '../../widgets/glass_main_app_bar.dart';
 import '../../widgets/shared_sheets.dart';
 import '../import/activity_import_screen.dart';
 import 'image_picker_helper.dart';
 
-// ── Design tokens ─────────────────────────────────────────────
 const _cyan   = Color(0xFF00E5FF);
 const _teal   = Color(0xFF00D4AA);
 const _tealDk = Color(0xFF00A880);
@@ -22,14 +22,6 @@ const _orange = Color(0xFFFF8C00);
 const _red    = Color(0xFFFF3B30);
 const _green  = Color(0xFF22C55E);
 const _blue   = Color(0xFF3B82F6);
-
-// ─────────────────────────────────────────────────────────────
-// SettingsScreen
-//
-// FIX ARCHITETTURALE: nessun Scaffold proprio — tab dentro
-// MainShell con extendBody:true. Stesso pattern di Home,
-// Allenamenti e Storico.
-// ─────────────────────────────────────────────────────────────
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -44,11 +36,24 @@ class SettingsScreen extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Column(children: [
-
-          // ── Glass AppBar ──────────────────────────────────────
-          _SettingsAppBar(auth: auth),
-
-          // ── Contenuto scrollabile ─────────────────────────────
+          GlassMainAppBar(
+            title:       'Impostazioni',
+            subtitle:    auth.currentIdentifier ?? '',
+            accentColor: _indigo,
+            screenIcon:  Icons.settings_rounded,
+            primaryActions: [
+              GlassToolbarAction(
+                icon:    Icons.edit_rounded,
+                tooltip: 'Modifica profilo',
+                onTap:   () => pushPage(context,
+                    ChangeNotifierProvider.value(
+                      value: context.read<AuthProvider>(),
+                      child: const EditProfileScreen()))),
+            ],
+            onProfileTap: () => pushPage(context,
+                ChangeNotifierProvider.value(
+                  value: context.read<AuthProvider>(),
+                  child: const EditProfileScreen()))),
           Expanded(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -56,20 +61,14 @@ class SettingsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
-                  // Profilo
                   _GlassProfileCard(auth: auth),
                   const SizedBox(height: 20),
-
-                  // Aspetto
                   _GlassSectionLabel('Aspetto'),
                   const SizedBox(height: 8),
                   _GlassThemeToggle(
                     isDark:   themeProvider.isDark,
                     onToggle: themeProvider.toggle),
                   const SizedBox(height: 18),
-
-                  // Sincronizzazione
                   _GlassSectionLabel('Sincronizzazione'),
                   const SizedBox(height: 8),
                   _GlassSection(tiles: [
@@ -82,8 +81,6 @@ class SettingsScreen extends StatelessWidget {
                           pushPage(context, const ActivityImportScreen())),
                   ]),
                   const SizedBox(height: 18),
-
-                  // Dati
                   _GlassSectionLabel('Dati'),
                   const SizedBox(height: 8),
                   _GlassSection(tiles: [
@@ -102,8 +99,6 @@ class SettingsScreen extends StatelessWidget {
                       onTap: () => _confirmDeleteNotes(context)),
                   ]),
                   const SizedBox(height: 18),
-
-                  // Account
                   _GlassSectionLabel('Account'),
                   const SizedBox(height: 8),
                   _GlassSection(tiles: [
@@ -117,15 +112,13 @@ class SettingsScreen extends StatelessWidget {
                       _GlassTileDivider(),
                     ],
                     _GlassTile(
-                      icon:      Icons.logout_rounded,
-                      color:     _red,
-                      title:     'Logout',
+                      icon:       Icons.logout_rounded,
+                      color:      _red,
+                      title:      'Logout',
                       titleColor: _red,
                       onTap: () => _confirmLogout(context)),
                   ]),
                   const SizedBox(height: 18),
-
-                  // Info
                   _GlassSectionLabel('Info'),
                   const SizedBox(height: 8),
                   _GlassSection(tiles: [
@@ -152,25 +145,26 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  // ── Dialogs ───────────────────────────────────────────────────
-
   void _confirmLogout(BuildContext context) async {
     final ok = await showGlassDialog<bool>(
       context: context, accentColor: _red,
-      icon: Container(width: 44, height: 44,
+      icon: Container(
+        width: 44, height: 44,
         decoration: BoxDecoration(
           color: _red.withOpacity(0.12), shape: BoxShape.circle,
           border: Border.all(color: _red.withOpacity(0.4)),
-          boxShadow: [BoxShadow(color: _red.withOpacity(0.2), blurRadius: 12)]),
+          boxShadow: [BoxShadow(
+              color: _red.withOpacity(0.2), blurRadius: 12)]),
         child: const Icon(Icons.logout_rounded, color: _red, size: 22)),
       title:   'Logout',
       message: "Vuoi uscire dall'account corrente?",
       actions: [
         GlassDialogAction(
-            label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+            label: 'Annulla',
+            onTap:  () => Navigator.pop(context, false)),
         GlassDialogAction(
             label: 'Logout', isDestructive: true,
-            onTap: () => Navigator.pop(context, true)),
+            onTap:  () => Navigator.pop(context, true)),
       ]);
     if (ok == true && context.mounted) {
       context.read<AuthProvider>().logout();
@@ -178,31 +172,34 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void _showSwitchAccount(BuildContext context) {
-    final auth = context.read<AuthProvider>();
     showModalBottomSheet(
-      context:         context,
-      backgroundColor: Colors.transparent,
+      context:            context,
+      backgroundColor:    Colors.transparent,
       isScrollControlled: true,
-      useSafeArea:     true,
-      builder: (ctx) => _SwitchAccountSheet(auth: auth));
+      useSafeArea:        true,
+      builder: (ctx) => _SwitchAccountSheet(
+          auth: context.read<AuthProvider>()));
   }
 
   void _confirmDeleteSessions(BuildContext context) async {
     final ok = await showGlassDialog<bool>(
       context: context, accentColor: _red,
-      icon: Container(width: 44, height: 44,
+      icon: Container(
+        width: 44, height: 44,
         decoration: BoxDecoration(
           color: _red.withOpacity(0.12), shape: BoxShape.circle,
           border: Border.all(color: _red.withOpacity(0.4))),
-        child: const Icon(Icons.delete_sweep_outlined, color: _red, size: 22)),
+        child: const Icon(Icons.delete_sweep_outlined,
+            color: _red, size: 22)),
       title:   'Elimina sessioni',
       message: 'Tutte le sessioni verranno rimosse definitivamente.',
       actions: [
         GlassDialogAction(
-            label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+            label: 'Annulla',
+            onTap:  () => Navigator.pop(context, false)),
         GlassDialogAction(
             label: 'Elimina tutto', isDestructive: true,
-            onTap: () => Navigator.pop(context, true)),
+            onTap:  () => Navigator.pop(context, true)),
       ]);
     if (ok == true && context.mounted) {
       await HiveDatabase.instance.deleteAllSessions();
@@ -213,19 +210,22 @@ class SettingsScreen extends StatelessWidget {
   void _confirmDeleteNotes(BuildContext context) async {
     final ok = await showGlassDialog<bool>(
       context: context, accentColor: _orange,
-      icon: Container(width: 44, height: 44,
+      icon: Container(
+        width: 44, height: 44,
         decoration: BoxDecoration(
           color: _orange.withOpacity(0.12), shape: BoxShape.circle,
           border: Border.all(color: _orange.withOpacity(0.4))),
-        child: const Icon(Icons.note_alt_outlined, color: _orange, size: 22)),
+        child: const Icon(Icons.note_alt_outlined,
+            color: _orange, size: 22)),
       title:   'Elimina note',
       message: 'Tutte le note degli esercizi verranno rimosse.',
       actions: [
         GlassDialogAction(
-            label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+            label: 'Annulla',
+            onTap:  () => Navigator.pop(context, false)),
         GlassDialogAction(
             label: 'Elimina', isDestructive: true,
-            onTap: () => Navigator.pop(context, true)),
+            onTap:  () => Navigator.pop(context, true)),
       ]);
     if (ok == true && context.mounted) {
       await HiveDatabase.instance.deleteAllNotes();
@@ -235,54 +235,13 @@ class SettingsScreen extends StatelessWidget {
 
   void _showSnack(BuildContext context, String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+      content: Text(msg, style: const TextStyle(
+          color: Colors.white, fontWeight: FontWeight.w600)),
       backgroundColor: const Color(0xFF0D1117),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.all(16)));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// _SettingsAppBar
-// ─────────────────────────────────────────────────────────────
-
-class _SettingsAppBar extends StatelessWidget {
-  final AuthProvider auth;
-  const _SettingsAppBar({required this.auth});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            border: Border(bottom: BorderSide(
-                color: _cyan.withOpacity(0.12), width: 0.6))),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: Row(children: [
-            Container(width: 32, height: 32,
-              decoration: BoxDecoration(
-                color: _indigo.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(9)),
-              child: const Icon(Icons.settings_rounded,
-                  size: 16, color: _indigo)),
-            const SizedBox(width: 10),
-            const Text('Impostazioni', style: TextStyle(
-                color: Colors.white, fontSize: 17,
-                fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-            const Spacer(),
-            Text(auth.currentIdentifier ?? '',
-                style: TextStyle(
-                    color: Colors.white.withOpacity(0.35), fontSize: 11),
-                overflow: TextOverflow.ellipsis),
-          ]),
-        ),
-      ),
-    );
   }
 }
 
@@ -308,22 +267,20 @@ class _GlassProfileCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            gradient: LinearGradient(begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
               colors: [
-                Colors.white.withOpacity(0.1),
+                Colors.white.withOpacity(0.10),
                 Colors.white.withOpacity(0.04)]),
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-                color: _teal.withOpacity(0.3), width: 1),
+            border: Border.all(color: _teal.withOpacity(0.3), width: 1),
             boxShadow: [BoxShadow(
                 color: _teal.withOpacity(0.07),
                 blurRadius: 24, spreadRadius: 2)]),
           child: Column(children: [
             Row(children: [
-              // Avatar
               GestureDetector(
-                onTap: () => _goToEditProfile(context),
+                onTap: () => _goToEdit(context),
                 child: Stack(children: [
                   AvatarWidget(auth: auth, radius: 38),
                   Positioned(right: 0, bottom: 0,
@@ -341,7 +298,6 @@ class _GlassProfileCard extends StatelessWidget {
                           size: 12, color: Colors.white))),
                 ])),
               const SizedBox(width: 14),
-              // Info
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -356,28 +312,24 @@ class _GlassProfileCard extends StatelessWidget {
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                 ],
                 const SizedBox(height: 3),
-                Row(children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _teal.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                          color: _teal.withOpacity(0.25), width: 0.7)),
-                    child: Text(email, style: TextStyle(
-                        color: _teal.withOpacity(0.85), fontSize: 10,
-                        fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis)),
-                ]),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _teal.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                        color: _teal.withOpacity(0.25), width: 0.7)),
+                  child: Text(email, style: TextStyle(
+                      color: _teal.withOpacity(0.85), fontSize: 10,
+                      fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis)),
               ])),
             ]),
-
-            // Dettagli account
             if (account != null &&
                 (account.firstName != null ||
                  account.birthDate != null ||
-                 account.phone != null)) ...[
+                 account.phone     != null)) ...[
               const SizedBox(height: 12),
               Container(height: 0.6,
                   color: Colors.white.withOpacity(0.06)),
@@ -385,8 +337,9 @@ class _GlassProfileCard extends StatelessWidget {
               Wrap(spacing: 8, runSpacing: 6, children: [
                 if (account.firstName != null)
                   _ProfileChip(
-                      icon: Icons.person_rounded,
-                      label: '${account.firstName} ${account.lastName ?? ''}'.trim()),
+                    icon:  Icons.person_rounded,
+                    label: '${account.firstName} ${account.lastName ?? ''}'
+                        .trim()),
                 if (account.birthDate != null)
                   _ProfileChip(
                       icon: Icons.cake_outlined,
@@ -401,60 +354,59 @@ class _GlassProfileCard extends StatelessWidget {
                       label: account.birthPlace!),
               ]),
             ],
-
             const SizedBox(height: 14),
-            // Pulsante Modifica
             GestureDetector(
-              onTap: () => _goToEditProfile(context),
+              onTap: () => _goToEdit(context),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 11),
                 decoration: BoxDecoration(
                   color: _teal.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(13),
-                  border: Border.all(
-                      color: _teal.withOpacity(0.35), width: 1)),
-                child: Row(
+                  border: Border.all(color: _teal.withOpacity(0.35), width: 1)),
+                child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                  const Icon(Icons.edit_outlined,
-                      size: 15, color: _teal),
-                  const SizedBox(width: 7),
-                  const Text('Modifica profilo',
-                      style: TextStyle(color: _teal, fontSize: 13,
-                          fontWeight: FontWeight.w700)),
-                ])),
-            ),
+                  Icon(Icons.edit_outlined, size: 15, color: _teal),
+                  SizedBox(width: 7),
+                  Text('Modifica profilo', style: TextStyle(
+                      color: _teal, fontSize: 13,
+                      fontWeight: FontWeight.w700)),
+                ]))),
           ]),
         ),
       ),
     );
   }
 
-  void _goToEditProfile(BuildContext context) {
+  void _goToEdit(BuildContext context) {
     pushPage(context, ChangeNotifierProvider.value(
-      value: context.read<AuthProvider>(),
-      child: const EditProfileScreen()));
+        value: context.read<AuthProvider>(),
+        child: const EditProfileScreen()));
   }
 }
 
 class _ProfileChip extends StatelessWidget {
   final IconData icon; final String label;
   const _ProfileChip({required this.icon, required this.label});
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-    decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.06),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: Colors.white.withOpacity(0.12), width: 0.7)),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 11, color: Colors.white.withOpacity(0.5)),
-      const SizedBox(width: 5),
-      Text(label.trim(), style: TextStyle(
-          fontSize: 11, color: Colors.white.withOpacity(0.65),
-          fontWeight: FontWeight.w500)),
-    ]));
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+            color: Colors.white.withOpacity(0.12), width: 0.7)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 11, color: Colors.white.withOpacity(0.5)),
+        const SizedBox(width: 5),
+        Text(label.trim(), style: TextStyle(
+            fontSize: 11, color: Colors.white.withOpacity(0.65),
+            fontWeight: FontWeight.w500)),
+      ]));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -464,12 +416,15 @@ class _ProfileChip extends StatelessWidget {
 class _GlassSectionLabel extends StatelessWidget {
   final String label;
   const _GlassSectionLabel(this.label);
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(left: 4),
-    child: Text(label.toUpperCase(), style: TextStyle(
-        color: _cyan.withOpacity(0.65), fontSize: 10,
-        fontWeight: FontWeight.w800, letterSpacing: 1.4)));
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(label.toUpperCase(), style: TextStyle(
+          color: _cyan.withOpacity(0.65), fontSize: 10,
+          fontWeight: FontWeight.w800, letterSpacing: 1.4)));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -499,12 +454,12 @@ class _GlassSection extends StatelessWidget {
 }
 
 class _GlassTile extends StatelessWidget {
-  final IconData  icon;
-  final Color     color;
-  final String    title;
-  final Color?    titleColor;
-  final String?   subtitle;
-  final Widget?   trailing;
+  final IconData      icon;
+  final Color         color;
+  final String        title;
+  final Color?        titleColor;
+  final String?       subtitle;
+  final Widget?       trailing;
   final VoidCallback? onTap;
 
   const _GlassTile({
@@ -514,13 +469,11 @@ class _GlassTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap != null ? () {
-        HapticFeedback.selectionClick();
-        onTap!();
-      } : null,
+      onTap: onTap != null
+          ? () { HapticFeedback.selectionClick(); onTap!(); }
+          : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 14, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         child: Row(children: [
           Container(width: 36, height: 36,
             decoration: BoxDecoration(
@@ -552,9 +505,12 @@ class _GlassTile extends StatelessWidget {
 
 class _GlassTileDivider extends StatelessWidget {
   @override
-  Widget build(BuildContext context) => Container(
-    height: 0.5, margin: const EdgeInsets.symmetric(horizontal: 14),
-    color: Colors.white.withOpacity(0.07));
+  Widget build(BuildContext context) {
+    return Container(
+      height: 0.5,
+      margin: const EdgeInsets.symmetric(horizontal: 14),
+      color: Colors.white.withOpacity(0.07));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -563,7 +519,8 @@ class _GlassTileDivider extends StatelessWidget {
 
 class _GlassThemeToggle extends StatelessWidget {
   final bool isDark; final VoidCallback onToggle;
-  const _GlassThemeToggle({required this.isDark, required this.onToggle});
+  const _GlassThemeToggle(
+      {required this.isDark, required this.onToggle});
 
   @override
   Widget build(BuildContext context) {
@@ -589,8 +546,7 @@ class _GlassThemeToggle extends StatelessWidget {
                   color: (isDark ? _indigo : _orange).withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10)),
                 child: Icon(
-                  isDark ? Icons.dark_mode_rounded
-                         : Icons.light_mode_rounded,
+                  isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
                   color: isDark ? _indigo : _orange, size: 19)),
               const SizedBox(width: 12),
               Expanded(child: Column(
@@ -604,7 +560,6 @@ class _GlassThemeToggle extends StatelessWidget {
                         fontSize: 11,
                         color: Colors.white.withOpacity(0.4))),
               ])),
-              // Toggle pill animata
               AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeInOut,
@@ -664,10 +619,12 @@ class _SwitchAccountSheet extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: GestureDetector(
-              onTap: isCurrent ? null : () {
-                Navigator.pop(context);
-                _switchTo(context, a);
-              },
+              onTap: isCurrent
+                  ? null
+                  : () {
+                      Navigator.pop(context);
+                      _switchTo(context, a);
+                    },
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
                 child: BackdropFilter(
@@ -683,32 +640,38 @@ class _SwitchAccountSheet extends StatelessWidget {
                         color: isCurrent
                             ? _blue.withOpacity(0.4)
                             : Colors.white.withOpacity(0.1),
-                        width: isCurrent ? 1 : 0.8)),
+                        width: isCurrent ? 1.0 : 0.8)),
                     child: Row(children: [
-                      Container(width: 40, height: 40,
+                      Container(
+                        width: 40, height: 40,
                         decoration: BoxDecoration(
                           gradient: LinearGradient(colors: [
-                            _blue.withOpacity(0.3), _indigo.withOpacity(0.2)]),
+                            _blue.withOpacity(0.3),
+                            _indigo.withOpacity(0.2)]),
                           shape: BoxShape.circle),
-                        child: Center(child: Text(a.initials,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 14,
-                                fontWeight: FontWeight.w800)))),
+                        child: Center(
+                          child: Text(a.initials,
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 14,
+                                  fontWeight: FontWeight.w800)))),
                       const SizedBox(width: 12),
-                      Expanded(child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                        Text(a.displayName ?? a.identifier,
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: isCurrent
-                                    ? FontWeight.w700 : FontWeight.w500),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(a.identifier, style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.white.withOpacity(0.4))),
-                      ])),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                          Text(a.displayName ?? a.identifier,
+                              style: TextStyle(
+                                  color: Colors.white, fontSize: 14,
+                                  fontWeight: isCurrent
+                                      ? FontWeight.w700
+                                      : FontWeight.w500),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          Text(a.identifier,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white.withOpacity(0.4))),
+                        ])),
                       if (isCurrent)
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -717,11 +680,18 @@ class _SwitchAccountSheet extends StatelessWidget {
                             color: _blue.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(7),
                             border: Border.all(
-                                color: _blue.withOpacity(0.35), width: 0.8)),
-                          child: const Text('Attivo', style: TextStyle(
-                              color: _blue, fontSize: 10,
-                              fontWeight: FontWeight.w700))),
-                    ]))))));
+                                color: _blue.withOpacity(0.35),
+                                width: 0.8)),
+                          child: const Text('Attivo',
+                              style: TextStyle(
+                                  color: _blue, fontSize: 10,
+                                  fontWeight: FontWeight.w700))),
+                    ]), // chiude Row children list ] e Row )
+                  ),   // chiude Container )
+                ),     // chiude BackdropFilter )
+              ),       // chiude ClipRRect )
+            ),         // chiude GestureDetector )
+          );           // chiude Padding )
         }),
         const SizedBox(height: 4),
       ]),
@@ -731,10 +701,10 @@ class _SwitchAccountSheet extends StatelessWidget {
   void _switchTo(BuildContext context, UserAccount account) {
     final pwCtrl = TextEditingController();
     showModalBottomSheet(
-      context:         context,
-      backgroundColor: Colors.transparent,
+      context:            context,
+      backgroundColor:    Colors.transparent,
       isScrollControlled: true,
-      useSafeArea:     true,
+      useSafeArea:        true,
       builder: (ctx) {
         final kb = MediaQuery.of(ctx).viewInsets.bottom;
         return GlassSheetWrapper(
@@ -742,7 +712,6 @@ class _SwitchAccountSheet extends StatelessWidget {
           subtitle:    account.identifier,
           accentColor: _teal,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            // Glass TextField
             ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: BackdropFilter(
@@ -764,11 +733,11 @@ class _SwitchAccountSheet extends StatelessWidget {
                       hintStyle: TextStyle(
                           color: Colors.white.withOpacity(0.3)),
                       prefixIcon: Icon(Icons.lock_outline_rounded,
-                          color: Colors.white.withOpacity(0.35), size: 18),
+                          color: Colors.white.withOpacity(0.35),
+                          size: 18),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 13))))),
-            ),
+                          horizontal: 14, vertical: 13)))))),
             SizedBox(height: kb > 0 ? 12 : 16),
             GestureDetector(
               onTap: () async {
@@ -788,12 +757,14 @@ class _SwitchAccountSheet extends StatelessWidget {
                 width:   double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [_teal, _tealDk]),
+                  gradient: const LinearGradient(
+                      colors: [_teal, _tealDk]),
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [BoxShadow(
                       color: _teal.withOpacity(0.4), blurRadius: 12,
                       offset: const Offset(0, 3))]),
-                child: const Text('Accedi', textAlign: TextAlign.center,
+                child: const Text('Accedi',
+                    textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white,
                         fontSize: 15, fontWeight: FontWeight.w700)))),
             SizedBox(height: kb > 0 ? kb : 4),
@@ -804,13 +775,14 @@ class _SwitchAccountSheet extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// AvatarWidget — condiviso con EditProfileScreen
+// AvatarWidget
 // ─────────────────────────────────────────────────────────────
 
 class AvatarWidget extends StatelessWidget {
   final AuthProvider auth;
   final double       radius;
-  const AvatarWidget({super.key, required this.auth, required this.radius});
+  const AvatarWidget(
+      {super.key, required this.auth, required this.radius});
 
   @override
   Widget build(BuildContext context) {
@@ -819,21 +791,23 @@ class AvatarWidget extends StatelessWidget {
       try {
         final bytes = base64Decode(b64);
         return Container(
-          width:  radius * 2, height: radius * 2,
+          width: radius * 2, height: radius * 2,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: _teal.withOpacity(0.5), width: 2),
             boxShadow: [BoxShadow(
                 color: _teal.withOpacity(0.25), blurRadius: 12)]),
-          child: ClipOval(child: Image.memory(bytes, fit: BoxFit.cover)));
+          child: ClipOval(
+              child: Image.memory(bytes, fit: BoxFit.cover)));
       } catch (_) {}
     }
     return Container(
       width: radius * 2, height: radius * 2,
       decoration: BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [_teal.withOpacity(0.4), _cyan.withOpacity(0.15)]),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [
+            _teal.withOpacity(0.4), _cyan.withOpacity(0.15)]),
         shape: BoxShape.circle,
         border: Border.all(color: _teal.withOpacity(0.55), width: 2),
         boxShadow: [BoxShadow(
@@ -845,13 +819,14 @@ class AvatarWidget extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// EditProfileScreen — ha Scaffold proprio (è una pushed page)
+// EditProfileScreen
 // ─────────────────────────────────────────────────────────────
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
   @override
-  State<EditProfileScreen> createState() => _EditProfileScreenState();
+  State<EditProfileScreen> createState() =>
+      _EditProfileScreenState();
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
@@ -866,21 +841,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   void initState() {
     super.initState();
-    final account     = context.read<AuthProvider>().currentAccount;
-    _firstNameCtrl    = TextEditingController(text: account?.firstName ?? '');
-    _lastNameCtrl     = TextEditingController(text: account?.lastName  ?? '');
-    _phoneCtrl        = TextEditingController(text: account?.phone     ?? '');
-    _birthPlaceCtrl   = TextEditingController(text: account?.birthPlace ?? '');
-    _bioCtrl          = TextEditingController(text: account?.bio        ?? '');
+    final account   = context.read<AuthProvider>().currentAccount;
+    _firstNameCtrl  = TextEditingController(text: account?.firstName  ?? '');
+    _lastNameCtrl   = TextEditingController(text: account?.lastName   ?? '');
+    _phoneCtrl      = TextEditingController(text: account?.phone      ?? '');
+    _birthPlaceCtrl = TextEditingController(text: account?.birthPlace ?? '');
+    _bioCtrl        = TextEditingController(text: account?.bio        ?? '');
     if (account?.birthDate != null) {
-      try { _selectedDate = DateTime.parse(account!.birthDate!); } catch (_) {}
+      try {
+        _selectedDate = DateTime.parse(account!.birthDate!);
+      } catch (_) {}
     }
   }
 
   @override
   void dispose() {
-    _firstNameCtrl.dispose(); _lastNameCtrl.dispose();
-    _phoneCtrl.dispose();     _birthPlaceCtrl.dispose();
+    _firstNameCtrl.dispose();
+    _lastNameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _birthPlaceCtrl.dispose();
     _bioCtrl.dispose();
     super.dispose();
   }
@@ -913,7 +892,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       helpText:    'Data di nascita',
       builder: (ctx, child) => Theme(
         data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(primary: _teal)),
+            colorScheme: const ColorScheme.dark(primary: _teal)),
         child: child!));
     if (picked != null) setState(() => _selectedDate = picked);
   }
@@ -921,18 +900,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _save() async {
     setState(() => _loading = true);
     await context.read<AuthProvider>().updateProfile(
-      firstName:  _firstNameCtrl.text.trim().isEmpty ? null : _firstNameCtrl.text.trim(),
-      lastName:   _lastNameCtrl.text.trim().isEmpty  ? null : _lastNameCtrl.text.trim(),
-      phone:      _phoneCtrl.text.trim().isEmpty     ? null : _phoneCtrl.text.trim(),
-      birthPlace: _birthPlaceCtrl.text.trim().isEmpty ? null : _birthPlaceCtrl.text.trim(),
-      bio:        _bioCtrl.text.trim().isEmpty        ? null : _bioCtrl.text.trim(),
-      birthDate:  _selectedDate?.toIso8601String().split('T')[0]);
+      firstName:  _firstNameCtrl.text.trim().isEmpty
+          ? null : _firstNameCtrl.text.trim(),
+      lastName:   _lastNameCtrl.text.trim().isEmpty
+          ? null : _lastNameCtrl.text.trim(),
+      phone:      _phoneCtrl.text.trim().isEmpty
+          ? null : _phoneCtrl.text.trim(),
+      birthPlace: _birthPlaceCtrl.text.trim().isEmpty
+          ? null : _birthPlaceCtrl.text.trim(),
+      bio:        _bioCtrl.text.trim().isEmpty
+          ? null : _bioCtrl.text.trim(),
+      birthDate:
+          _selectedDate?.toIso8601String().split('T')[0]);
     setState(() => _loading = false);
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Profilo aggiornato!',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w600)),
         backgroundColor: Color(0xFF0D1117),
         behavior: SnackBarBehavior.floating));
     }
@@ -940,8 +926,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth      = context.watch<AuthProvider>();
-    final kbHeight  = MediaQuery.of(context).viewInsets.bottom;
+    final auth     = context.watch<AuthProvider>();
+    final kbHeight = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
       backgroundColor:          Colors.transparent,
@@ -968,8 +954,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           color: Colors.white.withOpacity(0.07),
                           borderRadius: BorderRadius.circular(11),
                           border: Border.all(
-                              color: Colors.white.withOpacity(0.12), width: 0.7)),
-                        child: const Icon(Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white.withOpacity(0.12),
+                              width: 0.7)),
+                        child: const Icon(
+                            Icons.arrow_back_ios_new_rounded,
                             size: 15, color: Colors.white))),
                     const SizedBox(width: 12),
                     const Expanded(child: Column(
@@ -981,7 +969,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       Text('Aggiorna i tuoi dati', style: TextStyle(
                           color: Color(0x66FFFFFF), fontSize: 11)),
                     ])),
-                    // Salva button
                     GestureDetector(
                       onTap: _loading ? null : () {
                         HapticFeedback.mediumImpact();
@@ -992,29 +979,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
-                          gradient: _loading ? null : const LinearGradient(
-                              colors: [_teal, _tealDk]),
+                          gradient: _loading
+                              ? null
+                              : const LinearGradient(
+                                  colors: [_teal, _tealDk]),
                           color: _loading
                               ? Colors.white.withOpacity(0.05) : null,
                           borderRadius: BorderRadius.circular(11),
                           boxShadow: _loading ? null : [BoxShadow(
-                              color: _teal.withOpacity(0.4), blurRadius: 10,
+                              color: _teal.withOpacity(0.4),
+                              blurRadius: 10,
                               offset: const Offset(0, 3))]),
                         child: _loading
                             ? SizedBox(width: 14, height: 14,
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                     color: _teal.withOpacity(0.7)))
-                            : const Row(mainAxisSize: MainAxisSize.min, children: [
+                            : const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
                                 Icon(Icons.check_rounded,
                                     color: Colors.white, size: 15),
                                 SizedBox(width: 5),
                                 Text('Salva', style: TextStyle(
-                                    color: Colors.white, fontSize: 12,
+                                    color: Colors.white,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w700)),
                               ]))),
-                  ]))),
-            ),
+                  ])))),
 
             // Form
             Expanded(
@@ -1022,25 +1014,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 onTap: () => FocusScope.of(context).unfocus(),
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 32 + kbHeight),
+                  padding: EdgeInsets.fromLTRB(
+                      16, 16, 16, 32 + kbHeight),
                   child: Column(children: [
-
-                    // Avatar section
                     _EditAvatarSection(auth: auth, onPick: _pickImage),
                     const SizedBox(height: 20),
-
-                    // Dati personali
-                    _GlassFormSection(title: 'Dati personali',
-                        icon: Icons.person_rounded, color: _teal,
-                        children: [
+                    _GlassFormSection(
+                      title: 'Dati personali',
+                      icon:  Icons.person_rounded,
+                      color: _teal,
+                      children: [
                       Row(children: [
                         Expanded(child: _GlassFormField(
-                            controller: _firstNameCtrl, hint: 'Nome',
-                            icon: Icons.person_outline_rounded, accent: _teal)),
+                            controller: _firstNameCtrl,
+                            hint:       'Nome',
+                            icon:       Icons.person_outline_rounded,
+                            accent:     _teal)),
                         const SizedBox(width: 10),
                         Expanded(child: _GlassFormField(
-                            controller: _lastNameCtrl, hint: 'Cognome',
-                            accent: _teal)),
+                            controller: _lastNameCtrl,
+                            hint:       'Cognome',
+                            accent:     _teal)),
                       ]),
                       const SizedBox(height: 10),
                       GestureDetector(
@@ -1052,31 +1046,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       const SizedBox(height: 10),
                       _GlassFormField(
                           controller: _birthPlaceCtrl,
-                          hint: 'Luogo di nascita',
-                          icon: Icons.location_on_outlined,
-                          accent: _indigo),
+                          hint:       'Luogo di nascita',
+                          icon:       Icons.location_on_outlined,
+                          accent:     _indigo),
                       const SizedBox(height: 10),
                       _GlassFormField(
-                          controller: _phoneCtrl,
-                          hint: 'Telefono',
-                          icon: Icons.phone_outlined,
+                          controller:   _phoneCtrl,
+                          hint:         'Telefono',
+                          icon:         Icons.phone_outlined,
                           keyboardType: TextInputType.phone,
-                          accent: _green),
+                          accent:       _green),
                     ]),
                     const SizedBox(height: 14),
-
-                    // Bio
-                    _GlassFormSection(title: 'Su di me',
-                        icon: Icons.notes_rounded, color: _cyan,
-                        children: [
+                    _GlassFormSection(
+                      title: 'Su di me',
+                      icon:  Icons.notes_rounded,
+                      color: _cyan,
+                      children: [
                       _GlassFormField(
                           controller: _bioCtrl,
-                          hint: 'Raccontati in poche parole...',
-                          accent: _cyan, maxLines: 3),
+                          hint:       'Raccontati in poche parole...',
+                          accent:     _cyan,
+                          maxLines:   3),
                     ]),
                     const SizedBox(height: 24),
-
-                    // Salva bottom
                     GestureDetector(
                       onTap: _loading ? null : _save,
                       child: AnimatedContainer(
@@ -1084,16 +1077,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         width:   double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 15),
                         decoration: BoxDecoration(
-                          gradient: _loading ? null : const LinearGradient(
-                              colors: [_teal, _tealDk]),
+                          gradient: _loading
+                              ? null
+                              : const LinearGradient(
+                                  colors: [_teal, _tealDk]),
                           color: _loading
                               ? Colors.white.withOpacity(0.04) : null,
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: _loading ? null : [BoxShadow(
                               color: _teal.withOpacity(0.4),
-                              blurRadius: 16, offset: const Offset(0, 4))]),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4))]),
                         child: _loading
-                            ? Row(mainAxisAlignment: MainAxisAlignment.center,
+                            ? Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                 SizedBox(width: 16, height: 16,
                                   child: CircularProgressIndicator(
@@ -1101,19 +1098,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                       color: Colors.white.withOpacity(0.7))),
                                 const SizedBox(width: 10),
                                 const Text('Salvataggio...',
-                                    style: TextStyle(color: Colors.white,
-                                        fontSize: 15, fontWeight: FontWeight.w600)),
+                                    style: TextStyle(
+                                        color: Colors.white, fontSize: 15,
+                                        fontWeight: FontWeight.w600)),
                               ])
-                            : const Row(mainAxisAlignment: MainAxisAlignment.center,
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                 Icon(Icons.update_rounded,
                                     color: Colors.white, size: 18),
                                 SizedBox(width: 8),
                                 Text('Salva modifiche',
-                                    style: TextStyle(color: Colors.white,
-                                        fontSize: 15, fontWeight: FontWeight.w700)),
-                              ])),
-                    ),
+                                    style: TextStyle(
+                                        color: Colors.white, fontSize: 15,
+                                        fontWeight: FontWeight.w700)),
+                              ]))),
                   ]),
                 ),
               ),
@@ -1132,7 +1131,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 class _EditAvatarSection extends StatelessWidget {
   final AuthProvider auth;
   final VoidCallback onPick;
-  const _EditAvatarSection({required this.auth, required this.onPick});
+  const _EditAvatarSection(
+      {required this.auth, required this.onPick});
 
   @override
   Widget build(BuildContext context) {
@@ -1147,7 +1147,8 @@ class _EditAvatarSection extends StatelessWidget {
               Colors.white.withOpacity(0.07),
               Colors.white.withOpacity(0.02)]),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _cyan.withOpacity(0.15), width: 0.8)),
+            border: Border.all(
+                color: _cyan.withOpacity(0.15), width: 0.8)),
           child: Column(children: [
             GestureDetector(
               onTap: onPick,
@@ -1168,13 +1169,16 @@ class _EditAvatarSection extends StatelessWidget {
             const SizedBox(height: 14),
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               _AvatarBtn(
-                icon: Icons.photo_library_outlined,
-                label: 'Cambia foto', color: _teal, onTap: onPick),
+                icon:  Icons.photo_library_outlined,
+                label: 'Cambia foto',
+                color: _teal,
+                onTap: onPick),
               if (auth.avatarBase64 != null) ...[
                 const SizedBox(width: 10),
                 _AvatarBtn(
-                  icon: Icons.delete_outline_rounded,
-                  label: 'Rimuovi', color: _red,
+                  icon:  Icons.delete_outline_rounded,
+                  label: 'Rimuovi',
+                  color: _red,
                   onTap: () async {
                     await context.read<AuthProvider>().clearAvatar();
                   }),
@@ -1189,25 +1193,29 @@ class _AvatarBtn extends StatelessWidget {
   final Color color; final VoidCallback onTap;
   const _AvatarBtn({required this.icon, required this.label,
       required this.color, required this.onTap});
+
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3), width: 0.8)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: color, fontSize: 12,
-            fontWeight: FontWeight.w600)),
-      ])));
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withOpacity(0.3), width: 0.8)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(
+              color: color, fontSize: 12,
+              fontWeight: FontWeight.w600)),
+        ])));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GlassFormSection + _GlassFormField + _DateDisplayField
+// Form widgets
 // ─────────────────────────────────────────────────────────────
 
 class _GlassFormSection extends StatelessWidget {
@@ -1219,7 +1227,9 @@ class _GlassFormSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
       Row(children: [
         Container(width: 24, height: 24,
           decoration: BoxDecoration(
@@ -1259,69 +1269,106 @@ class _GlassFormField extends StatelessWidget {
   const _GlassFormField({
     required this.controller, required this.hint,
     required this.accent, this.icon,
-    this.keyboardType = TextInputType.text, this.maxLines = 1});
+    this.keyboardType = TextInputType.text,
+    this.maxLines = 1});
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(12),
-    child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: accent.withOpacity(0.2), width: 0.8)),
-        child: TextField(
-          controller:         controller,
-          maxLines:           maxLines,
-          keyboardType:       keyboardType,
-          keyboardAppearance: Brightness.dark,
-          textCapitalization: TextCapitalization.sentences,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          decoration: InputDecoration(
-            hintText:  hint,
-            hintStyle: TextStyle(
-                color: Colors.white.withOpacity(0.3), fontSize: 14),
-            prefixIcon: icon != null
-                ? Icon(icon, color: Colors.white.withOpacity(0.35), size: 17)
-                : null,
-            border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 12))))));
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: accent.withOpacity(0.2), width: 0.8)),
+          child: TextField(
+            controller:         controller,
+            maxLines:           maxLines,
+            keyboardType:       keyboardType,
+            keyboardAppearance: Brightness.dark,
+            textCapitalization: TextCapitalization.sentences,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            decoration: InputDecoration(
+              hintText:  hint,
+              hintStyle: TextStyle(
+                  color: Colors.white.withOpacity(0.3), fontSize: 14),
+              prefixIcon: icon != null
+                  ? Icon(icon,
+                      color: Colors.white.withOpacity(0.35), size: 17)
+                  : null,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 12))))));
+  }
 }
 
+// FIX: corpo esplicito {} con parentesi conteggiate manualmente.
+// Struttura: ClipRRect > BackdropFilter > Container > Row
+// Richiede esattamente 4 ) dopo ] per chiudere Row, Container,
+// BackdropFilter, ClipRRect — in questo ordine.
 class _DateDisplayField extends StatelessWidget {
-  final DateTime? date; final String hint; final IconData icon;
-  const _DateDisplayField({required this.date, required this.hint,
-      required this.icon});
+  final DateTime? date;
+  final String    hint;
+  final IconData  icon;
+
+  const _DateDisplayField({
+    required this.date,
+    required this.hint,
+    required this.icon,
+  });
 
   String _fmt(DateTime? d) {
     if (d == null) return '';
-    return '${d.day.toString().padLeft(2,'0')}/'
-        '${d.month.toString().padLeft(2,'0')}/${d.year}';
+    return '${d.day.toString().padLeft(2, '0')}/'
+        '${d.month.toString().padLeft(2, '0')}/${d.year}';
   }
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(12),
-    child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _orange.withOpacity(0.2), width: 0.8)),
-        child: Row(children: [
-          Icon(icon, color: Colors.white.withOpacity(0.35), size: 17),
-          const SizedBox(width: 10),
-          Expanded(child: Text(
-              date != null ? _fmt(date) : hint,
-              style: TextStyle(
-                  color: date != null
-                      ? Colors.white : Colors.white.withOpacity(0.3),
-                  fontSize: 14))),
-          Icon(Icons.calendar_today_outlined,
-              color: Colors.white.withOpacity(0.25), size: 15),
-        ]))));
+  Widget build(BuildContext context) {
+    return ClipRRect(                              // 1. ClipRRect apre
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(                       // 2. BackdropFilter apre
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(                          // 3. Container apre
+          padding: const EdgeInsets.symmetric(
+              horizontal: 14, vertical: 13),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: _orange.withOpacity(0.2), width: 0.8),
+          ),
+          child: Row(                              // 4. Row apre
+            children: [
+              Icon(
+                icon,
+                color: Colors.white.withOpacity(0.35),
+                size: 17,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  date != null ? _fmt(date) : hint,
+                  style: TextStyle(
+                    color: date != null
+                        ? Colors.white
+                        : Colors.white.withOpacity(0.3),
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.calendar_today_outlined,
+                color: Colors.white.withOpacity(0.25),
+                size: 15,
+              ),
+            ],
+          ),         // chiude Row (4)
+        ),           // chiude Container (3)
+      ),             // chiude BackdropFilter (2)
+    );               // chiude ClipRRect (1)
+  }
 }
