@@ -4,34 +4,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import 'db/hive_database.dart';
+import 'core/theme/markfit_colors.dart';
 import 'db/goal_database.dart';
+import 'db/hive_database.dart';
 import 'db/sport_database.dart';
-import 'providers/exercise_provider.dart';
-import 'providers/workout_provider.dart';
-import 'providers/session_provider.dart';
-import 'providers/theme_provider.dart';
-import 'providers/auth_provider.dart';
-import 'providers/goal_provider.dart';
-import 'providers/sport_provider.dart';
-import 'providers/profile_provider.dart';
 import 'navigation/navigation_depth_notifier.dart';
-import 'screens/home/home_screen.dart';
-import 'screens/workouts/allenamenti_screen.dart';
-import 'screens/history/history_screen.dart';
-import 'screens/settings/settings_screen.dart';
+import 'providers/auth_provider.dart';
+import 'providers/exercise_provider.dart';
+import 'providers/goal_provider.dart';
+import 'providers/profile_provider.dart';
+import 'providers/session_provider.dart';
+import 'providers/sport_provider.dart';
+import 'providers/theme_provider.dart';
+import 'providers/workout_provider.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/history/history_screen.dart';
+import 'screens/home/home_screen.dart';
+import 'screens/settings/settings_screen.dart';
+import 'screens/workouts/allenamenti_screen.dart';
 import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor:          Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness:     Brightness.light,
-    ),
-  );
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+  ));
   await HiveDatabase.instance.init();
   await GoalDatabase.instance.init();
   await SportDatabase.instance.init();
@@ -84,45 +81,31 @@ class MyApp extends StatelessWidget {
             create: (_) => ProfileProvider()..loadProfile()),
       ],
       child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, __) {
+        builder: (context, tp, __) {
           return MaterialApp(
-            title: 'MarkFit',
+            title:                  'MarkFit',
             debugShowCheckedModeBanner: false,
-            theme:     _buildTheme(Brightness.light),
-            darkTheme: _buildTheme(Brightness.dark),
-            themeMode: themeProvider.themeMode,
+            theme:      _buildTheme(Brightness.light),
+            darkTheme:  _buildTheme(Brightness.dark),
+            themeMode:  tp.themeMode,
             builder: (context, child) {
-              final theme  = Theme.of(context);
-              final cs     = theme.colorScheme;
-              final isDark = theme.brightness == Brightness.dark;
+              final isDark = Theme.of(context).brightness == Brightness.dark;
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: SystemUiOverlayStyle(
                   statusBarColor:          Colors.transparent,
-                  statusBarIconBrightness:
-                      isDark ? Brightness.light : Brightness.dark,
-                  statusBarBrightness:
-                      isDark ? Brightness.dark : Brightness.light,
+                  statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                  statusBarBrightness:     isDark ? Brightness.dark  : Brightness.light,
                 ),
                 child: CupertinoTheme(
                   data: CupertinoThemeData(
-                    brightness:
-                        isDark ? Brightness.dark : Brightness.light,
-                    primaryColor:            cs.primary,
-                    // FIX: scaffoldBackgroundColor trasparente →
-                    // elimina il blocco bianco durante le transizioni
-                    // con CupertinoPageRoute.
+                    brightness: isDark ? Brightness.dark : Brightness.light,
                     scaffoldBackgroundColor: Colors.transparent,
-                    barBackgroundColor:      cs.surface,
-                    textTheme: CupertinoTextThemeData(
-                        primaryColor: cs.primary),
                   ),
-                  // FIX: ColoredBox sostituisce cs.surface con il
-                  // colore esatto del tema, evitando qualunque flash.
                   child: ColoredBox(
-                      color: isDark
-                          ? const Color(0xFF0A0A0E)
-                          : const Color(0xFFF4F6FA),
-                      child: child!),
+                    color: isDark
+                        ? const Color(0xFF0A0A0E)
+                        : const Color(0xFFF0F4FA),
+                    child: child!),
                 ),
               );
             },
@@ -135,103 +118,82 @@ class MyApp extends StatelessWidget {
 
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
-    final cs = ColorScheme.fromSeed(
-      seedColor:  const Color(0xFF6750A4),
+    final mfc    = isDark ? MarkFitColors.dark : MarkFitColors.light;
+    final cs     = ColorScheme.fromSeed(
+      seedColor:  MarkFitColors.teal,
       brightness: brightness,
     );
+
     return ThemeData(
       colorScheme:             cs,
       useMaterial3:            true,
-      // FIX: scaffoldBackgroundColor trasparente impedisce al
-      // Scaffold padre di mostrare il suo sfondo nell'area che
-      // si crea tra il body rimpicciolito e la tastiera.
       scaffoldBackgroundColor: Colors.transparent,
-      canvasColor:             isDark
-          ? const Color(0xFF0A0A0E)
-          : const Color(0xFFF4F6FA),
-      dialogBackgroundColor:   cs.surface,
-      textTheme: const TextTheme(
-        headlineLarge:  TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineMedium: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineSmall:  TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
-        titleLarge:     TextStyle(fontWeight: FontWeight.w600),
-        titleMedium:    TextStyle(fontWeight: FontWeight.w600),
-        bodyLarge:      TextStyle(letterSpacing: 0.1),
+      canvasColor: isDark ? const Color(0xFF0A0A0E) : const Color(0xFFF0F4FA),
+      extensions: [mfc],
+
+      textTheme: TextTheme(
+        headlineLarge:  TextStyle(
+            fontWeight: FontWeight.w700, letterSpacing: -0.5,
+            color: mfc.textPrimary),
+        headlineMedium: TextStyle(
+            fontWeight: FontWeight.w700, letterSpacing: -0.5,
+            color: mfc.textPrimary),
+        headlineSmall:  TextStyle(
+            fontWeight: FontWeight.w600, color: mfc.textPrimary),
+        titleLarge:   TextStyle(fontWeight: FontWeight.w600, color: mfc.textPrimary),
+        titleMedium:  TextStyle(fontWeight: FontWeight.w600, color: mfc.textPrimary),
+        bodyLarge:    TextStyle(color: mfc.textPrimary),
+        bodyMedium:   TextStyle(color: mfc.textSecondary),
+        bodySmall:    TextStyle(color: mfc.textTertiary),
       ),
-      cardTheme: CardThemeData(
-        elevation:        0,
-        color:            cs.surface,
-        shape:            RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
-        surfaceTintColor: cs.surfaceTint,
-      ),
+
       appBarTheme: AppBarTheme(
-        elevation:              0,
-        scrolledUnderElevation: 1,
-        centerTitle:            true,
-        backgroundColor:        cs.surface,
-        surfaceTintColor:       cs.surfaceTint,
-        systemOverlayStyle:     isDark
-            ? SystemUiOverlayStyle.light
-                .copyWith(statusBarColor: Colors.transparent)
-            : SystemUiOverlayStyle.dark
-                .copyWith(statusBarColor: Colors.transparent),
+        elevation:          0,
+        backgroundColor:    Colors.transparent,
+        surfaceTintColor:   Colors.transparent,
+        iconTheme:          IconThemeData(color: mfc.textPrimary),
         titleTextStyle: TextStyle(
-          color:      cs.onSurface,
-          fontSize:   18,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.3),
+          color:      mfc.textPrimary, fontSize: 18,
+          fontWeight: FontWeight.w700, letterSpacing: -0.3),
+        systemOverlayStyle: isDark
+            ? SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent)
+            : SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
       ),
+
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color:     mfc.glassCard,
+        shape:     RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+      ),
+
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.transparent, elevation: 0,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)))),
+
+      snackBarTheme: SnackBarThemeData(
+        behavior:        SnackBarBehavior.floating,
+        backgroundColor: isDark ? const Color(0xFF0D1117) : const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+
       inputDecorationTheme: InputDecorationTheme(
         filled:     true,
-        fillColor:  cs.surfaceContainerHighest.withOpacity(0.4),
+        fillColor:  mfc.inputBg,
+        hintStyle:  TextStyle(color: mfc.inputHint),
         border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: cs.outlineVariant, width: 1)),
+            borderSide: BorderSide(color: mfc.inputBorder, width: 0.8)),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: cs.primary, width: 2)),
-        errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: cs.error, width: 1)),
+            borderSide: BorderSide(
+                color: MarkFitColors.teal, width: 1.5)),
         contentPadding: const EdgeInsets.symmetric(
             horizontal: 16, vertical: 14),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size(double.infinity, 50),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(
-              fontWeight: FontWeight.w600, fontSize: 15)),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600)),
-      ),
-      dialogTheme: DialogThemeData(
-        backgroundColor: cs.surface,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        elevation: 0,
-      ),
-      bottomSheetTheme: BottomSheetThemeData(
-        // FIX: trasparente → evita il rettangolo bianco nei sheet
-        backgroundColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(
-                top: Radius.circular(24))),
-        elevation: 0,
-      ),
-      snackBarTheme: SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -266,38 +228,24 @@ class _AppEntryState extends State<AppEntry> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark
-        ? const Color(0xFF0A0A0E)
-        : const Color(0xFFF4F6FA);
-
+    final c = context.mfc;
     if (!_checked) {
       return Scaffold(
-        backgroundColor: bg,
+        backgroundColor: c.scaffoldBg,
         body: Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.fitness_center,
-                size: 48,
-                color: const Color(0xFF00D4AA)),
+            Icon(Icons.fitness_center, size: 48, color: MarkFitColors.teal),
             const SizedBox(height: 16),
-            const CircularProgressIndicator(
-                color: Color(0xFF00D4AA)),
-          ]),
-        ),
-      );
+            CircularProgressIndicator(color: MarkFitColors.teal),
+          ])));
     }
-
     if (!context.watch<AuthProvider>().isLoggedIn) {
       return LoginScreen(
         onLoginSuccess: () {
           context.read<NavigationDepthNotifier>().reset();
-          context.read<AuthProvider>().setLoggedIn(
-              context.read<AuthProvider>().userEmail ?? '');
           setState(() {});
-        },
-      );
+        });
     }
-
     return const MainShell();
   }
 }
@@ -311,22 +259,12 @@ class MainShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex =
-        context.watch<NavigationNotifier>().currentIndex;
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
-
+    final idx = context.watch<NavigationNotifier>().currentIndex;
     return Scaffold(
-      // FIX: trasparente → il CosmicBackground delle schermate
-      // figlie si vede anche nella zona sotto la navbar,
-      // permettendo al BackdropFilter di sfumare il contenuto reale.
       backgroundColor: Colors.transparent,
-      // extendBody: true → il body si estende FISICAMENTE
-      // dietro la navbar floating. Senza questo il BackdropFilter
-      // non ha nulla da sfocare.
       extendBody: true,
       body: IndexedStack(
-        index: currentIndex,
+        index: idx,
         children: const [
           HomeScreen(),
           AllenamentiScreen(),
@@ -335,10 +273,8 @@ class MainShell extends StatelessWidget {
         ],
       ),
       bottomNavigationBar: _LiquidGlassNavBar(
-        currentIndex: currentIndex,
-        onTap: (i) =>
-            context.read<NavigationNotifier>().navigateTo(i),
-        isDark: isDark,
+        currentIndex: idx,
+        onTap: (i) => context.read<NavigationNotifier>().navigateTo(i),
       ),
     );
   }
@@ -346,30 +282,13 @@ class MainShell extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────
 // _LiquidGlassNavBar — iOS 26 Liquid Glass Tab View
-// ─────────────────────────────────────────────────────────────
-//
-// Architettura layer (bottom → top):
-//  1. Content (body con extendBody:true) — sfumato da BackdropFilter
-//  2. BackdropFilter(blur 28) — effetto vetro reale
-//  3. Container con glassBg opacity RIDOTTA (≤0.38 dark, ≤0.55 light)
-//     → il contenuto sfumato è visibile attraverso il vetro
-//  4. Specular highlight (bordo superiore luminoso)
-//  5. Tab icons
-//
-// La riduzione di opacity rispetto alla versione precedente
-// (era 0.6/0.72) è il fix principale per "contenuto invisibile".
+// Adattiva: usa MarkFitColors per tutti i token.
 // ─────────────────────────────────────────────────────────────
 
 class _LiquidGlassNavBar extends StatelessWidget {
   final int  currentIndex;
   final void Function(int) onTap;
-  final bool isDark;
-
-  const _LiquidGlassNavBar({
-    required this.currentIndex,
-    required this.onTap,
-    required this.isDark,
-  });
+  const _LiquidGlassNavBar({required this.currentIndex, required this.onTap});
 
   static const _items = [
     _NavItem(icon: Icons.today_rounded,          label: 'Oggi'),
@@ -380,95 +299,59 @@ class _LiquidGlassNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs        = Theme.of(context).colorScheme;
-    final bottomPad = MediaQuery.of(context).padding.bottom;
-
-    // FIX opacity: ridotta per permettere al contenuto
-    // sottostante di essere visibile attraverso il vetro.
-    // Dark: 0.38 (era 0.6)   Light: 0.55 (era 0.72)
-    final glassBg = isDark
-        ? const Color(0xFF111827).withOpacity(0.38)
-        : Colors.white.withOpacity(0.55);
-
-    // Bordo speculare (edge highlight)
-    final borderColor = isDark
-        ? Colors.white.withOpacity(0.12)
-        : Colors.white.withOpacity(0.80);
+    final c          = context.mfc;
+    final bottomPad  = MediaQuery.of(context).padding.bottom;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPad + 14),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(44),
         child: BackdropFilter(
-          // Blur aumentato a 32 per effetto vetro più realistico
           filter: ImageFilter.blur(sigmaX: 32, sigmaY: 32),
-          child: Stack(
-            children: [
-              // ── Corpo vetro ───────────────────────────────
-              Container(
-                height: 68,
-                decoration: BoxDecoration(
-                  color:        glassBg,
-                  borderRadius: BorderRadius.circular(44),
-                  border: Border.all(
-                      color: borderColor, width: 0.9),
-                  boxShadow: [
-                    // Ombra principale morbida
-                    BoxShadow(
-                      color: Colors.black.withOpacity(
-                          isDark ? 0.45 : 0.14),
-                      blurRadius:  40,
-                      spreadRadius: -6,
-                      offset: const Offset(0, 12)),
-                    // Glow interno leggero
-                    BoxShadow(
-                      color: (isDark
-                          ? const Color(0xFF00E5FF)
-                          : Colors.white).withOpacity(0.04),
-                      blurRadius: 0,
-                      offset:     const Offset(0, 1)),
-                  ],
-                ),
-                child: Row(
-                  children: List.generate(_items.length, (i) {
-                    return Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          onTap(i);
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        child: _LiquidNavItem(
-                          item:         _items[i],
-                          selected:     i == currentIndex,
-                          isDark:       isDark,
-                          primaryColor: cs.primary,
-                        ),
-                      ),
-                    );
-                  }),
-                ),
+          child: Stack(children: [
+            // Corpo vetro
+            Container(
+              height: 68,
+              decoration: BoxDecoration(
+                color:        c.navBg,
+                borderRadius: BorderRadius.circular(44),
+                border: Border.all(color: c.navBorder, width: 0.9),
+                boxShadow: c.showElevation
+                    ? [BoxShadow(
+                        color:       c.elevationColor,
+                        blurRadius:  28,
+                        spreadRadius: -4,
+                        offset: const Offset(0, 8))]
+                    : [BoxShadow(
+                        color:       Colors.black.withOpacity(0.35),
+                        blurRadius:  32,
+                        spreadRadius: -4,
+                        offset: const Offset(0, 10))],
               ),
-              // ── Specular highlight — bordo superiore luminoso ─
-              // Replica l'effetto iOS 26: una sottile linea bianca
-              // in cima alla capsula di vetro simula il riflesso
-              // della luce sull'edge del materiale.
-              Positioned(
-                top: 0, left: 16, right: 16,
-                child: Container(
-                  height: 0.7,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [
-                      Colors.transparent,
-                      Colors.white.withOpacity(
-                          isDark ? 0.38 : 0.65),
-                      Colors.transparent,
-                    ]),
+              child: Row(
+                children: List.generate(_items.length, (i) => Expanded(
+                  child: GestureDetector(
+                    onTap: () { HapticFeedback.selectionClick(); onTap(i); },
+                    behavior: HitTestBehavior.opaque,
+                    child: _LiquidNavItem(
+                      item:         _items[i],
+                      selected:     i == currentIndex,
+                      c:            c,
+                    ),
                   ),
-                ),
+                )),
               ),
-            ],
-          ),
+            ),
+            // Specular highlight superiore
+            Positioned(top: 0, left: 16, right: 16,
+              child: Container(height: 0.7,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [
+                    Colors.transparent,
+                    c.navSpecular,
+                    Colors.transparent,
+                  ])))),
+          ]),
         ),
       ),
     );
@@ -481,21 +364,11 @@ class _NavItem {
   const _NavItem({required this.icon, required this.label});
 }
 
-// ─────────────────────────────────────────────────────────────
-// _LiquidNavItem — singolo item con pill animata
-// ─────────────────────────────────────────────────────────────
-
 class _LiquidNavItem extends StatefulWidget {
-  final _NavItem item;
-  final bool     selected, isDark;
-  final Color    primaryColor;
-
-  const _LiquidNavItem({
-    required this.item,
-    required this.selected,
-    required this.isDark,
-    required this.primaryColor,
-  });
+  final _NavItem      item;
+  final bool          selected;
+  final MarkFitColors c;
+  const _LiquidNavItem({required this.item, required this.selected, required this.c});
 
   @override
   State<_LiquidNavItem> createState() => _LiquidNavItemState();
@@ -504,139 +377,80 @@ class _LiquidNavItem extends StatefulWidget {
 class _LiquidNavItemState extends State<_LiquidNavItem>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
-  late Animation<double>   _scale;
-  late Animation<double>   _pillWidth;
+  late Animation<double>   _scale, _width;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-        vsync: this,
+    _ctrl  = AnimationController(vsync: this,
         duration: const Duration(milliseconds: 350));
-    _scale     = CurvedAnimation(
-        parent: _ctrl, curve: Curves.easeOutBack);
-    _pillWidth = CurvedAnimation(
-        parent: _ctrl, curve: Curves.easeInOutCubic);
+    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack);
+    _width = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOutCubic);
     if (widget.selected) _ctrl.forward();
   }
 
   @override
   void didUpdateWidget(_LiquidNavItem old) {
     super.didUpdateWidget(old);
-    if (widget.selected && !old.selected) {
-      _ctrl.forward();
-    } else if (!widget.selected && old.selected) {
-      _ctrl.reverse();
-    }
+    if (widget.selected && !old.selected) _ctrl.forward();
+    else if (!widget.selected && old.selected) _ctrl.reverse();
   }
 
   @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
+  void dispose() { _ctrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
-    final unselectedColor = widget.isDark
-        ? Colors.white.withOpacity(0.42)
-        : Colors.grey.shade500;
-
-    return SizedBox(
-      height: 68,
+    final c = widget.c;
+    return SizedBox(height: 68,
       child: AnimatedBuilder(
         animation: _ctrl,
         builder: (_, __) {
-          final pillW = 54.0 + 8.0 * _pillWidth.value;
-          final iconScale = 0.86 + 0.14 * _scale.value;
-
+          final pillW     = 52.0 + 8.0 * _width.value;
+          final iconScale = 0.85 + 0.15 * _scale.value;
           return Center(
             child: widget.selected
-                // ── Stato selezionato: pill con glow ──────────
-                ? SizedBox(
-                    width: pillW, height: 42,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Glow esterno
-                        Container(
+                ? SizedBox(width: pillW, height: 40,
+                    child: Stack(alignment: Alignment.center, children: [
+                      // Glow
+                      Container(decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [BoxShadow(
+                            color: MarkFitColors.teal.withOpacity(0.38),
+                            blurRadius: 16, spreadRadius: -2)])),
+                      // Pill
+                      Container(decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                            colors: c.navPillGradient,
+                            begin: Alignment.topCenter,
+                            end:   Alignment.bottomCenter),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [BoxShadow(
+                            color: MarkFitColors.teal.withOpacity(0.45),
+                            blurRadius: 10, offset: const Offset(0, 3))])),
+                      // Specular sulla pill
+                      Positioned(top: 1,
+                        child: Container(width: pillW * 0.45, height: 5,
                           decoration: BoxDecoration(
-                            color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(21),
-                            boxShadow: [
-                              BoxShadow(
-                                color: widget.primaryColor
-                                    .withOpacity(0.35),
-                                blurRadius:   18,
-                                spreadRadius: -2),
-                            ],
-                          ),
-                        ),
-                        // Pill
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end:   Alignment.bottomCenter,
-                              colors: [
-                                widget.primaryColor,
-                                Color.lerp(widget.primaryColor,
-                                    Colors.black, 0.18) ??
-                                    widget.primaryColor,
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(21),
-                            boxShadow: [
-                              BoxShadow(
-                                color: widget.primaryColor
-                                    .withOpacity(0.5),
-                                blurRadius:  12,
-                                offset: const Offset(0, 4)),
-                            ],
-                          ),
-                        ),
-                        // Specular highlight sulla pill
-                        Positioned(
-                          top: 0,
-                          child: Container(
-                            width:  pillW * 0.5,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(colors: [
-                                Colors.transparent,
-                                Colors.white.withOpacity(0.3),
-                                Colors.transparent,
-                              ]),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                        ),
-                        // Icona
-                        Transform.scale(
-                          scale: iconScale,
-                          child: Icon(widget.item.icon,
-                              color: Colors.white, size: 22),
-                        ),
-                      ],
-                    ),
-                  )
-                // ── Stato deselezionato ────────────────────────
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(widget.item.icon,
-                          color: unselectedColor, size: 22),
-                      const SizedBox(height: 3),
-                      Text(widget.item.label,
-                          style: TextStyle(
-                              fontSize:   9,
-                              fontWeight: FontWeight.w500,
-                              color:      unselectedColor)),
-                    ],
-                  ),
+                            gradient: LinearGradient(colors: [
+                              Colors.transparent,
+                              Colors.white.withOpacity(0.3),
+                              Colors.transparent]),
+                            borderRadius: BorderRadius.circular(3)))),
+                      // Icon
+                      Transform.scale(scale: iconScale,
+                        child: Icon(widget.item.icon,
+                            color: Colors.white, size: 21)),
+                    ]))
+                : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(widget.item.icon, color: c.navUnselected, size: 21),
+                    const SizedBox(height: 3),
+                    Text(widget.item.label, style: TextStyle(
+                        fontSize: 9, fontWeight: FontWeight.w500,
+                        color: c.navUnselected)),
+                  ]),
           );
         },
-      ),
-    );
+      ));
   }
 }
