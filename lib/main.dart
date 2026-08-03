@@ -31,8 +31,7 @@ import 'services/notification_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-  ));
+    statusBarColor: Colors.transparent));
   await HiveDatabase.instance.init();
   await GoalDatabase.instance.init();
   await SportDatabase.instance.init();
@@ -86,8 +85,8 @@ class MyApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, tp, __) => MaterialApp(
-          title:                       'MarkFit',
-          debugShowCheckedModeBanner:  false,
+          title:                      'MarkFit',
+          debugShowCheckedModeBanner: false,
           theme:     _buildTheme(Brightness.light),
           darkTheme: _buildTheme(Brightness.dark),
           themeMode: tp.themeMode,
@@ -98,7 +97,7 @@ class MyApp extends StatelessWidget {
     );
   }
 
-  // ── Builder globale ───────────────────────────────────────
+  // ── Global builder ────────────────────────────────────────
 
   Widget _appBuilder(BuildContext context, Widget? child) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -116,9 +115,10 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.transparent,
         primaryColor:            MarkFitColors.teal,
         textTheme: CupertinoTextThemeData(
-          primaryColor:  mfc.textPrimary,
-          textStyle:     TextStyle(color: mfc.textPrimary, fontSize: 16),
-          actionTextStyle: TextStyle(color: MarkFitColors.teal, fontSize: 16),
+          primaryColor: mfc.textPrimary,
+          textStyle: TextStyle(color: mfc.textPrimary, fontSize: 16),
+          actionTextStyle: const TextStyle(
+              color: MarkFitColors.teal, fontSize: 16),
         ),
       ),
       child: ColoredBox(color: mfc.scaffoldBg, child: child!),
@@ -131,13 +131,11 @@ class MyApp extends StatelessWidget {
     final isDark = brightness == Brightness.dark;
     final mfc    = isDark ? MarkFitColors.dark : MarkFitColors.light;
 
-    // Base ColorScheme da seed color = teal
     final base = ColorScheme.fromSeed(
       seedColor:  MarkFitColors.teal,
       brightness: brightness,
     );
 
-    // Override specifici per garantire contrasto corretto
     final cs = base.copyWith(
       surface:              mfc.scaffoldBg,
       surfaceContainerLow:  mfc.glassCardInset,
@@ -169,55 +167,57 @@ class MyApp extends StatelessWidget {
 
       // ── TextTheme ─────────────────────────────────────────
       textTheme: TextTheme(
-        displayLarge:   TextStyle(color: mfc.textPrimary, fontWeight: FontWeight.w800, letterSpacing: -0.8),
-        displayMedium:  TextStyle(color: mfc.textPrimary, fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        displaySmall:   TextStyle(color: mfc.textPrimary, fontWeight: FontWeight.w700, letterSpacing: -0.3),
-        headlineLarge:  TextStyle(color: mfc.textPrimary, fontWeight: FontWeight.w700, letterSpacing: -0.5),
-        headlineMedium: TextStyle(color: mfc.textPrimary, fontWeight: FontWeight.w700, letterSpacing: -0.3),
-        headlineSmall:  TextStyle(color: mfc.textPrimary, fontWeight: FontWeight.w600),
-        titleLarge:     TextStyle(color: mfc.textPrimary, fontWeight: FontWeight.w700, letterSpacing: -0.2),
-        titleMedium:    TextStyle(color: mfc.textPrimary, fontWeight: FontWeight.w600),
-        titleSmall:     TextStyle(color: mfc.textSecondary, fontWeight: FontWeight.w600),
-        bodyLarge:      TextStyle(color: mfc.textPrimary),
-        bodyMedium:     TextStyle(color: mfc.textSecondary),
-        bodySmall:      TextStyle(color: mfc.textTertiary),
-        labelLarge:     TextStyle(color: mfc.textPrimary,   fontWeight: FontWeight.w600),
-        labelMedium:    TextStyle(color: mfc.textSecondary, fontWeight: FontWeight.w500),
-        labelSmall:     TextStyle(color: mfc.textTertiary,  fontWeight: FontWeight.w500, letterSpacing: 0.5),
+        displayLarge:   _ts(mfc.textPrimary, FontWeight.w800, -0.8),
+        displayMedium:  _ts(mfc.textPrimary, FontWeight.w700, -0.5),
+        displaySmall:   _ts(mfc.textPrimary, FontWeight.w700, -0.3),
+        headlineLarge:  _ts(mfc.textPrimary, FontWeight.w700, -0.5),
+        headlineMedium: _ts(mfc.textPrimary, FontWeight.w700, -0.3),
+        headlineSmall:  _ts(mfc.textPrimary, FontWeight.w600,  0.0),
+        titleLarge:     _ts(mfc.textPrimary, FontWeight.w700, -0.2),
+        titleMedium:    _ts(mfc.textPrimary, FontWeight.w600,  0.0),
+        titleSmall:     _ts(mfc.textSecondary, FontWeight.w600, 0.0),
+        bodyLarge:      _ts(mfc.textPrimary,   FontWeight.w400, 0.0),
+        bodyMedium:     _ts(mfc.textSecondary, FontWeight.w400, 0.0),
+        bodySmall:      _ts(mfc.textTertiary,  FontWeight.w400, 0.0),
+        labelLarge:     _ts(mfc.textPrimary,   FontWeight.w600, 0.0),
+        labelMedium:    _ts(mfc.textSecondary, FontWeight.w500, 0.0),
+        labelSmall:     _ts(mfc.textTertiary,  FontWeight.w500, 0.5),
       ),
 
       // ── AppBarTheme ───────────────────────────────────────
       appBarTheme: AppBarTheme(
-        elevation:        0,
+        elevation:              0,
         scrolledUnderElevation: 0,
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        foregroundColor: mfc.textPrimary,
-        iconTheme:        IconThemeData(color: mfc.iconPrimary, size: 22),
+        backgroundColor:        Colors.transparent,
+        surfaceTintColor:       Colors.transparent,
+        foregroundColor:        mfc.textPrimary,
+        iconTheme:     IconThemeData(color: mfc.iconPrimary, size: 22),
         actionsIconTheme: IconThemeData(color: mfc.iconPrimary, size: 22),
-        titleTextStyle:   TextStyle(
-          color:      mfc.textPrimary,
-          fontSize:   18,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.3,
-        ),
+        titleTextStyle: TextStyle(
+          color: mfc.textPrimary, fontSize: 18,
+          fontWeight: FontWeight.w700, letterSpacing: -0.3),
         systemOverlayStyle: isDark
-            ? SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent)
-            : SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
+            ? SystemUiOverlayStyle.light
+                .copyWith(statusBarColor: Colors.transparent)
+            : SystemUiOverlayStyle.dark
+                .copyWith(statusBarColor: Colors.transparent),
       ),
 
       // ── CardTheme ─────────────────────────────────────────
+      // In light mode elevazione alta — la profondità viene dalle ombre
       cardTheme: CardThemeData(
-        elevation:    isDark ? 0 : 2,
-        color:        mfc.glassCard,
-        shadowColor:  mfc.elevationColor,
+        elevation:   isDark ? 0 : 6,
+        color:       mfc.glassCard,
+        shadowColor: mfc.elevationColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: mfc.glassBorder, width: 0.8),
+          side: BorderSide(
+              color: mfc.glassBorder,
+              width: isDark ? 0.8 : 1.1),
         ),
       ),
 
-      // ── InputDecorationTheme ──────────────────────────────
+      // ── InputDecoration ───────────────────────────────────
       inputDecorationTheme: InputDecorationTheme(
         filled:     true,
         fillColor:  mfc.inputBg,
@@ -227,75 +227,71 @@ class MyApp extends StatelessWidget {
         suffixIconColor: mfc.iconSecondary,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: mfc.inputBorder, width: 0.8),
-        ),
+          borderSide: BorderSide(color: mfc.inputBorder, width: 0.9)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: mfc.inputBorder, width: 0.8),
-        ),
+          borderSide: BorderSide(color: mfc.inputBorder, width: 0.9)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: mfc.inputBorderFocus, width: 1.5),
-        ),
+          borderSide: BorderSide(
+              color: mfc.inputBorderFocus, width: 1.6)),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: MarkFitColors.red, width: 1.2),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          borderSide: BorderSide(color: MarkFitColors.red, width: 1.2)),
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 14),
       ),
 
       // ── Divider ───────────────────────────────────────────
       dividerTheme: DividerThemeData(
-        color:     mfc.divider,
-        thickness: 0.5,
-        space:     1,
-      ),
+        color: mfc.divider, thickness: 0.5, space: 1),
 
       // ── BottomSheet ───────────────────────────────────────
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: Colors.transparent,
-        elevation:       0,
+        elevation: 0,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       ),
 
       // ── SnackBar ──────────────────────────────────────────
       snackBarTheme: SnackBarThemeData(
         behavior:        SnackBarBehavior.floating,
-        backgroundColor: isDark ? const Color(0xFF0D1117) : const Color(0xFF1A2035),
+        backgroundColor: isDark
+            ? const Color(0xFF0D1117) : const Color(0xFF0F1C2E),
         contentTextStyle: const TextStyle(
             color: Colors.white, fontWeight: FontWeight.w500),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
       ),
 
       // ── Dialog ───────────────────────────────────────────
       dialogTheme: DialogThemeData(
-        backgroundColor: mfc.sheetBg,
+        backgroundColor:  mfc.sheetBg,
         surfaceTintColor: Colors.transparent,
-        elevation: isDark ? 0 : 8,
-        shadowColor: mfc.elevationColor,
+        elevation:        isDark ? 0 : 24,
+        shadowColor:      mfc.elevationColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: mfc.sheetBorder, width: 0.8),
-        ),
+          side: BorderSide(color: mfc.sheetBorder, width: 0.8)),
       ),
 
       // ── ListTile ──────────────────────────────────────────
       listTileTheme: ListTileThemeData(
-        iconColor:  mfc.iconSecondary,
-        textColor:  mfc.textPrimary,
-        titleTextStyle: TextStyle(
+        iconColor:         mfc.iconSecondary,
+        textColor:         mfc.textPrimary,
+        titleTextStyle:    TextStyle(
             color: mfc.textPrimary, fontWeight: FontWeight.w500),
         subtitleTextStyle: TextStyle(
             color: mfc.textTertiary, fontSize: 12),
       ),
 
-      // ── Switch / Checkbox / Radio ─────────────────────────
+      // ── Switch ────────────────────────────────────────────
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) =>
             states.contains(WidgetState.selected)
-                ? MarkFitColors.teal : (isDark ? Colors.white54 : Colors.grey)),
+                ? MarkFitColors.teal : (isDark
+                    ? Colors.white54 : Colors.grey.shade400)),
         trackColor: WidgetStateProperty.resolveWith((states) =>
             states.contains(WidgetState.selected)
                 ? MarkFitColors.teal.withOpacity(0.4)
@@ -304,31 +300,24 @@ class MyApp extends StatelessWidget {
 
       // ── PopupMenu ─────────────────────────────────────────
       popupMenuTheme: PopupMenuThemeData(
-        color:       mfc.glassCardStrong,
+        color:            mfc.glassCardStrong,
         surfaceTintColor: Colors.transparent,
-        elevation:   isDark ? 0 : 4,
-        shadowColor: mfc.elevationColor,
+        elevation:        isDark ? 0 : 8,
+        shadowColor:      mfc.elevationColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: mfc.glassBorder),
-        ),
+          side: BorderSide(color: mfc.glassBorder, width: 0.8)),
         labelTextStyle: WidgetStatePropertyAll(
             TextStyle(color: mfc.textPrimary)),
       ),
 
       // ── Chip ──────────────────────────────────────────────
       chipTheme: ChipThemeData(
-        backgroundColor: mfc.glassCard,
-        selectedColor:  MarkFitColors.teal.withOpacity(0.2),
-        side:            BorderSide(color: mfc.glassBorder, width: 0.8),
-        labelStyle:      TextStyle(color: mfc.textPrimary, fontSize: 12),
-      ),
-
-      // ── IconButton ────────────────────────────────────────
-      iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          foregroundColor: mfc.iconPrimary,
-        ),
+        backgroundColor:  mfc.glassCard,
+        selectedColor:    MarkFitColors.teal.withOpacity(0.2),
+        side: BorderSide(color: mfc.glassBorder,
+            width: isDark ? 0.8 : 1.0),
+        labelStyle: TextStyle(color: mfc.textPrimary, fontSize: 12),
       ),
 
       // ── FilledButton ─────────────────────────────────────
@@ -336,9 +325,13 @@ class MyApp extends StatelessWidget {
         style: FilledButton.styleFrom(
           backgroundColor:  MarkFitColors.teal,
           foregroundColor:  Colors.white,
-          shape:            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          padding:          const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          textStyle:        const TextStyle(fontWeight: FontWeight.w700),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 20, vertical: 12),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          elevation: isDark ? 0 : 4,
+          shadowColor: MarkFitColors.teal.withOpacity(0.4),
         ),
       ),
 
@@ -346,9 +339,12 @@ class MyApp extends StatelessWidget {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: mfc.textPrimary,
-          side:            BorderSide(color: mfc.glassBorder),
-          shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          padding:         const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          side: BorderSide(color: mfc.glassBorder,
+              width: isDark ? 0.8 : 1.1),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 20, vertical: 12),
         ),
       ),
 
@@ -356,8 +352,14 @@ class MyApp extends StatelessWidget {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: MarkFitColors.teal,
-          textStyle:       const TextStyle(fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
+      ),
+
+      // ── ProgressIndicator ─────────────────────────────────
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color:            MarkFitColors.teal,
+        linearTrackColor: mfc.divider,
       ),
 
       // ── Slider ───────────────────────────────────────────
@@ -368,23 +370,27 @@ class MyApp extends StatelessWidget {
         inactiveTrackColor: mfc.divider,
       ),
 
-      // ── ProgressIndicator ─────────────────────────────────
-      progressIndicatorTheme: ProgressIndicatorThemeData(
-        color:            MarkFitColors.teal,
-        linearTrackColor: mfc.divider,
-      ),
-
       // ── TabBar ────────────────────────────────────────────
       tabBarTheme: TabBarThemeData(
-        labelColor:         MarkFitColors.teal,
+        labelColor:           MarkFitColors.teal,
         unselectedLabelColor: mfc.textTertiary,
-        indicatorColor:     MarkFitColors.teal,
-        dividerColor:       Colors.transparent,
-        labelStyle:         const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+        indicatorColor:       MarkFitColors.teal,
+        dividerColor:         Colors.transparent,
+        labelStyle: const TextStyle(
+            fontWeight: FontWeight.w700, fontSize: 12),
+        unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w500, fontSize: 12),
       ),
+
+      // ── IconButton ────────────────────────────────────────
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(foregroundColor: mfc.iconPrimary)),
     );
   }
+
+  // Helper
+  TextStyle _ts(Color color, FontWeight w, double ls) =>
+      TextStyle(color: color, fontWeight: w, letterSpacing: ls);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -417,7 +423,6 @@ class _AppEntryState extends State<AppEntry> {
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
-
     if (!_checked) {
       return Scaffold(
         backgroundColor: c.scaffoldBg,
@@ -430,13 +435,11 @@ class _AppEntryState extends State<AppEntry> {
                 color: MarkFitColors.teal, strokeWidth: 2),
           ])));
     }
-
     if (!context.watch<AuthProvider>().isLoggedIn) {
-      return LoginScreen(
-        onLoginSuccess: () {
-          context.read<NavigationDepthNotifier>().reset();
-          setState(() {});
-        });
+      return LoginScreen(onLoginSuccess: () {
+        context.read<NavigationDepthNotifier>().reset();
+        setState(() {});
+      });
     }
     return const MainShell();
   }
@@ -463,20 +466,20 @@ class MainShell extends StatelessWidget {
       ]),
       bottomNavigationBar: _LiquidGlassNavBar(
         currentIndex: idx,
-        onTap: (i) => context.read<NavigationNotifier>().navigateTo(i),
-      ),
+        onTap: (i) => context.read<NavigationNotifier>().navigateTo(i)),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _LiquidGlassNavBar — completamente adattiva light/dark
+// _LiquidGlassNavBar — completamente adattiva
 // ─────────────────────────────────────────────────────────────
 
 class _LiquidGlassNavBar extends StatelessWidget {
   final int  currentIndex;
   final void Function(int) onTap;
-  const _LiquidGlassNavBar({required this.currentIndex, required this.onTap});
+  const _LiquidGlassNavBar(
+      {required this.currentIndex, required this.onTap});
 
   static const _items = [
     _NavItem(icon: Icons.today_rounded,          label: 'Oggi'),
@@ -498,37 +501,38 @@ class _LiquidGlassNavBar extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 32, sigmaY: 32),
           child: Stack(children: [
-            // Corpo vetro
             Container(
               height: 68,
               decoration: BoxDecoration(
                 color:        c.navBg,
                 borderRadius: BorderRadius.circular(44),
-                border:       Border.all(color: c.navBorder, width: isDark ? 0.9 : 1.2),
+                border: Border.all(
+                    color: c.navBorder,
+                    width: isDark ? 0.9 : 1.4),
                 boxShadow: [
                   BoxShadow(
                     color:        c.navShadow,
-                    blurRadius:   isDark ? 32 : 20,
+                    blurRadius:   isDark ? 32 : 24,
                     spreadRadius: -4,
                     offset:       const Offset(0, 8)),
                 ],
               ),
-              child: Row(
-                children: List.generate(_items.length, (i) => Expanded(
+              child: Row(children: List.generate(
+                _items.length, (i) => Expanded(
                   child: GestureDetector(
-                    onTap: () { HapticFeedback.selectionClick(); onTap(i); },
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      onTap(i);
+                    },
                     behavior: HitTestBehavior.opaque,
                     child: _LiquidNavItem(
                       item:     _items[i],
                       selected: i == currentIndex,
-                      c:        c),
-                  ),
-                )),
-              ),
+                      c:        c))))),
             ),
             // Specular highlight superiore
             Positioned(top: 0, left: 20, right: 20,
-              child: Container(height: 0.7,
+              child: Container(height: isDark ? 0.7 : 1.0,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(colors: [
                     Colors.transparent,
@@ -565,10 +569,12 @@ class _LiquidNavItemState extends State<_LiquidNavItem>
   @override
   void initState() {
     super.initState();
-    _ctrl  = AnimationController(vsync: this,
-        duration: const Duration(milliseconds: 350));
-    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack);
-    _width = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOutCubic);
+    _ctrl  = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 350));
+    _scale = CurvedAnimation(
+        parent: _ctrl, curve: Curves.easeOutBack);
+    _width = CurvedAnimation(
+        parent: _ctrl, curve: Curves.easeInOutCubic);
     if (widget.selected) _ctrl.forward();
   }
 
@@ -596,13 +602,11 @@ class _LiquidNavItemState extends State<_LiquidNavItem>
             child: widget.selected
                 ? SizedBox(width: pillW, height: 40,
                     child: Stack(alignment: Alignment.center, children: [
-                      // Glow
                       Container(decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [BoxShadow(
-                            color: MarkFitColors.teal.withOpacity(0.35),
+                            color: MarkFitColors.teal.withOpacity(0.4),
                             blurRadius: 14, spreadRadius: -2)])),
-                      // Pill
                       Container(decoration: BoxDecoration(
                         gradient: LinearGradient(
                             colors: c.navPillGradient,
@@ -610,23 +614,25 @@ class _LiquidNavItemState extends State<_LiquidNavItem>
                             end:   Alignment.bottomCenter),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [BoxShadow(
-                            color: MarkFitColors.teal.withOpacity(0.4),
-                            blurRadius: 8, offset: const Offset(0, 3))])),
-                      // Specular sulla pill
+                            color: MarkFitColors.teal.withOpacity(0.45),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3))])),
                       Positioned(top: 1,
-                        child: Container(width: pillW * 0.4, height: 4,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: [
-                              Colors.transparent,
-                              Colors.white.withOpacity(0.35),
-                              Colors.transparent]),
-                            borderRadius: BorderRadius.circular(2)))),
-                      // Icon
+                        child: Container(
+                            width: pillW * 0.4, height: 4,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(colors: [
+                                Colors.transparent,
+                                Colors.white.withOpacity(0.35),
+                                Colors.transparent]),
+                              borderRadius: BorderRadius.circular(2)))),
                       Transform.scale(scale: iconScale,
                         child: Icon(widget.item.icon,
                             color: Colors.white, size: 21)),
                     ]))
-                : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                     Icon(widget.item.icon,
                         color: c.navUnselected, size: 21),
                     const SizedBox(height: 3),
