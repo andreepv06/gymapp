@@ -70,17 +70,15 @@ class SettingsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Profilo
+
                   _ProfileCard(auth: auth, c: c),
                   const SizedBox(height: 20),
 
-                  // Aspetto
                   _SectionLabel('Aspetto', c: c),
                   const SizedBox(height: 8),
                   _ThemeToggle(isDark: tp.isDark, onToggle: tp.toggle, c: c),
                   const SizedBox(height: 18),
 
-                  // Backup
                   _SectionLabel('Backup dati', c: c),
                   const SizedBox(height: 8),
                   _Section(c: c, tiles: [
@@ -90,7 +88,7 @@ class SettingsScreen extends StatelessWidget {
                       title:    'Esporta backup',
                       subtitle: 'Salva tutti i tuoi dati in un file JSON',
                       c:        c,
-                      onTap: () => _exportBackup(context, tp, auth)),
+                      onTap:    () => _exportBackup(context, tp, auth)),
                     _Divider(c: c),
                     _Tile(
                       icon:     Icons.upload_outlined,
@@ -98,11 +96,10 @@ class SettingsScreen extends StatelessWidget {
                       title:    'Importa backup',
                       subtitle: 'Ripristina da un file di backup MarkFit',
                       c:        c,
-                      onTap: () => _importBackup(context)),
+                      onTap:    () => _importBackup(context)),
                   ]),
                   const SizedBox(height: 18),
 
-                  // Sincronizzazione
                   _SectionLabel('Sincronizzazione', c: c),
                   const SizedBox(height: 8),
                   _Section(c: c, tiles: [
@@ -112,11 +109,11 @@ class SettingsScreen extends StatelessWidget {
                       title:    'Importa attività GPS',
                       subtitle: 'Da file TCX o GPX (Garmin, Suunto, Polar...)',
                       c:        c,
-                      onTap: () => pushPage(context, const ActivityImportScreen())),
+                      onTap:    () =>
+                          pushPage(context, const ActivityImportScreen())),
                   ]),
                   const SizedBox(height: 18),
 
-                  // Dati
                   _SectionLabel('Dati', c: c),
                   const SizedBox(height: 8),
                   _Section(c: c, tiles: [
@@ -126,7 +123,7 @@ class SettingsScreen extends StatelessWidget {
                       title:    'Elimina sessioni',
                       subtitle: 'Rimuove lo storico allenamenti',
                       c:        c,
-                      onTap: () => _confirmDeleteSessions(context, c)),
+                      onTap:    () => _confirmDeleteSessions(context, c)),
                     _Divider(c: c),
                     _Tile(
                       icon:     Icons.note_alt_outlined,
@@ -134,11 +131,10 @@ class SettingsScreen extends StatelessWidget {
                       title:    'Elimina note esercizi',
                       subtitle: 'Rimuove tutte le note degli esercizi',
                       c:        c,
-                      onTap: () => _confirmDeleteNotes(context, c)),
+                      onTap:    () => _confirmDeleteNotes(context, c)),
                   ]),
                   const SizedBox(height: 18),
 
-                  // Account
                   _SectionLabel('Account', c: c),
                   const SizedBox(height: 8),
                   _Section(c: c, tiles: [
@@ -149,7 +145,7 @@ class SettingsScreen extends StatelessWidget {
                         title:    'Cambia account',
                         subtitle: '${auth.accounts.length} account salvati',
                         c:        c,
-                        onTap: () => _showSwitchAccount(context)),
+                        onTap:    () => _showSwitchAccount(context)),
                       _Divider(c: c),
                     ],
                     _Tile(
@@ -158,11 +154,10 @@ class SettingsScreen extends StatelessWidget {
                       title:      'Logout',
                       titleColor: MarkFitColors.red,
                       c:          c,
-                      onTap: () => _confirmLogout(context, c)),
+                      onTap:      () => _confirmLogout(context, c)),
                   ]),
                   const SizedBox(height: 18),
 
-                  // Info
                   _SectionLabel('Info', c: c),
                   const SizedBox(height: 8),
                   _Section(c: c, tiles: [
@@ -172,8 +167,8 @@ class SettingsScreen extends StatelessWidget {
                       title: 'Versione',
                       c:     c,
                       trailing: Text('1.0.0', style: TextStyle(
-                          color: c.textTertiary,
-                          fontSize: 13, fontWeight: FontWeight.w500))),
+                          color: c.textTertiary, fontSize: 13,
+                          fontWeight: FontWeight.w500))),
                     _Divider(c: c),
                     _Tile(
                       icon:     Icons.fitness_center_rounded,
@@ -197,11 +192,14 @@ class SettingsScreen extends StatelessWidget {
       BuildContext context, ThemeProvider tp, AuthProvider auth) async {
     final c = context.mfc;
     try {
-      await BackupService.instance.exportBackup(
-          auth: auth, isDark: tp.isDark);
-      if (context.mounted) _showSnack(context, c, '✓ Backup esportato', MarkFitColors.teal);
+      await BackupService.instance.exportBackup(auth: auth, isDark: tp.isDark);
+      if (context.mounted) {
+        _showSnack(context, c, '✓ Backup esportato', MarkFitColors.teal);
+      }
     } catch (e) {
-      if (context.mounted) _showSnack(context, c, 'Errore durante l\'export', MarkFitColors.red);
+      if (context.mounted) {
+        _showSnack(context, c, "Errore durante l'export", MarkFitColors.red);
+      }
     }
   }
 
@@ -226,7 +224,8 @@ class SettingsScreen extends StatelessWidget {
             child: const Icon(Icons.error_outline_rounded,
                 color: MarkFitColors.red, size: 22)),
           title:   'Impossibile importare il file',
-          message: 'I dati non sono compatibili con questa versione di MarkFit.\n\n${e.message}',
+          message: 'I dati non sono compatibili con questa versione di MarkFit.'
+              '\n\n${e.message}',
           actions: [
             GlassDialogAction(
                 label: 'OK', onTap: () => Navigator.pop(context)),
@@ -234,13 +233,14 @@ class SettingsScreen extends StatelessWidget {
       }
       return;
     } catch (_) {
-      if (context.mounted) _showSnack(context, c, 'Impossibile leggere il file', MarkFitColors.red);
+      if (context.mounted) {
+        _showSnack(context, c, 'Impossibile leggere il file', MarkFitColors.red);
+      }
       return;
     }
 
     if (data == null || !context.mounted) return;
 
-    // Conferma
     final ok = await showGlassDialog<bool>(
       context:     context,
       accentColor: MarkFitColors.indigo,
@@ -252,44 +252,50 @@ class SettingsScreen extends StatelessWidget {
         child: const Icon(Icons.restore_rounded,
             color: MarkFitColors.indigo, size: 22)),
       title:   'Importa backup',
-      message: 'Il backup del ${_fmtDate(data.exportedAt)} verrà ripristinato.\n\nI dati attuali verranno sostituiti. Vuoi procedere?',
+      message: 'Il backup del ${_fmtDate(data.exportedAt)} verrà ripristinato.'
+          '\n\nI dati attuali verranno sostituiti. Vuoi procedere?',
       actions: [
-        GlassDialogAction(label: 'Annulla', onTap: () => Navigator.pop(context, false)),
-        GlassDialogAction(label: 'Importa', isDestructive: false,
+        GlassDialogAction(
+            label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+        GlassDialogAction(
+            label: 'Importa', isDestructive: false,
             color: MarkFitColors.indigo,
             onTap: () => Navigator.pop(context, true)),
       ]);
 
     if (ok != true || !context.mounted) return;
 
-    // Loading overlay
     showDialog(
-      context: context,
+      context:          context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.55),
+      barrierColor:     Colors.black.withOpacity(0.55),
       builder: (ctx) => _LoadingDialog(c: c));
 
     try {
       await BackupService.instance.restoreBackup(data);
-      // Refresh providers
       if (context.mounted) {
         context.read<WorkoutProvider>().loadWorkouts();
         context.read<ExerciseProvider>().loadExercises();
         context.read<GoalProvider>().loadGoals();
         context.read<SportProvider>().loadSessions();
       }
-      if (context.mounted) Navigator.pop(context); // close loading
-      if (context.mounted) _showSnack(context, c, '✓ Backup ripristinato', MarkFitColors.teal);
+      if (context.mounted) Navigator.pop(context);
+      if (context.mounted) {
+        _showSnack(context, c, '✓ Backup ripristinato', MarkFitColors.teal);
+      }
     } catch (e) {
-      if (context.mounted) Navigator.pop(context); // close loading
-      if (context.mounted) _showSnack(context, c, 'Errore durante l\'import', MarkFitColors.red);
+      if (context.mounted) Navigator.pop(context);
+      if (context.mounted) {
+        _showSnack(context, c, "Errore durante l'import", MarkFitColors.red);
+      }
     }
   }
 
   String _fmtDate(String iso) {
     try {
       final dt = DateTime.parse(iso);
-      return '${dt.day.toString().padLeft(2,'0')}/${dt.month.toString().padLeft(2,'0')}/${dt.year}';
+      return '${dt.day.toString().padLeft(2, '0')}/'
+          '${dt.month.toString().padLeft(2, '0')}/${dt.year}';
     } catch (_) { return iso; }
   }
 
@@ -300,15 +306,19 @@ class SettingsScreen extends StatelessWidget {
       context: context, accentColor: MarkFitColors.red,
       icon: Container(width: 44, height: 44,
         decoration: BoxDecoration(
-          color: MarkFitColors.red.withOpacity(0.12), shape: BoxShape.circle,
+          color: MarkFitColors.red.withOpacity(0.12),
+          shape: BoxShape.circle,
           border: Border.all(color: MarkFitColors.red.withOpacity(0.4)),
-          boxShadow: [BoxShadow(color: MarkFitColors.red.withOpacity(0.2), blurRadius: 12)]),
+          boxShadow: [BoxShadow(
+              color: MarkFitColors.red.withOpacity(0.2), blurRadius: 12)]),
         child: const Icon(Icons.logout_rounded, color: MarkFitColors.red, size: 22)),
       title:   'Logout',
       message: "Vuoi uscire dall'account corrente?",
       actions: [
-        GlassDialogAction(label: 'Annulla', onTap: () => Navigator.pop(context, false)),
-        GlassDialogAction(label: 'Logout', isDestructive: true,
+        GlassDialogAction(
+            label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+        GlassDialogAction(
+            label: 'Logout', isDestructive: true,
             onTap: () => Navigator.pop(context, true)),
       ]);
     if (ok == true && context.mounted) context.read<AuthProvider>().logout();
@@ -330,19 +340,25 @@ class SettingsScreen extends StatelessWidget {
       context: context, accentColor: MarkFitColors.red,
       icon: Container(width: 44, height: 44,
         decoration: BoxDecoration(
-          color: MarkFitColors.red.withOpacity(0.12), shape: BoxShape.circle,
+          color: MarkFitColors.red.withOpacity(0.12),
+          shape: BoxShape.circle,
           border: Border.all(color: MarkFitColors.red.withOpacity(0.4))),
-        child: const Icon(Icons.delete_sweep_outlined, color: MarkFitColors.red, size: 22)),
+        child: const Icon(Icons.delete_sweep_outlined,
+            color: MarkFitColors.red, size: 22)),
       title:   'Elimina sessioni',
       message: 'Tutte le sessioni verranno rimosse definitivamente.',
       actions: [
-        GlassDialogAction(label: 'Annulla', onTap: () => Navigator.pop(context, false)),
-        GlassDialogAction(label: 'Elimina tutto', isDestructive: true,
+        GlassDialogAction(
+            label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+        GlassDialogAction(
+            label: 'Elimina tutto', isDestructive: true,
             onTap: () => Navigator.pop(context, true)),
       ]);
     if (ok == true && context.mounted) {
       await HiveDatabase.instance.deleteAllSessions();
-      if (context.mounted) _showSnack(context, c, 'Sessioni eliminate', MarkFitColors.teal);
+      if (context.mounted) {
+        _showSnack(context, c, 'Sessioni eliminate', MarkFitColors.teal);
+      }
     }
   }
 
@@ -352,30 +368,38 @@ class SettingsScreen extends StatelessWidget {
       context: context, accentColor: MarkFitColors.orange,
       icon: Container(width: 44, height: 44,
         decoration: BoxDecoration(
-          color: MarkFitColors.orange.withOpacity(0.12), shape: BoxShape.circle,
+          color: MarkFitColors.orange.withOpacity(0.12),
+          shape: BoxShape.circle,
           border: Border.all(color: MarkFitColors.orange.withOpacity(0.4))),
-        child: const Icon(Icons.note_alt_outlined, color: MarkFitColors.orange, size: 22)),
+        child: const Icon(Icons.note_alt_outlined,
+            color: MarkFitColors.orange, size: 22)),
       title:   'Elimina note',
       message: 'Tutte le note degli esercizi verranno rimosse.',
       actions: [
-        GlassDialogAction(label: 'Annulla', onTap: () => Navigator.pop(context, false)),
-        GlassDialogAction(label: 'Elimina', isDestructive: true,
+        GlassDialogAction(
+            label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+        GlassDialogAction(
+            label: 'Elimina', isDestructive: true,
             onTap: () => Navigator.pop(context, true)),
       ]);
     if (ok == true && context.mounted) {
       await HiveDatabase.instance.deleteAllNotes();
-      if (context.mounted) _showSnack(context, c, 'Note eliminate', MarkFitColors.teal);
+      if (context.mounted) {
+        _showSnack(context, c, 'Note eliminate', MarkFitColors.teal);
+      }
     }
   }
 
-  void _showSnack(BuildContext context, MarkFitColors c, String msg, Color accent) {
+  void _showSnack(BuildContext context, MarkFitColors c,
+      String msg, Color accent) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg, style: TextStyle(
           color: c.textOnAccent, fontWeight: FontWeight.w600)),
       backgroundColor: context.isDarkMode
           ? const Color(0xFF0D1117) : const Color(0xFF1E293B),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.all(16)));
   }
 }
@@ -403,7 +427,8 @@ class _LoadingDialog extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: c.glassBorder)),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              CircularProgressIndicator(color: MarkFitColors.teal, strokeWidth: 3),
+              const CircularProgressIndicator(
+                  color: MarkFitColors.teal, strokeWidth: 3),
               const SizedBox(height: 16),
               Text('Importazione in corso...',
                   style: TextStyle(color: c.textPrimary,
@@ -431,16 +456,20 @@ class _ProfileCard extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: c.blurStrong, sigmaY: c.blurStrong),
+        // FIX: glassBlurStrong (era blurStrong)
+        filter: ImageFilter.blur(
+            sigmaX: c.glassBlurStrong, sigmaY: c.glassBlurStrong),
         child: Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: c.glassCardStrong,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: MarkFitColors.teal.withOpacity(0.3), width: 1),
+            border: Border.all(
+                color: MarkFitColors.teal.withOpacity(0.3), width: 1),
             boxShadow: c.showElevation
                 ? [BoxShadow(color: c.elevationColor, blurRadius: 20)]
-                : [BoxShadow(color: MarkFitColors.teal.withOpacity(0.06),
+                : [BoxShadow(
+                    color: MarkFitColors.teal.withOpacity(0.06),
                     blurRadius: 20, spreadRadius: 2)]),
           child: Column(children: [
 
@@ -458,31 +487,38 @@ class _ProfileCard extends StatelessWidget {
                         shape: BoxShape.circle,
                         border: Border.all(color: c.scaffoldBg, width: 2),
                         boxShadow: [BoxShadow(
-                            color: MarkFitColors.teal.withOpacity(0.4), blurRadius: 6)]),
-                      child: const Icon(Icons.edit_rounded, size: 12, color: Colors.white))),
+                            color: MarkFitColors.teal.withOpacity(0.4),
+                            blurRadius: 6)]),
+                      child: const Icon(Icons.edit_rounded,
+                          size: 12, color: Colors.white))),
                 ])),
               const SizedBox(width: 14),
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                Text(name, style: TextStyle(color: c.textPrimary, fontSize: 18,
+                Text(name, style: TextStyle(
+                    color: c.textPrimary, fontSize: 18,
                     fontWeight: FontWeight.w800, letterSpacing: -0.3),
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 if (bio != null && bio.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(bio, style: TextStyle(color: c.textSecondary, fontSize: 12),
+                  Text(bio, style: TextStyle(
+                      color: c.textSecondary, fontSize: 12),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                 ],
                 const SizedBox(height: 3),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: MarkFitColors.teal.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: MarkFitColors.teal.withOpacity(0.25), width: 0.7)),
+                    border: Border.all(
+                        color: MarkFitColors.teal.withOpacity(0.25),
+                        width: 0.7)),
                   child: Text(email, style: TextStyle(
-                      color: MarkFitColors.teal.withOpacity(0.9), fontSize: 10,
-                      fontWeight: FontWeight.w600),
+                      color: MarkFitColors.teal.withOpacity(0.9),
+                      fontSize: 10, fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis)),
               ])),
             ]),
@@ -496,14 +532,22 @@ class _ProfileCard extends StatelessWidget {
               const SizedBox(height: 10),
               Wrap(spacing: 8, runSpacing: 6, children: [
                 if (account.firstName != null)
-                  _ProfileChip(icon: Icons.person_rounded,
-                      label: '${account.firstName} ${account.lastName ?? ''}'.trim(), c: c),
+                  _ProfileChip(
+                    icon:  Icons.person_rounded,
+                    label: '${account.firstName} ${account.lastName ?? ''}'.trim(),
+                    c:     c),
                 if (account.birthDate != null)
-                  _ProfileChip(icon: Icons.cake_outlined, label: account.birthDate!, c: c),
+                  _ProfileChip(
+                      icon: Icons.cake_outlined,
+                      label: account.birthDate!, c: c),
                 if (account.phone != null)
-                  _ProfileChip(icon: Icons.phone_outlined, label: account.phone!, c: c),
+                  _ProfileChip(
+                      icon: Icons.phone_outlined,
+                      label: account.phone!, c: c),
                 if (account.birthPlace != null)
-                  _ProfileChip(icon: Icons.location_on_outlined, label: account.birthPlace!, c: c),
+                  _ProfileChip(
+                      icon: Icons.location_on_outlined,
+                      label: account.birthPlace!, c: c),
               ]),
             ],
 
@@ -516,10 +560,13 @@ class _ProfileCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: MarkFitColors.teal.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(13),
-                  border: Border.all(color: MarkFitColors.teal.withOpacity(0.35), width: 1)),
-                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  const Icon(Icons.edit_outlined, size: 15, color: MarkFitColors.teal),
-                  const SizedBox(width: 7),
+                  border: Border.all(
+                      color: MarkFitColors.teal.withOpacity(0.35), width: 1)),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                  Icon(Icons.edit_outlined, size: 15, color: MarkFitColors.teal),
+                  SizedBox(width: 7),
                   Text('Modifica profilo', style: TextStyle(
                       color: MarkFitColors.teal, fontSize: 13,
                       fontWeight: FontWeight.w700)),
@@ -539,20 +586,25 @@ class _ProfileCard extends StatelessWidget {
 
 class _ProfileChip extends StatelessWidget {
   final IconData icon; final String label; final MarkFitColors c;
-  const _ProfileChip({required this.icon, required this.label, required this.c});
+  const _ProfileChip({required this.icon, required this.label,
+      required this.c});
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-    decoration: BoxDecoration(
-      color: c.glassCard,
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: c.glassBorder, width: 0.7)),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 11, color: c.textTertiary),
-      const SizedBox(width: 5),
-      Text(label.trim(), style: TextStyle(
-          fontSize: 11, color: c.textSecondary, fontWeight: FontWeight.w500)),
-    ]));
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: c.glassCard,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: c.glassBorder, width: 0.7)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 11, color: c.textTertiary),
+        const SizedBox(width: 5),
+        Text(label.trim(), style: TextStyle(
+            fontSize: 11, color: c.textSecondary,
+            fontWeight: FontWeight.w500)),
+      ]));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -562,30 +614,41 @@ class _ProfileChip extends StatelessWidget {
 class _SectionLabel extends StatelessWidget {
   final String label; final MarkFitColors c;
   const _SectionLabel(this.label, {required this.c});
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(left: 4),
-    child: Text(label.toUpperCase(), style: TextStyle(
-        color: MarkFitColors.cyan.withOpacity(context.isDarkMode ? 0.65 : 0.7),
-        fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.4)));
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(label.toUpperCase(), style: TextStyle(
+          color: MarkFitColors.cyan.withOpacity(
+              context.isDarkMode ? 0.65 : 0.70),
+          fontSize: 10, fontWeight: FontWeight.w800,
+          letterSpacing: 1.4)));
+  }
 }
 
 class _Section extends StatelessWidget {
   final List<Widget> tiles; final MarkFitColors c;
   const _Section({required this.tiles, required this.c});
+
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(18),
-    child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: c.blur, sigmaY: c.blur),
-      child: Container(
-        decoration: BoxDecoration(
-          color: c.glassCard,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: c.glassBorder, width: 0.8),
-          boxShadow: c.showElevation
-              ? [BoxShadow(color: c.elevationColor, blurRadius: 12)] : null),
-        child: Column(children: tiles))));
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        // FIX: glassBlur (era blur)
+        filter: ImageFilter.blur(
+            sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+        child: Container(
+          decoration: BoxDecoration(
+            color: c.glassCard,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: c.glassBorder, width: 0.8),
+            boxShadow: c.showElevation
+                ? [BoxShadow(color: c.elevationColor, blurRadius: 12)]
+                : null),
+          child: Column(children: tiles))));
+  }
 }
 
 class _Tile extends StatelessWidget {
@@ -604,44 +667,53 @@ class _Tile extends StatelessWidget {
     this.titleColor, this.subtitle, this.trailing, this.onTap});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap != null ? () { HapticFeedback.selectionClick(); onTap!(); } : null,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-      child: Row(children: [
-        Container(width: 36, height: 36,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(10)),
-          child: Icon(icon, color: color, size: 19)),
-        const SizedBox(width: 12),
-        Expanded(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-          Text(title, style: TextStyle(
-              color: titleColor ?? c.textPrimary,
-              fontSize: 14, fontWeight: FontWeight.w600)),
-          if (subtitle != null) ...[
-            const SizedBox(height: 2),
-            Text(subtitle!, style: TextStyle(
-                fontSize: 11, color: c.textTertiary)),
-          ],
-        ])),
-        if (trailing != null)
-          trailing!
-        else if (onTap != null)
-          Icon(Icons.chevron_right_rounded,
-              color: c.textTertiary, size: 18),
-      ])));
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap != null
+          ? () { HapticFeedback.selectionClick(); onTap!(); }
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: 14, vertical: 13),
+        child: Row(children: [
+          Container(width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: color, size: 19)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+            Text(title, style: TextStyle(
+                color: titleColor ?? c.textPrimary,
+                fontSize: 14, fontWeight: FontWeight.w600)),
+            if (subtitle != null) ...[
+              const SizedBox(height: 2),
+              Text(subtitle!, style: TextStyle(
+                  fontSize: 11, color: c.textTertiary)),
+            ],
+          ])),
+          if (trailing != null)
+            trailing!
+          else if (onTap != null)
+            Icon(Icons.chevron_right_rounded,
+                color: c.textTertiary, size: 18),
+        ])));
+  }
 }
 
 class _Divider extends StatelessWidget {
   final MarkFitColors c;
   const _Divider({required this.c});
+
   @override
-  Widget build(BuildContext context) => Container(
-    height: 0.5, margin: const EdgeInsets.symmetric(horizontal: 14),
-    color: c.divider);
+  Widget build(BuildContext context) {
+    return Container(
+      height: 0.5,
+      margin: const EdgeInsets.symmetric(horizontal: 14),
+      color: c.divider);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -650,74 +722,85 @@ class _Divider extends StatelessWidget {
 
 class _ThemeToggle extends StatelessWidget {
   final bool isDark; final VoidCallback onToggle; final MarkFitColors c;
-  const _ThemeToggle({required this.isDark, required this.onToggle, required this.c});
+  const _ThemeToggle({required this.isDark, required this.onToggle,
+      required this.c});
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(18),
-    child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: c.blur, sigmaY: c.blur),
-      child: GestureDetector(
-        onTap: () { HapticFeedback.selectionClick(); onToggle(); },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
-            color: c.glassCard,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: c.glassBorder, width: 0.8),
-            boxShadow: c.showElevation
-                ? [BoxShadow(color: c.elevationColor, blurRadius: 12)] : null),
-          child: Row(children: [
-            Container(width: 36, height: 36,
-              decoration: BoxDecoration(
-                color: (isDark ? MarkFitColors.indigo : MarkFitColors.orange)
-                    .withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10)),
-              child: Icon(
-                isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
-                color: isDark ? MarkFitColors.indigo : MarkFitColors.orange, size: 19)),
-            const SizedBox(width: 12),
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-              Text('Tema', style: TextStyle(color: c.textPrimary,
-                  fontSize: 14, fontWeight: FontWeight.w600)),
-              Text(isDark ? 'Modalità scura' : 'Modalità chiara',
-                  style: TextStyle(fontSize: 11, color: c.textTertiary)),
-            ])),
-            // Toggle pill
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              width: 50, height: 28,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? MarkFitColors.indigo.withOpacity(0.3)
-                    : MarkFitColors.orange.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isDark
-                      ? MarkFitColors.indigo.withOpacity(0.5)
-                      : MarkFitColors.orange.withOpacity(0.4), width: 1)),
-              child: AnimatedAlign(
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        // FIX: glassBlur (era blur)
+        filter: ImageFilter.blur(
+            sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+        child: GestureDetector(
+          onTap: () { HapticFeedback.selectionClick(); onToggle(); },
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: c.glassCard,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: c.glassBorder, width: 0.8),
+              boxShadow: c.showElevation
+                  ? [BoxShadow(color: c.elevationColor, blurRadius: 12)]
+                  : null),
+            child: Row(children: [
+              Container(width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: (isDark
+                      ? MarkFitColors.indigo
+                      : MarkFitColors.orange).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10)),
+                child: Icon(
+                  isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                  color: isDark ? MarkFitColors.indigo : MarkFitColors.orange,
+                  size: 19)),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                Text('Tema', style: TextStyle(
+                    color: c.textPrimary, fontSize: 14,
+                    fontWeight: FontWeight.w600)),
+                Text(isDark ? 'Modalità scura' : 'Modalità chiara',
+                    style: TextStyle(fontSize: 11, color: c.textTertiary)),
+              ])),
+              AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeInOut,
-                alignment: isDark ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  width: 22, height: 22,
-                  margin: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: Colors.white, shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(
-                        color: Colors.black.withOpacity(0.2), blurRadius: 4)]),
-                  child: Icon(
-                    isDark ? Icons.dark_mode : Icons.light_mode,
-                    size: 12,
-                    color: isDark ? MarkFitColors.indigo : MarkFitColors.orange)))),
-          ]),
+                width: 50, height: 28,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? MarkFitColors.indigo.withOpacity(0.3)
+                      : MarkFitColors.orange.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark
+                        ? MarkFitColors.indigo.withOpacity(0.5)
+                        : MarkFitColors.orange.withOpacity(0.4),
+                    width: 1)),
+                child: AnimatedAlign(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  alignment: isDark
+                      ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    width: 22, height: 22,
+                    margin: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: Colors.white, shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(
+                          color: Colors.black.withOpacity(0.2), blurRadius: 4)]),
+                    child: Icon(
+                      isDark ? Icons.dark_mode : Icons.light_mode,
+                      size: 12,
+                      color: isDark ? MarkFitColors.indigo : MarkFitColors.orange)))),
+            ]),
+          ),
         ),
-      ),
-    ));
+      ));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -741,7 +824,9 @@ class _SwitchAccountSheet extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: GestureDetector(
-              onTap: isCurrent ? null : () { Navigator.pop(context); _switchTo(context, a); },
+              onTap: isCurrent
+                  ? null
+                  : () { Navigator.pop(context); _switchTo(context, a); },
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
                 child: BackdropFilter(
@@ -750,11 +835,13 @@ class _SwitchAccountSheet extends StatelessWidget {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: isCurrent
-                          ? MarkFitColors.blue.withOpacity(0.1) : c.glassCard,
+                          ? MarkFitColors.blue.withOpacity(0.1)
+                          : c.glassCard,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: isCurrent
-                            ? MarkFitColors.blue.withOpacity(0.4) : c.glassBorder,
+                            ? MarkFitColors.blue.withOpacity(0.4)
+                            : c.glassBorder,
                         width: isCurrent ? 1.0 : 0.8)),
                     child: Row(children: [
                       Container(width: 40, height: 40,
@@ -764,14 +851,16 @@ class _SwitchAccountSheet extends StatelessWidget {
                             MarkFitColors.indigo.withOpacity(0.2)]),
                           shape: BoxShape.circle),
                         child: Center(child: Text(a.initials,
-                            style: TextStyle(color: c.textPrimary, fontSize: 14,
+                            style: TextStyle(
+                                color: c.textPrimary, fontSize: 14,
                                 fontWeight: FontWeight.w800)))),
                       const SizedBox(width: 12),
                       Expanded(child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                         Text(a.displayName ?? a.identifier,
-                            style: TextStyle(color: c.textPrimary, fontSize: 14,
+                            style: TextStyle(
+                                color: c.textPrimary, fontSize: 14,
                                 fontWeight: isCurrent
                                     ? FontWeight.w700 : FontWeight.w500),
                             maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -786,8 +875,9 @@ class _SwitchAccountSheet extends StatelessWidget {
                             color: MarkFitColors.blue.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(7),
                             border: Border.all(
-                                color: MarkFitColors.blue.withOpacity(0.35), width: 0.8)),
-                          child: Text('Attivo', style: TextStyle(
+                                color: MarkFitColors.blue.withOpacity(0.35),
+                                width: 0.8)),
+                          child: const Text('Attivo', style: TextStyle(
                               color: MarkFitColors.blue, fontSize: 10,
                               fontWeight: FontWeight.w700))),
                     ]))))));
@@ -812,17 +902,25 @@ class _SwitchAccountSheet extends StatelessWidget {
           subtitle:    account.identifier,
           accentColor: MarkFitColors.teal,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _GlassInput(ctrl: pwCtrl, c: c, hint: 'Password',
-                icon: Icons.lock_outline_rounded, obscure: true),
+            _GlassInput(
+              ctrl:        pwCtrl,
+              c:           c,
+              hint:        'Password',
+              icon:        Icons.lock_outline_rounded,
+              obscure:     true),
             SizedBox(height: kb > 0 ? 12 : 16),
             GestureDetector(
               onTap: () async {
                 final err = await ctx.read<AuthProvider>().login(
-                    identifier: account.identifier, password: pwCtrl.text);
+                    identifier: account.identifier,
+                    password:   pwCtrl.text);
                 if (err != null && ctx.mounted) {
                   ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                    content: Text(err), backgroundColor: MarkFitColors.red));
-                } else if (ctx.mounted) Navigator.pop(ctx);
+                    content: Text(err),
+                    backgroundColor: MarkFitColors.red));
+                } else if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
               },
               child: Container(
                 width:   double.infinity,
@@ -832,10 +930,11 @@ class _SwitchAccountSheet extends StatelessWidget {
                       colors: [MarkFitColors.teal, MarkFitColors.tealDk]),
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [BoxShadow(
-                      color: MarkFitColors.teal.withOpacity(0.4), blurRadius: 12,
-                      offset: const Offset(0, 3))]),
+                      color: MarkFitColors.teal.withOpacity(0.4),
+                      blurRadius: 12, offset: const Offset(0, 3))]),
                 child: Text('Accedi', textAlign: TextAlign.center,
-                    style: TextStyle(color: c.textOnAccent, fontSize: 15,
+                    style: TextStyle(
+                        color: c.textOnAccent, fontSize: 15,
                         fontWeight: FontWeight.w700)))),
             SizedBox(height: kb > 0 ? kb : 4),
           ]),
@@ -863,12 +962,14 @@ class AvatarWidget extends StatelessWidget {
         final bytes = base64Decode(b64);
         return Container(
           width: radius * 2, height: radius * 2,
-          decoration: BoxDecoration(shape: BoxShape.circle,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
             border: Border.all(
                 color: MarkFitColors.teal.withOpacity(0.5), width: 2),
             boxShadow: [BoxShadow(
                 color: MarkFitColors.teal.withOpacity(0.25), blurRadius: 12)]),
-          child: ClipOval(child: Image.memory(bytes, fit: BoxFit.cover)));
+          child: ClipOval(
+              child: Image.memory(bytes, fit: BoxFit.cover)));
       } catch (_) {}
     }
     return Container(
@@ -876,10 +977,12 @@ class AvatarWidget extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft, end: Alignment.bottomRight,
-          colors: [MarkFitColors.teal.withOpacity(0.4),
+          colors: [
+            MarkFitColors.teal.withOpacity(0.4),
             MarkFitColors.cyan.withOpacity(0.15)]),
         shape: BoxShape.circle,
-        border: Border.all(color: MarkFitColors.teal.withOpacity(0.55), width: 2),
+        border: Border.all(
+            color: MarkFitColors.teal.withOpacity(0.55), width: 2),
         boxShadow: [BoxShadow(
             color: MarkFitColors.teal.withOpacity(0.3), blurRadius: 14)]),
       child: Center(child: Text(auth.initials, style: TextStyle(
@@ -945,13 +1048,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _pickDate() async {
     final now    = DateTime.now();
     final picked = await showDatePicker(
-      context: context,
+      context:     context,
       initialDate: _selectedDate ?? DateTime(now.year - 25),
-      firstDate: DateTime(1920), lastDate: now,
-      helpText: 'Data di nascita',
+      firstDate:   DateTime(1920),
+      lastDate:    now,
+      helpText:    'Data di nascita',
       builder: (ctx, child) => Theme(
         data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(primary: MarkFitColors.teal)),
+            colorScheme: const ColorScheme.dark(
+                primary: MarkFitColors.teal)),
         child: child!));
     if (picked != null) setState(() => _selectedDate = picked);
   }
@@ -959,11 +1064,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _save() async {
     setState(() => _loading = true);
     await context.read<AuthProvider>().updateProfile(
-      firstName:  _firstNameCtrl.text.trim().isEmpty ? null : _firstNameCtrl.text.trim(),
-      lastName:   _lastNameCtrl.text.trim().isEmpty  ? null : _lastNameCtrl.text.trim(),
-      phone:      _phoneCtrl.text.trim().isEmpty     ? null : _phoneCtrl.text.trim(),
-      birthPlace: _birthPlaceCtrl.text.trim().isEmpty ? null : _birthPlaceCtrl.text.trim(),
-      bio:        _bioCtrl.text.trim().isEmpty        ? null : _bioCtrl.text.trim(),
+      firstName:  _firstNameCtrl.text.trim().isEmpty
+          ? null : _firstNameCtrl.text.trim(),
+      lastName:   _lastNameCtrl.text.trim().isEmpty
+          ? null : _lastNameCtrl.text.trim(),
+      phone:      _phoneCtrl.text.trim().isEmpty
+          ? null : _phoneCtrl.text.trim(),
+      birthPlace: _birthPlaceCtrl.text.trim().isEmpty
+          ? null : _birthPlaceCtrl.text.trim(),
+      bio:        _bioCtrl.text.trim().isEmpty
+          ? null : _bioCtrl.text.trim(),
       birthDate:  _selectedDate?.toIso8601String().split('T')[0]);
     setState(() => _loading = false);
     if (mounted) {
@@ -993,15 +1103,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         child: SafeArea(
           child: Column(children: [
 
-            // AppBar
+            // Glass AppBar
             ClipRect(
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: c.blurStrong, sigmaY: c.blurStrong),
+                // FIX: glassBlurStrong (era blurStrong)
+                filter: ImageFilter.blur(
+                    sigmaX: c.glassBlurStrong,
+                    sigmaY: c.glassBlurStrong),
                 child: Container(
                   decoration: BoxDecoration(
                     color: c.glassCard,
                     border: Border(bottom: BorderSide(
-                        color: MarkFitColors.cyan.withOpacity(0.12), width: 0.6))),
+                        color: MarkFitColors.cyan.withOpacity(0.12),
+                        width: 0.6))),
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                   child: Row(children: [
                     GestureDetector(
@@ -1010,7 +1124,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         decoration: BoxDecoration(
                           color: c.glassCardStrong,
                           borderRadius: BorderRadius.circular(11),
-                          border: Border.all(color: c.glassBorder, width: 0.7)),
+                          border: Border.all(
+                              color: c.glassBorder, width: 0.7)),
                         child: Icon(Icons.arrow_back_ios_new_rounded,
                             size: 15, color: c.textPrimary))),
                     const SizedBox(width: 12),
@@ -1024,26 +1139,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           color: c.textTertiary, fontSize: 11)),
                     ])),
                     GestureDetector(
-                      onTap: _loading ? null : () { HapticFeedback.mediumImpact(); _save(); },
+                      onTap: _loading ? null : () {
+                        HapticFeedback.mediumImpact();
+                        _save();
+                      },
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
                           gradient: _loading ? null : const LinearGradient(
                               colors: [MarkFitColors.teal, MarkFitColors.tealDk]),
                           color: _loading ? c.glassCard : null,
                           borderRadius: BorderRadius.circular(11),
                           boxShadow: _loading ? null : [BoxShadow(
-                              color: MarkFitColors.teal.withOpacity(0.4), blurRadius: 10,
-                              offset: const Offset(0, 3))]),
+                              color: MarkFitColors.teal.withOpacity(0.4),
+                              blurRadius: 10, offset: const Offset(0, 3))]),
                         child: _loading
                             ? SizedBox(width: 14, height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
                                     color: MarkFitColors.teal.withOpacity(0.7)))
-                            : Row(mainAxisSize: MainAxisSize.min, children: [
-                                const Icon(Icons.check_rounded, color: Colors.white, size: 15),
-                                const SizedBox(width: 5),
-                                const Text('Salva', style: TextStyle(
+                            : const Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.check_rounded,
+                                    color: Colors.white, size: 15),
+                                SizedBox(width: 5),
+                                Text('Salva', style: TextStyle(
                                     color: Colors.white, fontSize: 12,
                                     fontWeight: FontWeight.w700)),
                               ]))),
@@ -1058,53 +1179,62 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   padding: EdgeInsets.fromLTRB(16, 16, 16, 32 + kbHeight),
                   child: Column(children: [
 
-                    // Avatar
                     _EditAvatar(auth: auth, c: c, onPick: _pickImage),
                     const SizedBox(height: 20),
 
-                    // Dati personali
-                    _FormSection(title: 'Dati personali',
-                        icon: Icons.person_rounded, color: MarkFitColors.teal, c: c,
-                        children: [
+                    _FormSection(
+                      title: 'Dati personali',
+                      icon:  Icons.person_rounded,
+                      color: MarkFitColors.teal,
+                      c:     c,
+                      children: [
                       Row(children: [
-                        Expanded(child: _GlassInput(ctrl: _firstNameCtrl, c: c,
-                            hint: 'Nome', icon: Icons.person_outline_rounded,
+                        Expanded(child: _GlassInput(
+                            ctrl: _firstNameCtrl, c: c, hint: 'Nome',
+                            icon: Icons.person_outline_rounded,
                             accentColor: MarkFitColors.teal)),
                         const SizedBox(width: 10),
-                        Expanded(child: _GlassInput(ctrl: _lastNameCtrl, c: c,
-                            hint: 'Cognome', accentColor: MarkFitColors.teal)),
+                        Expanded(child: _GlassInput(
+                            ctrl: _lastNameCtrl, c: c, hint: 'Cognome',
+                            accentColor: MarkFitColors.teal)),
                       ]),
                       const SizedBox(height: 10),
                       GestureDetector(
                         onTap: _pickDate,
-                        child: _DateField(date: _selectedDate, c: c,
+                        child: _DateField(
+                            date: _selectedDate, c: c,
                             hint: 'Data di nascita',
                             icon: Icons.cake_outlined)),
                       const SizedBox(height: 10),
-                      _GlassInput(ctrl: _birthPlaceCtrl, c: c,
+                      _GlassInput(
+                          ctrl: _birthPlaceCtrl, c: c,
                           hint: 'Luogo di nascita',
                           icon: Icons.location_on_outlined,
                           accentColor: MarkFitColors.indigo),
                       const SizedBox(height: 10),
-                      _GlassInput(ctrl: _phoneCtrl, c: c,
-                          hint: 'Telefono',
-                          icon: Icons.phone_outlined,
+                      _GlassInput(
+                          ctrl:        _phoneCtrl, c: c,
+                          hint:        'Telefono',
+                          icon:        Icons.phone_outlined,
                           keyboardType: TextInputType.phone,
                           accentColor: MarkFitColors.green),
                     ]),
                     const SizedBox(height: 14),
 
-                    // Bio
-                    _FormSection(title: 'Su di me',
-                        icon: Icons.notes_rounded, color: MarkFitColors.cyan, c: c,
-                        children: [
-                      _GlassInput(ctrl: _bioCtrl, c: c,
-                          hint: 'Raccontati in poche parole...',
-                          accentColor: MarkFitColors.cyan, maxLines: 3),
+                    _FormSection(
+                      title: 'Su di me',
+                      icon:  Icons.notes_rounded,
+                      color: MarkFitColors.cyan,
+                      c:     c,
+                      children: [
+                      _GlassInput(
+                          ctrl:       _bioCtrl, c: c,
+                          hint:       'Raccontati in poche parole...',
+                          accentColor: MarkFitColors.cyan,
+                          maxLines:   3),
                     ]),
                     const SizedBox(height: 24),
 
-                    // Save button
                     GestureDetector(
                       onTap: _loading ? null : _save,
                       child: AnimatedContainer(
@@ -1120,21 +1250,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               color: MarkFitColors.teal.withOpacity(0.4),
                               blurRadius: 16, offset: const Offset(0, 4))]),
                         child: _loading
-                            ? Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            ? Row(mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
                                 SizedBox(width: 16, height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2,
                                       color: Colors.white.withOpacity(0.7))),
                                 const SizedBox(width: 10),
-                                const Text('Salvataggio...',
-                                    style: TextStyle(color: Colors.white,
-                                        fontSize: 15, fontWeight: FontWeight.w600)),
+                                const Text('Salvataggio...', style: TextStyle(
+                                    color: Colors.white, fontSize: 15,
+                                    fontWeight: FontWeight.w600)),
                               ])
-                            : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                Icon(Icons.update_rounded, color: Colors.white, size: 18),
+                            : const Row(mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                Icon(Icons.update_rounded,
+                                    color: Colors.white, size: 18),
                                 SizedBox(width: 8),
-                                Text('Salva modifiche',
-                                    style: TextStyle(color: Colors.white,
-                                        fontSize: 15, fontWeight: FontWeight.w700)),
+                                Text('Salva modifiche', style: TextStyle(
+                                    color: Colors.white, fontSize: 15,
+                                    fontWeight: FontWeight.w700)),
                               ]))),
                   ]),
                 ),
@@ -1155,50 +1289,65 @@ class _EditAvatar extends StatelessWidget {
   final AuthProvider  auth;
   final MarkFitColors c;
   final VoidCallback  onPick;
-  const _EditAvatar({required this.auth, required this.c, required this.onPick});
+  const _EditAvatar({required this.auth, required this.c,
+      required this.onPick});
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(18),
-    child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: c.blur, sigmaY: c.blur),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: c.glassCard,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: MarkFitColors.cyan.withOpacity(0.15), width: 0.8),
-          boxShadow: c.showElevation
-              ? [BoxShadow(color: c.elevationColor, blurRadius: 12)] : null),
-        child: Column(children: [
-          GestureDetector(
-            onTap: onPick,
-            child: Stack(children: [
-              AvatarWidget(auth: auth, radius: 46, c: c),
-              Positioned(right: 0, bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [MarkFitColors.teal, MarkFitColors.tealDk]),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: c.scaffoldBg, width: 2)),
-                  child: const Icon(Icons.camera_alt_rounded, size: 14, color: Colors.white))),
-            ])),
-          const SizedBox(height: 14),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            _AvatarBtn(icon: Icons.photo_library_outlined,
-                label: 'Cambia foto', color: MarkFitColors.teal,
-                c: c, onTap: onPick),
-            if (auth.avatarBase64 != null) ...[
-              const SizedBox(width: 10),
-              _AvatarBtn(icon: Icons.delete_outline_rounded,
-                  label: 'Rimuovi', color: MarkFitColors.red, c: c,
-                  onTap: () async =>
-                      await context.read<AuthProvider>().clearAvatar()),
-            ],
-          ]),
-        ]))));
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        // FIX: glassBlur (era blur)
+        filter: ImageFilter.blur(
+            sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: c.glassCard,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+                color: MarkFitColors.cyan.withOpacity(0.15), width: 0.8),
+            boxShadow: c.showElevation
+                ? [BoxShadow(color: c.elevationColor, blurRadius: 12)]
+                : null),
+          child: Column(children: [
+            GestureDetector(
+              onTap: onPick,
+              child: Stack(children: [
+                AvatarWidget(auth: auth, radius: 46, c: c),
+                Positioned(right: 0, bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                          colors: [MarkFitColors.teal, MarkFitColors.tealDk]),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: c.scaffoldBg, width: 2)),
+                    child: const Icon(Icons.camera_alt_rounded,
+                        size: 14, color: Colors.white))),
+              ])),
+            const SizedBox(height: 14),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _AvatarBtn(
+                icon:  Icons.photo_library_outlined,
+                label: 'Cambia foto',
+                color: MarkFitColors.teal,
+                c:     c,
+                onTap: onPick),
+              if (auth.avatarBase64 != null) ...[
+                const SizedBox(width: 10),
+                _AvatarBtn(
+                  icon:  Icons.delete_outline_rounded,
+                  label: 'Rimuovi',
+                  color: MarkFitColors.red,
+                  c:     c,
+                  onTap: () async {
+                    await context.read<AuthProvider>().clearAvatar();
+                  }),
+              ],
+            ]),
+          ]))));
+  }
 }
 
 class _AvatarBtn extends StatelessWidget {
@@ -1206,21 +1355,24 @@ class _AvatarBtn extends StatelessWidget {
   final Color color; final MarkFitColors c; final VoidCallback onTap;
   const _AvatarBtn({required this.icon, required this.label,
       required this.color, required this.c, required this.onTap});
+
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3), width: 0.8)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: color, fontSize: 12,
-            fontWeight: FontWeight.w600)),
-      ])));
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withOpacity(0.3), width: 0.8)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(
+              color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+        ])));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1235,35 +1387,40 @@ class _FormSection extends StatelessWidget {
       required this.color, required this.c, required this.children});
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-    Row(children: [
-      Container(width: 24, height: 24,
-        decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(6)),
-        child: Icon(icon, size: 12, color: color)),
-      const SizedBox(width: 7),
-      Text(title.toUpperCase(), style: TextStyle(
-          color: color.withOpacity(0.85), fontSize: 10,
-          fontWeight: FontWeight.w800, letterSpacing: 1.2)),
-    ]),
-    const SizedBox(height: 10),
-    ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: c.blur, sigmaY: c.blur),
-        child: Container(
-          padding: const EdgeInsets.all(14),
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+      Row(children: [
+        Container(width: 24, height: 24,
           decoration: BoxDecoration(
-color: c.glassCard,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withOpacity(0.15), width: 0.8),
-            boxShadow: c.showElevation
-                ? [BoxShadow(color: c.elevationColor, blurRadius: 10)] : null),
-          child: Column(children: children)))),
-  ]);
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(6)),
+          child: Icon(icon, size: 12, color: color)),
+        const SizedBox(width: 7),
+        Text(title.toUpperCase(), style: TextStyle(
+            color: color.withOpacity(0.85), fontSize: 10,
+            fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+      ]),
+      const SizedBox(height: 10),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          // FIX: glassBlur (era blur)
+          filter: ImageFilter.blur(
+              sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: c.glassCard,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withOpacity(0.15), width: 0.8),
+              boxShadow: c.showElevation
+                  ? [BoxShadow(color: c.elevationColor, blurRadius: 10)]
+                  : null),
+            child: Column(children: children)))),
+    ]);
+  }
 }
 
 class _GlassInput extends StatelessWidget {
@@ -1292,13 +1449,14 @@ class _GlassInput extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: c.blur, sigmaY: c.blur),
+        // FIX: glassBlur (era blur)
+        filter: ImageFilter.blur(
+            sigmaX: c.glassBlur, sigmaY: c.glassBlur),
         child: Container(
           decoration: BoxDecoration(
             color: c.inputBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: c.inputBorder, width: 0.8),
-          ),
+            border: Border.all(color: c.inputBorder, width: 0.8)),
           child: TextField(
             controller:         ctrl,
             maxLines:           obscure ? 1 : maxLines,
@@ -1330,11 +1488,8 @@ class _DateField extends StatelessWidget {
   final IconData      icon;
 
   const _DateField({
-    required this.date,
-    required this.c,
-    required this.hint,
-    required this.icon,
-  });
+    required this.date, required this.c,
+    required this.hint, required this.icon});
 
   String _fmt(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/'
@@ -1345,14 +1500,16 @@ class _DateField extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: c.blur, sigmaY: c.blur),
+        // FIX: glassBlur (era blur)
+        filter: ImageFilter.blur(
+            sigmaX: c.glassBlur, sigmaY: c.glassBlur),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 14, vertical: 13),
           decoration: BoxDecoration(
             color: c.inputBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: c.inputBorder, width: 0.8),
-          ),
+            border: Border.all(color: c.inputBorder, width: 0.8)),
           child: Row(children: [
             Icon(icon, color: c.textTertiary, size: 17),
             const SizedBox(width: 10),
@@ -1360,11 +1517,8 @@ class _DateField extends StatelessWidget {
               child: Text(
                 date != null ? _fmt(date!) : hint,
                 style: TextStyle(
-                  color: date != null ? c.textPrimary : c.inputHint,
-                  fontSize: 14,
-                ),
-              ),
-            ),
+                    color: date != null ? c.textPrimary : c.inputHint,
+                    fontSize: 14))),
             Icon(Icons.calendar_today_outlined,
                 color: c.textTertiary, size: 15),
           ]),
