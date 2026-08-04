@@ -867,7 +867,7 @@ class _GlassDayCellState extends State<_GlassDayCell> {
           decoration: BoxDecoration(
             color: c.sheetBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: c.sheetBorder)),
+            border: Border.all(color: c.glassBorder)),
           child: Column(mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: widget.sessions.map((s) => Padding(

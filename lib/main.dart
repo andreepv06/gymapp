@@ -24,14 +24,10 @@ import 'screens/settings/settings_screen.dart';
 import 'screens/workouts/allenamenti_screen.dart';
 import 'services/notification_service.dart';
 
-// ─────────────────────────────────────────────────────────────
-// Entry point
-// ─────────────────────────────────────────────────────────────
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent));
+  SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
   await HiveDatabase.instance.init();
   await GoalDatabase.instance.init();
   await SportDatabase.instance.init();
@@ -97,8 +93,6 @@ class MyApp extends StatelessWidget {
     );
   }
 
-  // ── Global builder ────────────────────────────────────────
-
   Widget _appBuilder(BuildContext context, Widget? child) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final mfc    = isDark ? MarkFitColors.dark : MarkFitColors.light;
@@ -115,8 +109,8 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.transparent,
         primaryColor:            MarkFitColors.teal,
         textTheme: CupertinoTextThemeData(
-          primaryColor: mfc.textPrimary,
-          textStyle: TextStyle(color: mfc.textPrimary, fontSize: 16),
+          primaryColor:  mfc.textPrimary,
+          textStyle:     TextStyle(color: mfc.textPrimary, fontSize: 16),
           actionTextStyle: const TextStyle(
               color: MarkFitColors.teal, fontSize: 16),
         ),
@@ -125,16 +119,12 @@ class MyApp extends StatelessWidget {
     );
   }
 
-  // ── ThemeData ─────────────────────────────────────────────
-
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     final mfc    = isDark ? MarkFitColors.dark : MarkFitColors.light;
 
     final base = ColorScheme.fromSeed(
-      seedColor:  MarkFitColors.teal,
-      brightness: brightness,
-    );
+        seedColor: MarkFitColors.teal, brightness: brightness);
 
     final cs = base.copyWith(
       surface:              mfc.scaffoldBg,
@@ -165,34 +155,33 @@ class MyApp extends StatelessWidget {
       dividerColor:            mfc.divider,
       extensions:              [mfc],
 
-      // ── TextTheme ─────────────────────────────────────────
       textTheme: TextTheme(
-        displayLarge:   _ts(mfc.textPrimary, FontWeight.w800, -0.8),
-        displayMedium:  _ts(mfc.textPrimary, FontWeight.w700, -0.5),
-        displaySmall:   _ts(mfc.textPrimary, FontWeight.w700, -0.3),
-        headlineLarge:  _ts(mfc.textPrimary, FontWeight.w700, -0.5),
-        headlineMedium: _ts(mfc.textPrimary, FontWeight.w700, -0.3),
-        headlineSmall:  _ts(mfc.textPrimary, FontWeight.w600,  0.0),
-        titleLarge:     _ts(mfc.textPrimary, FontWeight.w700, -0.2),
-        titleMedium:    _ts(mfc.textPrimary, FontWeight.w600,  0.0),
-        titleSmall:     _ts(mfc.textSecondary, FontWeight.w600, 0.0),
-        bodyLarge:      _ts(mfc.textPrimary,   FontWeight.w400, 0.0),
-        bodyMedium:     _ts(mfc.textSecondary, FontWeight.w400, 0.0),
-        bodySmall:      _ts(mfc.textTertiary,  FontWeight.w400, 0.0),
-        labelLarge:     _ts(mfc.textPrimary,   FontWeight.w600, 0.0),
-        labelMedium:    _ts(mfc.textSecondary, FontWeight.w500, 0.0),
-        labelSmall:     _ts(mfc.textTertiary,  FontWeight.w500, 0.5),
+        displayLarge:   _ts(mfc.textPrimary,   FontWeight.w800, -0.8),
+        displayMedium:  _ts(mfc.textPrimary,   FontWeight.w700, -0.5),
+        displaySmall:   _ts(mfc.textPrimary,   FontWeight.w700, -0.3),
+        headlineLarge:  _ts(mfc.textPrimary,   FontWeight.w700, -0.5),
+        headlineMedium: _ts(mfc.textPrimary,   FontWeight.w700, -0.3),
+        headlineSmall:  _ts(mfc.textPrimary,   FontWeight.w600,  0.0),
+        titleLarge:     _ts(mfc.textPrimary,   FontWeight.w700, -0.2),
+        titleMedium:    _ts(mfc.textPrimary,   FontWeight.w600,  0.0),
+        titleSmall:     _ts(mfc.textSecondary, FontWeight.w600,  0.0),
+        bodyLarge:      _ts(mfc.textPrimary,   FontWeight.w400,  0.0),
+        bodyMedium:     _ts(mfc.textSecondary, FontWeight.w400,  0.0),
+        bodySmall:      _ts(mfc.textTertiary,  FontWeight.w400,  0.0),
+        labelLarge:     _ts(mfc.textPrimary,   FontWeight.w600,  0.0),
+        labelMedium:    _ts(mfc.textSecondary, FontWeight.w500,  0.0),
+        labelSmall:     _ts(mfc.textTertiary,  FontWeight.w500,  0.5),
       ),
 
-      // ── AppBarTheme ───────────────────────────────────────
       appBarTheme: AppBarTheme(
         elevation:              0,
         scrolledUnderElevation: 0,
         backgroundColor:        Colors.transparent,
         surfaceTintColor:       Colors.transparent,
         foregroundColor:        mfc.textPrimary,
-        iconTheme:     IconThemeData(color: mfc.iconPrimary, size: 22),
-        actionsIconTheme: IconThemeData(color: mfc.iconPrimary, size: 22),
+        iconTheme: IconThemeData(color: mfc.iconPrimary, size: 22),
+        actionsIconTheme: IconThemeData(
+            color: mfc.iconPrimary, size: 22),
         titleTextStyle: TextStyle(
           color: mfc.textPrimary, fontSize: 18,
           fontWeight: FontWeight.w700, letterSpacing: -0.3),
@@ -203,139 +192,135 @@ class MyApp extends StatelessWidget {
                 .copyWith(statusBarColor: Colors.transparent),
       ),
 
-      // ── CardTheme ─────────────────────────────────────────
-      // In light mode elevazione alta — la profondità viene dalle ombre
+      // In light mode: elevation ALTA per profondità tramite ombra
       cardTheme: CardThemeData(
-        elevation:   isDark ? 0 : 6,
+        elevation:   isDark ? 0 : 8,
         color:       mfc.glassCard,
         shadowColor: mfc.elevationColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
               color: mfc.glassBorder,
-              width: isDark ? 0.8 : 1.1),
-        ),
+              width: isDark ? 0.8 : 1.1)),
       ),
 
-      // ── InputDecoration ───────────────────────────────────
       inputDecorationTheme: InputDecorationTheme(
         filled:     true,
         fillColor:  mfc.inputBg,
         hintStyle:  TextStyle(color: mfc.inputHint, fontSize: 14),
-        labelStyle: TextStyle(color: mfc.textSecondary, fontSize: 14),
+        labelStyle: TextStyle(
+            color: mfc.textSecondary, fontSize: 14),
         prefixIconColor: mfc.iconSecondary,
         suffixIconColor: mfc.iconSecondary,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: mfc.inputBorder, width: 0.9)),
+          borderSide: BorderSide(
+              color: mfc.inputBorder, width: isDark ? 0.8 : 1.1)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: mfc.inputBorder, width: 0.9)),
+          borderSide: BorderSide(
+              color: mfc.inputBorder, width: isDark ? 0.8 : 1.1)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-              color: mfc.inputBorderFocus, width: 1.6)),
+              color: mfc.inputBorderFocus,
+              width: isDark ? 1.5 : 1.8)),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: MarkFitColors.red, width: 1.2)),
+          borderSide: BorderSide(
+              color: MarkFitColors.red, width: 1.2)),
         contentPadding: const EdgeInsets.symmetric(
             horizontal: 16, vertical: 14),
       ),
 
-      // ── Divider ───────────────────────────────────────────
       dividerTheme: DividerThemeData(
-        color: mfc.divider, thickness: 0.5, space: 1),
+          color: mfc.divider, thickness: 0.5, space: 1),
 
-      // ── BottomSheet ───────────────────────────────────────
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: Colors.transparent,
         elevation: 0,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          borderRadius: BorderRadius.vertical(
+              top: Radius.circular(24))),
       ),
 
-      // ── SnackBar ──────────────────────────────────────────
       snackBarTheme: SnackBarThemeData(
         behavior:        SnackBarBehavior.floating,
-        backgroundColor: isDark
-            ? const Color(0xFF0D1117) : const Color(0xFF0F1C2E),
+        // Dark snackbar in entrambi i temi per leggibilità
+        backgroundColor: const Color(0xFF0F1C2E),
         contentTextStyle: const TextStyle(
             color: Colors.white, fontWeight: FontWeight.w500),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12)),
       ),
 
-      // ── Dialog ───────────────────────────────────────────
       dialogTheme: DialogThemeData(
         backgroundColor:  mfc.sheetBg,
         surfaceTintColor: Colors.transparent,
-        elevation:        isDark ? 0 : 24,
+        // Elevazione alta in light per distinguere il dialog
+        elevation:        isDark ? 0 : 32,
         shadowColor:      mfc.elevationColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: mfc.sheetBorder, width: 0.8)),
+          side: BorderSide(color: mfc.glassBorder,
+              width: isDark ? 0.8 : 1.1)),
       ),
 
-      // ── ListTile ──────────────────────────────────────────
       listTileTheme: ListTileThemeData(
-        iconColor:         mfc.iconSecondary,
-        textColor:         mfc.textPrimary,
-        titleTextStyle:    TextStyle(
+        iconColor:      mfc.iconSecondary,
+        textColor:      mfc.textPrimary,
+        titleTextStyle: TextStyle(
             color: mfc.textPrimary, fontWeight: FontWeight.w500),
         subtitleTextStyle: TextStyle(
             color: mfc.textTertiary, fontSize: 12),
       ),
 
-      // ── Switch ────────────────────────────────────────────
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) =>
             states.contains(WidgetState.selected)
-                ? MarkFitColors.teal : (isDark
-                    ? Colors.white54 : Colors.grey.shade400)),
+                ? MarkFitColors.teal
+                : (isDark ? Colors.white54 : Colors.grey.shade400)),
         trackColor: WidgetStateProperty.resolveWith((states) =>
             states.contains(WidgetState.selected)
                 ? MarkFitColors.teal.withOpacity(0.4)
                 : mfc.glassBorder),
       ),
 
-      // ── PopupMenu ─────────────────────────────────────────
       popupMenuTheme: PopupMenuThemeData(
         color:            mfc.glassCardStrong,
         surfaceTintColor: Colors.transparent,
-        elevation:        isDark ? 0 : 8,
+        elevation:        isDark ? 0 : 10,
         shadowColor:      mfc.elevationColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: mfc.glassBorder, width: 0.8)),
+          side: BorderSide(color: mfc.glassBorder,
+              width: isDark ? 0.8 : 1.0)),
         labelTextStyle: WidgetStatePropertyAll(
             TextStyle(color: mfc.textPrimary)),
       ),
 
-      // ── Chip ──────────────────────────────────────────────
       chipTheme: ChipThemeData(
         backgroundColor:  mfc.glassCard,
-        selectedColor:    MarkFitColors.teal.withOpacity(0.2),
+        selectedColor:    MarkFitColors.teal.withOpacity(0.15),
         side: BorderSide(color: mfc.glassBorder,
             width: isDark ? 0.8 : 1.0),
         labelStyle: TextStyle(color: mfc.textPrimary, fontSize: 12),
       ),
 
-      // ── FilledButton ─────────────────────────────────────
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor:  MarkFitColors.teal,
-          foregroundColor:  Colors.white,
+          backgroundColor: MarkFitColors.teal,
+          foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12)),
           padding: const EdgeInsets.symmetric(
               horizontal: 20, vertical: 12),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
-          elevation: isDark ? 0 : 4,
-          shadowColor: MarkFitColors.teal.withOpacity(0.4),
+          elevation:   isDark ? 0 : 5,
+          shadowColor: MarkFitColors.teal.withOpacity(0.45),
         ),
       ),
 
-      // ── OutlinedButton ────────────────────────────────────
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: mfc.textPrimary,
@@ -348,21 +333,19 @@ class MyApp extends StatelessWidget {
         ),
       ),
 
-      // ── TextButton ────────────────────────────────────────
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: MarkFitColors.teal,
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+          textStyle:
+              const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
 
-      // ── ProgressIndicator ─────────────────────────────────
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color:            MarkFitColors.teal,
         linearTrackColor: mfc.divider,
       ),
 
-      // ── Slider ───────────────────────────────────────────
       sliderTheme: SliderThemeData(
         activeTrackColor:   MarkFitColors.teal,
         thumbColor:         MarkFitColors.teal,
@@ -370,7 +353,6 @@ class MyApp extends StatelessWidget {
         inactiveTrackColor: mfc.divider,
       ),
 
-      // ── TabBar ────────────────────────────────────────────
       tabBarTheme: TabBarThemeData(
         labelColor:           MarkFitColors.teal,
         unselectedLabelColor: mfc.textTertiary,
@@ -382,13 +364,12 @@ class MyApp extends StatelessWidget {
             fontWeight: FontWeight.w500, fontSize: 12),
       ),
 
-      // ── IconButton ────────────────────────────────────────
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(foregroundColor: mfc.iconPrimary)),
+        style: IconButton.styleFrom(
+            foregroundColor: mfc.iconPrimary)),
     );
   }
 
-  // Helper
   TextStyle _ts(Color color, FontWeight w, double ls) =>
       TextStyle(color: color, fontWeight: w, letterSpacing: ls);
 }
@@ -426,14 +407,15 @@ class _AppEntryState extends State<AppEntry> {
     if (!_checked) {
       return Scaffold(
         backgroundColor: c.scaffoldBg,
-        body: Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.fitness_center_rounded,
-                size: 48, color: MarkFitColors.teal),
-            const SizedBox(height: 16),
-            CircularProgressIndicator(
-                color: MarkFitColors.teal, strokeWidth: 2),
-          ])));
+        body: Center(child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+          Icon(Icons.fitness_center_rounded,
+              size: 48, color: MarkFitColors.teal),
+          const SizedBox(height: 16),
+          CircularProgressIndicator(
+              color: MarkFitColors.teal, strokeWidth: 2),
+        ])));
     }
     if (!context.watch<AuthProvider>().isLoggedIn) {
       return LoginScreen(onLoginSuccess: () {
@@ -466,13 +448,14 @@ class MainShell extends StatelessWidget {
       ]),
       bottomNavigationBar: _LiquidGlassNavBar(
         currentIndex: idx,
-        onTap: (i) => context.read<NavigationNotifier>().navigateTo(i)),
+        onTap: (i) =>
+            context.read<NavigationNotifier>().navigateTo(i)),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _LiquidGlassNavBar — completamente adattiva
+// _LiquidGlassNavBar
 // ─────────────────────────────────────────────────────────────
 
 class _LiquidGlassNavBar extends StatelessWidget {
@@ -508,11 +491,11 @@ class _LiquidGlassNavBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(44),
                 border: Border.all(
                     color: c.navBorder,
-                    width: isDark ? 0.9 : 1.4),
+                    width: isDark ? 0.9 : 1.5),
                 boxShadow: [
                   BoxShadow(
                     color:        c.navShadow,
-                    blurRadius:   isDark ? 32 : 24,
+                    blurRadius:   isDark ? 32 : 28,
                     spreadRadius: -4,
                     offset:       const Offset(0, 8)),
                 ],
@@ -530,15 +513,14 @@ class _LiquidGlassNavBar extends StatelessWidget {
                       selected: i == currentIndex,
                       c:        c))))),
             ),
-            // Specular highlight superiore
             Positioned(top: 0, left: 20, right: 20,
-              child: Container(height: isDark ? 0.7 : 1.0,
+              child: Container(
+                height: isDark ? 0.7 : 1.0,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(colors: [
                     Colors.transparent,
                     c.navSpecular,
-                    Colors.transparent,
-                  ])))),
+                    Colors.transparent])))),
           ]),
         ),
       ),
@@ -569,12 +551,10 @@ class _LiquidNavItemState extends State<_LiquidNavItem>
   @override
   void initState() {
     super.initState();
-    _ctrl  = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 350));
-    _scale = CurvedAnimation(
-        parent: _ctrl, curve: Curves.easeOutBack);
-    _width = CurvedAnimation(
-        parent: _ctrl, curve: Curves.easeInOutCubic);
+    _ctrl  = AnimationController(vsync: this,
+        duration: const Duration(milliseconds: 350));
+    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack);
+    _width = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOutCubic);
     if (widget.selected) _ctrl.forward();
   }
 
@@ -591,8 +571,7 @@ class _LiquidNavItemState extends State<_LiquidNavItem>
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
-    return SizedBox(
-      height: 68,
+    return SizedBox(height: 68,
       child: AnimatedBuilder(
         animation: _ctrl,
         builder: (_, __) {
@@ -605,7 +584,7 @@ class _LiquidNavItemState extends State<_LiquidNavItem>
                       Container(decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [BoxShadow(
-                            color: MarkFitColors.teal.withOpacity(0.4),
+                            color: MarkFitColors.teal.withOpacity(0.40),
                             blurRadius: 14, spreadRadius: -2)])),
                       Container(decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -619,13 +598,13 @@ class _LiquidNavItemState extends State<_LiquidNavItem>
                             offset: const Offset(0, 3))])),
                       Positioned(top: 1,
                         child: Container(
-                            width: pillW * 0.4, height: 4,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(colors: [
-                                Colors.transparent,
-                                Colors.white.withOpacity(0.35),
-                                Colors.transparent]),
-                              borderRadius: BorderRadius.circular(2)))),
+                          width: pillW * 0.4, height: 4,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: [
+                              Colors.transparent,
+                              Colors.white.withOpacity(0.35),
+                              Colors.transparent]),
+                            borderRadius: BorderRadius.circular(2)))),
                       Transform.scale(scale: iconScale,
                         child: Icon(widget.item.icon,
                             color: Colors.white, size: 21)),
@@ -641,7 +620,6 @@ class _LiquidNavItemState extends State<_LiquidNavItem>
                         color: c.navUnselected)),
                   ]),
           );
-        },
-      ));
+        }));
   }
 }

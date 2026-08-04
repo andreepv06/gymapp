@@ -1,12 +1,12 @@
 import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 
-/// MarkFit Design System — token centralizzati dark/light.
-/// Accesso: context.mfc  |  Utility: context.isDarkMode
+/// MarkFit Design System centralizzato.
+/// Accesso rapido: context.mfc  |  Utility: context.isDarkMode
 @immutable
 class MarkFitColors extends ThemeExtension<MarkFitColors> {
 
-  // ── Accent fissi (identici in entrambi i temi) ────────────
+  // ── Accent costanti (identici in entrambi i temi) ─────────
   static const cyan    = Color(0xFF00E5FF);
   static const teal    = Color(0xFF00D4AA);
   static const tealDk  = Color(0xFF00A880);
@@ -19,34 +19,28 @@ class MarkFitColors extends ThemeExtension<MarkFitColors> {
 
   // ── Token adattativi ─────────────────────────────────────
 
-  // Background
   final Color scaffoldBg;
   final List<Color> bgGradient;
 
-  // Glass card
   final Color glassCard;
   final Color glassCardStrong;
   final Color glassCardInset;
   final Color glassBorder;
-  final Color glassBorderFocus;
+  final Color glassBorderAccent;
   final double glassBlur;
   final double glassBlurStrong;
 
-  // Testo
   final Color textPrimary;
   final Color textSecondary;
   final Color textTertiary;
   final Color textOnAccent;
-  final Color textOnGlass;
+  final Color textDisabled;
 
-  // Divider
   final Color divider;
-
-  // Elevazione
   final bool showElevation;
   final Color elevationColor;
+  final double elevationBlur;
 
-  // Navbar
   final Color navBg;
   final Color navBorder;
   final Color navUnselected;
@@ -54,20 +48,18 @@ class MarkFitColors extends ThemeExtension<MarkFitColors> {
   final Color navSpecular;
   final Color navShadow;
 
-  // Input
   final Color inputBg;
   final Color inputBorder;
   final Color inputBorderFocus;
   final Color inputHint;
   final Color inputText;
 
-  // Icone
   final Color iconPrimary;
   final Color iconSecondary;
+  final Color iconOnAccent;
 
-  // Sheet / Dialog
   final Color sheetBg;
-  final Color sheetBorder;
+  final Color sheetHandle;
 
   const MarkFitColors({
     required this.scaffoldBg,
@@ -76,17 +68,18 @@ class MarkFitColors extends ThemeExtension<MarkFitColors> {
     required this.glassCardStrong,
     required this.glassCardInset,
     required this.glassBorder,
-    required this.glassBorderFocus,
+    required this.glassBorderAccent,
     required this.glassBlur,
     required this.glassBlurStrong,
     required this.textPrimary,
     required this.textSecondary,
     required this.textTertiary,
     required this.textOnAccent,
-    required this.textOnGlass,
+    required this.textDisabled,
     required this.divider,
     required this.showElevation,
     required this.elevationColor,
+    required this.elevationBlur,
     required this.navBg,
     required this.navBorder,
     required this.navUnselected,
@@ -100,13 +93,14 @@ class MarkFitColors extends ThemeExtension<MarkFitColors> {
     required this.inputText,
     required this.iconPrimary,
     required this.iconSecondary,
+    required this.iconOnAccent,
     required this.sheetBg,
-    required this.sheetBorder,
+    required this.sheetHandle,
   });
 
-  // ═══════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════
   // DARK — Jarvis / Iron Man HUD (INVARIATO)
-  // ═══════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════
 
   static const dark = MarkFitColors(
     scaffoldBg:  Color(0xFF060810),
@@ -116,110 +110,119 @@ class MarkFitColors extends ThemeExtension<MarkFitColors> {
     glassCardStrong:  Color(0x1AFFFFFF),
     glassCardInset:   Color(0x0DFFFFFF),
     glassBorder:      Color(0x1FFFFFFF),
-    glassBorderFocus: Color(0x4D00E5FF),
+    glassBorderAccent: Color(0x4D00E5FF),
     glassBlur:        10.0,
     glassBlurStrong:  20.0,
 
     textPrimary:   Color(0xFFFFFFFF),
     textSecondary: Color(0xB3FFFFFF),
-    textTertiary:  Color(0x66FFFFFF),
+    textTertiary:  Color(0x73FFFFFF),
     textOnAccent:  Color(0xFFFFFFFF),
-    textOnGlass:   Color(0xFFFFFFFF),
+    textDisabled:  Color(0x40FFFFFF),
 
-    divider:       Color(0x14FFFFFF),
-    showElevation: false,
-    elevationColor: Color(0x00000000),
+    divider:         Color(0x14FFFFFF),
+    showElevation:   false,
+    elevationColor:  Color(0x00000000),
+    elevationBlur:   0.0,
 
     navBg:           Color(0x5E111827),
     navBorder:       Color(0x1EFFFFFF),
-    navUnselected:   Color(0x73FFFFFF),
+    navUnselected:   Color(0x80FFFFFF),
     navPillGradient: [Color(0xFF00D4AA), Color(0xFF00A880)],
     navSpecular:     Color(0x5CFFFFFF),
-    navShadow:       Color(0x8C000000),
+    navShadow:       Color(0x99000000),
 
     inputBg:          Color(0x0DFFFFFF),
     inputBorder:      Color(0x26FFFFFF),
-    inputBorderFocus: Color(0x6600D4AA),
+    inputBorderFocus: Color(0x8000D4AA),
     inputHint:        Color(0x4DFFFFFF),
     inputText:        Color(0xFFFFFFFF),
 
     iconPrimary:   Color(0xFFFFFFFF),
     iconSecondary: Color(0x99FFFFFF),
+    iconOnAccent:  Color(0xFFFFFFFF),
 
-    sheetBg:     Color(0xFF060B14),
-    sheetBorder: Color(0x2600E5FF),
+    sheetBg:     Color(0xFF080E18),
+    sheetHandle: Color(0x33FFFFFF),
   );
 
-  // ═══════════════════════════════════════════════════════════
-  // LIGHT — iOS Liquid Glass con CONTRASTO ACCESSIBILE
+  // ════════════════════════════════════════════════════════════
+  // LIGHT — iOS Liquid Glass con CONTRASTO PROFESSIONALE
   //
-  // Principi:
-  //  • Background: blu-grigio medio (#E8EDF5) — NON bianco puro
-  //  • Card: bianco satinato CHIARAMENTE DISTINTO dal background
-  //  • Bordi: scuri e VISIBILI (18-24% near-black)
-  //  • Testo primario: quasi-nero (#080D1A)
-  //  • Testo secondario: grigio SCURO (#1F2D40) — mai troppo chiaro
-  //  • Testo terziario: grigio MEDIO (#4D5E75) — LEGGIBILE
-  //  • Navbar: bianco solido con bordo chiaramente visibile
-  //  • Ombre: più forti — la PROFONDITÀ in light mode viene dalle ombre
-  //  • La trasparenza NON è il meccanismo principale in light mode
-  // ═══════════════════════════════════════════════════════════
+  // FILOSOFIA:
+  //   In dark mode il contrasto viene dalla trasparenza (bianco su nero).
+  //   In light mode NON funziona così: bianco su quasi-bianco = invisibile.
+  //   In light mode il contrasto viene da:
+  //     1. Background CHIARAMENTE BLU-GRIGIO (non bianco)
+  //     2. Card BIANCHE SOLIDE (contrasto netto contro il background)
+  //     3. Bordi SOLIDI VISIBILI (non trasparenti)
+  //     4. Testi QUASI-NERI con gerarchia netta
+  //     5. Ombre PRONUNCIATE (la "profondità" in light = ombra, non blur)
+  //
+  // WCAG AA compliance:
+  //   textPrimary su glassCard   → contrasto ≥ 15:1  ✓
+  //   textSecondary su glassCard → contrasto ≥ 7:1   ✓
+  //   textTertiary su glassCard  → contrasto ≥ 4.5:1 ✓
+  //   navUnselected su navBg     → contrasto ≥ 4.5:1 ✓
+  // ════════════════════════════════════════════════════════════
 
   static const light = MarkFitColors(
-    // Background: grigio-azzurro medio — crea il contrasto necessario
-    // con le card bianche. NON è bianco puro.
-    scaffoldBg:  Color(0xFFE5EAF2),
-    bgGradient:  [Color(0xFFE8EDF5), Color(0xFFE2E8F0), Color(0xFFECF0F7)],
+    // Background: blu-slate medio — CHIARAMENTE distinto dalle card bianche
+    // #D8E2EE è abbastanza scuro da far risaltare il bianco ma abbastanza
+    // chiaro da non sembrare un'app dark
+    scaffoldBg:  Color(0xFFD8E2EE),
+    bgGradient:  [Color(0xFFD8E2EE), Color(0xFFD2DCE9), Color(0xFFDDE6F0)],
 
-    // Card: chiaramente bianchi contro il background grigio-blu.
-    // L'effetto Glass viene da:
-    //   1. Il riempimento bianco (chiaramente diverso dal background)
-    //   2. Il blur (effetto frosted)
-    //   3. L'ombra (profondità — il meccanismo principale in light)
-    //   4. Il bordo (definisce chiaramente i bordi)
-    glassCard:        Color(0xEAFFFFFF),  // 92% bianco
-    glassCardStrong:  Color(0xF7FFFFFF),  // 97% bianco — per dialog/sheet
-    glassCardInset:   Color(0xD6FFFFFF),  // 84% bianco — per input/inset
+    // Card: BIANCO SOLIDO — nessuna opacity, contrasto netto con il background
+    glassCard:        Color(0xFFFFFFFF),
+    glassCardStrong:  Color(0xFFF7FAFD),
+    glassCardInset:   Color(0xFFEDF2F8),
 
-    // Bordi CHIARAMENTE VISIBILI — non quasi-trasparenti
-    glassBorder:      Color(0x320A0F23),  // 20% near-black
-    glassBorderFocus: Color(0xD400897B),  // 83% teal
+    // Bordi: COLORI SOLIDI VISIBILI — non opacity-based
+    // #8BA4BE è un blu-grigio medio che si vede su bianco
+    glassBorder:      Color(0xFF8BA4BE),
+    glassBorderAccent: Color(0xFF00897B),
 
-    glassBlur:        20.0,  // più forte in light mode
+    glassBlur:        20.0,  // blur maggiore in light per effetto vetro
     glassBlurStrong:  32.0,
 
-    // TESTO: massimo contrasto — accessibilità WCAG AA/AAA
-    textPrimary:   Color(0xFF080D1A),  // quasi-nero (contrasto > 18:1)
-    textSecondary: Color(0xFF1F2D40),  // grigio-navy scuro (contrasto > 8:1)
-    textTertiary:  Color(0xFF4D5E75),  // grigio medio LEGGIBILE (contrasto > 4.5:1)
+    // TESTO — gerarchia netta con contrasti WCAG AA
+    textPrimary:   Color(0xFF071525),  // quasi-nero navy (contrasto 19:1 su white)
+    textSecondary: Color(0xFF1A3050),  // navy scuro  (contrasto 10:1 su white)
+    textTertiary:  Color(0xFF3E5A78),  // slate medio  (contrasto 5.2:1 su white)
     textOnAccent:  Color(0xFFFFFFFF),
-    textOnGlass:   Color(0xFF080D1A),
+    textDisabled:  Color(0xFFA0B4C8),
 
-    divider:       Color(0x280A0F23),  // 16% — linee divisorie visibili
-    showElevation: true,
-    // Ombra FORTE — la profondità in light mode viene principalmente da qui
-    elevationColor: Color(0x3C0A0F23),  // 24% — ombra pronunciata
+    // Divider: visible line between elements
+    divider:        Color(0xFFB8CBE0),
+    showElevation:  true,
+    // Ombra FORTE — in light mode la profondità viene principalmente da qui
+    elevationColor: Color(0x50071525),
+    elevationBlur:  16.0,
 
-    // Navbar: vetro bianco CHIARAMENTE VISIBILE con bordo marcato
-    navBg:           Color(0xEDFFFFFF),  // 93% bianco
-    navBorder:       Color(0x400A0F23),  // 25% near-black — VISIBILE
-    navUnselected:   Color(0xFF374152),  // grigio scuro — LEGGIBILE
+    // Navbar: bianco SOLIDO con bordo visibile e ombra forte
+    navBg:           Color(0xFFFFFFFF),
+    navBorder:       Color(0xFF7A98B8),   // blu-slate — chiaramente visibile
+    navUnselected:   Color(0xFF3E5A78),   // contrasto 5.2:1 su white ✓
     navPillGradient: [Color(0xFF00897B), Color(0xFF006B62)],
-    navSpecular:     Color(0x80FFFFFF),
-    navShadow:       Color(0x4A0A0F23),  // ombra forte sotto la navbar
+    navSpecular:     Color(0x70FFFFFF),
+    navShadow:       Color(0x60071525),   // ombra forte sotto la navbar
 
-    // Input: quasi bianchi con bordo chiaramente visibile
-    inputBg:          Color(0xF3FFFFFF),  // 95% bianco
-    inputBorder:      Color(0x320A0F23),  // 20% — VISIBILE
-    inputBorderFocus: Color(0xCC00897B),  // 80% teal
-    inputHint:        Color(0xFF7B8CA0),  // grigio medio — leggibile
-    inputText:        Color(0xFF080D1A),  // quasi-nero
+    // Input: sfondo quasi bianco con bordo visibile
+    inputBg:          Color(0xFFF0F6FF),
+    inputBorder:      Color(0xFF7A98B8),
+    inputBorderFocus: Color(0xFF00897B),
+    inputHint:        Color(0xFF6B8299),
+    inputText:        Color(0xFF071525),
 
-    iconPrimary:   Color(0xFF080D1A),  // quasi-nero
-    iconSecondary: Color(0xFF374152),  // grigio scuro
+    // Icone: stessa gerarchia del testo
+    iconPrimary:   Color(0xFF071525),
+    iconSecondary: Color(0xFF3E5A78),
+    iconOnAccent:  Color(0xFFFFFFFF),
 
-    sheetBg:     Color(0xFFF2F5FA),  // grigio-blu molto chiaro
-    sheetBorder: Color(0x2800897B),  // 16% teal
+    // Sheet: leggermente diverso dalla card per distinguerlo
+    sheetBg:     Color(0xFFF2F7FC),
+    sheetHandle: Color(0xFFB8CBE0),
   );
 
   // ── copyWith ─────────────────────────────────────────────
@@ -228,17 +231,17 @@ class MarkFitColors extends ThemeExtension<MarkFitColors> {
   MarkFitColors copyWith({
     Color? scaffoldBg, List<Color>? bgGradient,
     Color? glassCard, Color? glassCardStrong, Color? glassCardInset,
-    Color? glassBorder, Color? glassBorderFocus,
+    Color? glassBorder, Color? glassBorderAccent,
     double? glassBlur, double? glassBlurStrong,
     Color? textPrimary, Color? textSecondary, Color? textTertiary,
-    Color? textOnAccent, Color? textOnGlass, Color? divider,
-    bool? showElevation, Color? elevationColor,
+    Color? textOnAccent, Color? textDisabled, Color? divider,
+    bool? showElevation, Color? elevationColor, double? elevationBlur,
     Color? navBg, Color? navBorder, Color? navUnselected,
     List<Color>? navPillGradient, Color? navSpecular, Color? navShadow,
     Color? inputBg, Color? inputBorder, Color? inputBorderFocus,
     Color? inputHint, Color? inputText,
-    Color? iconPrimary, Color? iconSecondary,
-    Color? sheetBg, Color? sheetBorder,
+    Color? iconPrimary, Color? iconSecondary, Color? iconOnAccent,
+    Color? sheetBg, Color? sheetHandle,
   }) => MarkFitColors(
     scaffoldBg:       scaffoldBg       ?? this.scaffoldBg,
     bgGradient:       bgGradient       ?? this.bgGradient,
@@ -246,17 +249,18 @@ class MarkFitColors extends ThemeExtension<MarkFitColors> {
     glassCardStrong:  glassCardStrong  ?? this.glassCardStrong,
     glassCardInset:   glassCardInset   ?? this.glassCardInset,
     glassBorder:      glassBorder      ?? this.glassBorder,
-    glassBorderFocus: glassBorderFocus ?? this.glassBorderFocus,
+    glassBorderAccent: glassBorderAccent ?? this.glassBorderAccent,
     glassBlur:        glassBlur        ?? this.glassBlur,
     glassBlurStrong:  glassBlurStrong  ?? this.glassBlurStrong,
     textPrimary:      textPrimary      ?? this.textPrimary,
     textSecondary:    textSecondary    ?? this.textSecondary,
     textTertiary:     textTertiary     ?? this.textTertiary,
     textOnAccent:     textOnAccent     ?? this.textOnAccent,
-    textOnGlass:      textOnGlass      ?? this.textOnGlass,
+    textDisabled:     textDisabled     ?? this.textDisabled,
     divider:          divider          ?? this.divider,
     showElevation:    showElevation    ?? this.showElevation,
     elevationColor:   elevationColor   ?? this.elevationColor,
+    elevationBlur:    elevationBlur    ?? this.elevationBlur,
     navBg:            navBg            ?? this.navBg,
     navBorder:        navBorder        ?? this.navBorder,
     navUnselected:    navUnselected    ?? this.navUnselected,
@@ -270,8 +274,9 @@ class MarkFitColors extends ThemeExtension<MarkFitColors> {
     inputText:        inputText        ?? this.inputText,
     iconPrimary:      iconPrimary      ?? this.iconPrimary,
     iconSecondary:    iconSecondary    ?? this.iconSecondary,
+    iconOnAccent:     iconOnAccent     ?? this.iconOnAccent,
     sheetBg:          sheetBg          ?? this.sheetBg,
-    sheetBorder:      sheetBorder      ?? this.sheetBorder,
+    sheetHandle:      sheetHandle      ?? this.sheetHandle,
   );
 
   @override
@@ -287,17 +292,18 @@ class MarkFitColors extends ThemeExtension<MarkFitColors> {
       glassCardStrong:  lc(glassCardStrong,  other.glassCardStrong),
       glassCardInset:   lc(glassCardInset,   other.glassCardInset),
       glassBorder:      lc(glassBorder,      other.glassBorder),
-      glassBorderFocus: lc(glassBorderFocus, other.glassBorderFocus),
+      glassBorderAccent: lc(glassBorderAccent, other.glassBorderAccent),
       glassBlur:        ld(glassBlur,        other.glassBlur),
       glassBlurStrong:  ld(glassBlurStrong,  other.glassBlurStrong),
       textPrimary:      lc(textPrimary,      other.textPrimary),
       textSecondary:    lc(textSecondary,    other.textSecondary),
       textTertiary:     lc(textTertiary,     other.textTertiary),
       textOnAccent:     lc(textOnAccent,     other.textOnAccent),
-      textOnGlass:      lc(textOnGlass,      other.textOnGlass),
+      textDisabled:     lc(textDisabled,     other.textDisabled),
       divider:          lc(divider,          other.divider),
       showElevation:    t < 0.5 ? showElevation : other.showElevation,
       elevationColor:   lc(elevationColor,   other.elevationColor),
+      elevationBlur:    ld(elevationBlur,    other.elevationBlur),
       navBg:            lc(navBg,            other.navBg),
       navBorder:        lc(navBorder,        other.navBorder),
       navUnselected:    lc(navUnselected,     other.navUnselected),
@@ -312,14 +318,15 @@ class MarkFitColors extends ThemeExtension<MarkFitColors> {
       inputText:        lc(inputText,        other.inputText),
       iconPrimary:      lc(iconPrimary,      other.iconPrimary),
       iconSecondary:    lc(iconSecondary,    other.iconSecondary),
+      iconOnAccent:     lc(iconOnAccent,     other.iconOnAccent),
       sheetBg:          lc(sheetBg,          other.sheetBg),
-      sheetBorder:      lc(sheetBorder,      other.sheetBorder),
+      sheetHandle:      lc(sheetHandle,      other.sheetHandle),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// Estensioni BuildContext
+// BuildContext extensions
 // ─────────────────────────────────────────────────────────────
 
 extension MarkFitContextX on BuildContext {
@@ -331,5 +338,6 @@ extension MarkFitContextX on BuildContext {
         : MarkFitColors.light;
   }
 
-  bool get isDarkMode => Theme.of(this).brightness == Brightness.dark;
+  bool get isDarkMode =>
+      Theme.of(this).brightness == Brightness.dark;
 }

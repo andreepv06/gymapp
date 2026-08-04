@@ -5,12 +5,17 @@ import 'package:flutter/material.dart';
 import '../core/theme/markfit_colors.dart';
 
 // ─────────────────────────────────────────────────────────────
-// CosmicBackground — sfondo adattivo light/dark.
+// CosmicBackground — sfondo adattivo dark/light.
 //
 // DARK:  stelle animate (Jarvis HUD)
-// LIGHT: frost blobs radiali (iOS Liquid Glass)
+// LIGHT: frost blobs radiali morbidi (iOS Liquid Glass)
 //
-// subtle = true → intensità ridotta (schermate secondary pushed)
+// In light mode il background #D8E2EE crea già il contrasto
+// necessario con le card bianche — i blob aggiungono profondità
+// senza interferire con la leggibilità.
+//
+// subtle = true → meno stelle / blob più piccoli
+//   (per schermate pushed: active_session, workout_detail, ecc.)
 // ─────────────────────────────────────────────────────────────
 
 class CosmicBackground extends StatefulWidget {
@@ -38,15 +43,12 @@ class _CosmicBackgroundState extends State<CosmicBackground>
     _ctrl = AnimationController(
         vsync: this, duration: const Duration(seconds: 18))
       ..repeat();
-    final count = widget.subtle ? 40 : 70;
+    final count = widget.subtle ? 38 : 70;
     _stars = List.generate(count, (_) => _Star.random());
   }
 
   @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
+  void dispose() { _ctrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -59,8 +61,8 @@ class _CosmicBackgroundState extends State<CosmicBackground>
       Positioned.fill(child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin:  Alignment.topLeft,
-            end:    Alignment.bottomRight,
+            begin: Alignment.topLeft,
+            end:   Alignment.bottomRight,
             colors: c.bgGradient)))),
 
       // Dark: stelle animate
@@ -72,23 +74,24 @@ class _CosmicBackgroundState extends State<CosmicBackground>
                 stars: _stars, progress: _ctrl.value,
                 subtle: widget.subtle)))),
 
-      // Light: frost blobs colorati
+      // Light: frost blobs — dimensioni ridotte per non
+      // interferire con la leggibilità delle card
       if (!isDark) ...[
-        Positioned(right: -80, top: -80,
+        Positioned(right: -60, top: -60,
           child: _FrostBlob(
-              size:    widget.subtle ? 200 : 280,
+              size:    widget.subtle ? 180 : 260,
               color:   MarkFitColors.teal,
-              opacity: widget.subtle ? 0.05 : 0.08)),
-        Positioned(left: -60, bottom: 160,
+              opacity: widget.subtle ? 0.06 : 0.09)),
+        Positioned(left: -50, bottom: 140,
           child: _FrostBlob(
-              size:    widget.subtle ? 160 : 220,
+              size:    widget.subtle ? 140 : 200,
               color:   MarkFitColors.blue,
-              opacity: widget.subtle ? 0.04 : 0.07)),
-        Positioned(right: 40, bottom: -40,
+              opacity: widget.subtle ? 0.05 : 0.08)),
+        Positioned(right: 30, bottom: -30,
           child: _FrostBlob(
-              size:    widget.subtle ? 130 : 180,
+              size:    widget.subtle ? 110 : 160,
               color:   MarkFitColors.indigo,
-              opacity: widget.subtle ? 0.03 : 0.06)),
+              opacity: widget.subtle ? 0.04 : 0.06)),
       ],
 
       // Content
@@ -104,7 +107,7 @@ class _Star {
   factory _Star.random() {
     final rnd = math.Random();
     return _Star(
-      x:     rnd.nextDouble(), y:  rnd.nextDouble(),
+      x:     rnd.nextDouble(), y:     rnd.nextDouble(),
       r:     rnd.nextDouble() * 1.3 + 0.3,
       op:    rnd.nextDouble() * 0.55 + 0.1,
       speed: rnd.nextDouble() * 0.5 + 0.15,
@@ -118,6 +121,7 @@ class _StarPainter extends CustomPainter {
   final bool        subtle;
   const _StarPainter({required this.stars, required this.progress,
       this.subtle = false});
+
   @override
   void paint(Canvas canvas, Size size) {
     final opFactor = subtle ? 0.6 : 1.0;
@@ -130,6 +134,7 @@ class _StarPainter extends CustomPainter {
             (s.op * twinkle * opFactor).clamp(0.0, 1.0)));
     }
   }
+
   @override
   bool shouldRepaint(_StarPainter old) =>
       old.progress != progress || old.subtle != subtle;
@@ -140,6 +145,7 @@ class _FrostBlob extends StatelessWidget {
   final Color  color;
   const _FrostBlob({required this.size, required this.color,
       required this.opacity});
+
   @override
   Widget build(BuildContext context) => Container(
     width: size, height: size,

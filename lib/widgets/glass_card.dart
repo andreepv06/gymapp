@@ -1,6 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-
+import 'package:flutter/services.dart';
 import '../core/theme/markfit_colors.dart';
 
 // ─────────────────────────────────────────────────────────────
@@ -25,6 +25,12 @@ import '../core/theme/markfit_colors.dart';
 //
 // Card inset (input fields, tag containers):
 //   GlassCard(inset: true, child: MyContent())
+//
+// Card tappabile:
+//   GlassCard(onTap: () {}, child: MyContent())
+//
+// Card con fill colorato (QuickWorkoutPanel, tile sport):
+//   GlassCard(tintColor: color.withOpacity(0.12), child: MyContent())
 // ─────────────────────────────────────────────────────────────
 
 class GlassCard extends StatelessWidget {
@@ -35,6 +41,11 @@ class GlassCard extends StatelessWidget {
   /// Colore accent per il bordo (override glassBorder).
   /// Usato per card tematiche (teal = workout, red = danger, ecc.)
   final Color? accentColor;
+
+  /// Override del colore fill.
+  /// Ha precedenza su prominent/inset/glassCard.
+  /// Usato da QuickWorkoutPanel per tile colorati.
+  final Color? tintColor;
 
   /// Larghezza bordo accent. Default adattivo (0.8 dark, 1.2 light).
   final double? accentBorderWidth;
@@ -53,17 +64,22 @@ class GlassCard extends StatelessWidget {
   /// Override della forza dell'ombra. Default: c.elevationColor.
   final Color? shadowColorOverride;
 
+  /// Rende la card tappabile con haptic feedback.
+  final VoidCallback? onTap;
+
   const GlassCard({
     super.key,
     required this.child,
     this.padding,
     this.borderRadius = 16,
     this.accentColor,
+    this.tintColor,
     this.accentBorderWidth,
     this.prominent = false,
     this.inset = false,
     this.blurOverride,
     this.shadowColorOverride,
+    this.onTap,
   }) : assert(!(prominent && inset),
             'GlassCard: prominent e inset non possono essere entrambi true');
 
@@ -73,12 +89,13 @@ class GlassCard extends StatelessWidget {
     final isDark = context.isDarkMode;
     final br     = BorderRadius.circular(borderRadius);
 
-    // Selezione fill
-    final Color fill = inset
-        ? c.glassCardInset
-        : prominent
-            ? c.glassCardStrong
-            : c.glassCard;
+    // Selezione fill: tintColor ha priorità assoluta
+    final Color fill = tintColor ??
+        (inset
+            ? c.glassCardInset
+            : prominent
+                ? c.glassCardStrong
+                : c.glassCard);
 
     // Bordo: accent se specificato, altrimenti glassBorder
     final Color border = accentColor != null
@@ -92,7 +109,7 @@ class GlassCard extends StatelessWidget {
     // Blur
     final double blur = blurOverride ?? c.glassBlur;
 
-    // Ombre: solo in light mode + optionalmente con accent
+    // Ombre: solo in light mode + opzionalmente con accent
     List<BoxShadow>? shadows;
     if (c.showElevation) {
       shadows = [
@@ -121,7 +138,7 @@ class GlassCard extends StatelessWidget {
       ];
     }
 
-    return ClipRRect(
+    Widget card = ClipRRect(
       borderRadius: br,
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
@@ -137,6 +154,17 @@ class GlassCard extends StatelessWidget {
         ),
       ),
     );
+
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap!();
+        },
+        child: card,
+      );
+    }
+    return card;
   }
 }
 
@@ -242,8 +270,8 @@ class GlassSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GlassCard(
-      borderRadius: borderRadius,
-      child: Column(children: children));
+        borderRadius: borderRadius,
+        child: Column(children: children));
   }
 }
 
@@ -258,9 +286,9 @@ class GlassDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 0.5,
-      margin: EdgeInsets.symmetric(horizontal: indent),
-      color: context.mfc.divider);
+        height: 0.5,
+        margin: EdgeInsets.symmetric(horizontal: indent),
+        color: context.mfc.divider);
   }
 }
 
@@ -328,7 +356,8 @@ class GlassInputField extends StatelessWidget {
               hintStyle: TextStyle(color: c.inputHint, fontSize: 14),
               prefixIcon: prefixIcon != null
                   ? Icon(prefixIcon,
-                      color: c.iconSecondary, size: 17) : null,
+                      color: c.iconSecondary, size: 17)
+                  : null,
               suffixIcon: suffix,
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
@@ -352,7 +381,6 @@ class GlassSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.mfc;
     final color = accentColor ?? MarkFitColors.cyan;
     return Padding(
       padding: const EdgeInsets.only(left: 4),
@@ -388,7 +416,8 @@ class GlassChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        padding: const EdgeInsets.symmetric(
+            horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: selected
               ? accentColor.withOpacity(0.15)
@@ -407,6 +436,7 @@ class GlassChip extends StatelessWidget {
         child: Text(label, style: TextStyle(
             color: selected ? accentColor : c.textTertiary,
             fontSize: 12,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500))));
+            fontWeight: selected
+                ? FontWeight.w700 : FontWeight.w500))));
   }
 }

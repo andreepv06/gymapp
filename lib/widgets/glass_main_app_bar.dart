@@ -9,7 +9,7 @@ import '../core/theme/markfit_colors.dart';
 import '../providers/auth_provider.dart';
 
 // ─────────────────────────────────────────────────────────────
-// GlassToolbarAction
+// GlassToolbarAction — azione iOS 26 ToolbarItemGroup
 // ─────────────────────────────────────────────────────────────
 
 class GlassToolbarAction {
@@ -61,23 +61,22 @@ class GlassMainAppBar extends StatelessWidget {
         filter: ImageFilter.blur(
             sigmaX: c.glassBlurStrong, sigmaY: c.glassBlurStrong),
         child: Stack(children: [
-
           Positioned.fill(child: CustomPaint(
               painter: _RadialDotsPainter(accentColor, isDark))),
-
           Container(
             decoration: BoxDecoration(
               color: c.glassCard,
               border: Border(bottom: BorderSide(
-                  color: accentColor.withOpacity(isDark ? 0.20 : 0.15),
-                  width: isDark ? 0.6 : 0.8)),
+                  color: accentColor.withOpacity(isDark ? 0.20 : 0.25),
+                  width: isDark ? 0.6 : 1.0)),
               boxShadow: c.showElevation
-                  ? [BoxShadow(color: c.elevationColor, blurRadius: 8)]
+                  ? [BoxShadow(
+                      color: c.elevationColor,
+                      blurRadius: 8, offset: const Offset(0, 2))]
                   : null),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Row(children: [
 
-              // Screen icon
               Container(width: 32, height: 32,
                 decoration: BoxDecoration(
                   color: accentColor.withOpacity(isDark ? 0.12 : 0.10),
@@ -85,7 +84,6 @@ class GlassMainAppBar extends StatelessWidget {
                 child: Icon(screenIcon, size: 16, color: accentColor)),
               const SizedBox(width: 10),
 
-              // Title + subtitle
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -102,8 +100,7 @@ class GlassMainAppBar extends StatelessWidget {
 
               if (primaryActions.isNotEmpty) ...[
                 const SizedBox(width: 8),
-                _ActionPill(
-                    actions: primaryActions, c: c,
+                _ActionPill(actions: primaryActions, c: c,
                     accentColor: accentColor, isDark: isDark),
               ],
               const SizedBox(width: 8),
@@ -126,11 +123,10 @@ class _ActionPill extends StatelessWidget {
   final List<GlassToolbarAction> actions;
   final MarkFitColors c;
   final Color accentColor;
-  final bool isDark;
+  final bool  isDark;
 
-  const _ActionPill({
-    required this.actions, required this.c,
-    required this.accentColor, required this.isDark});
+  const _ActionPill({required this.actions, required this.c,
+      required this.accentColor, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -143,17 +139,19 @@ class _ActionPill extends StatelessWidget {
             color: c.glassCardStrong,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-                color: c.glassBorder, width: isDark ? 0.8 : 1.0),
+                color: c.glassBorder, width: isDark ? 0.8 : 1.1),
             boxShadow: c.showElevation
-                ? [BoxShadow(color: c.elevationColor, blurRadius: 8,
-                    offset: const Offset(0, 2))]
+                ? [BoxShadow(color: c.elevationColor,
+                    blurRadius: 8, offset: const Offset(0, 2))]
                 : null),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 6, vertical: 3),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             for (int i = 0; i < actions.length; i++) ...[
               if (i > 0) ...[
                 const SizedBox(width: 2),
-                Container(width: 0.5, height: 14, color: c.divider),
+                Container(width: 0.5, height: 14,
+                    color: c.divider),
                 const SizedBox(width: 2),
               ],
               _ActionBtn(action: actions[i], c: c),
@@ -164,7 +162,7 @@ class _ActionPill extends StatelessWidget {
 
 class _ActionBtn extends StatelessWidget {
   final GlassToolbarAction action;
-  final MarkFitColors c;
+  final MarkFitColors      c;
   const _ActionBtn({required this.action, required this.c});
 
   @override
@@ -201,11 +199,10 @@ class _ProfilePill extends StatelessWidget {
   final AuthProvider  auth;
   final MarkFitColors c;
   final VoidCallback? onTap;
-  final bool isDark;
+  final bool          isDark;
 
-  const _ProfilePill({
-    required this.auth, required this.c,
-    this.onTap, required this.isDark});
+  const _ProfilePill({required this.auth, required this.c,
+      this.onTap, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -217,28 +214,31 @@ class _ProfilePill extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
             decoration: BoxDecoration(
-              color: MarkFitColors.teal.withOpacity(isDark ? 0.12 : 0.10),
+              color: MarkFitColors.teal.withOpacity(
+                  isDark ? 0.12 : 0.10),
               borderRadius: BorderRadius.circular(22),
               border: Border.all(
-                  color: MarkFitColors.teal.withOpacity(isDark ? 0.35 : 0.45),
-                  width: isDark ? 0.9 : 1.2),
+                  color: MarkFitColors.teal.withOpacity(
+                      isDark ? 0.35 : 0.50),
+                  width: isDark ? 0.9 : 1.3),
               boxShadow: c.showElevation
                   ? [BoxShadow(
                       color: MarkFitColors.teal.withOpacity(0.15),
-                      blurRadius: 8, offset: const Offset(0, 2))]
+                      blurRadius: 8,
+                      offset: const Offset(0, 2))]
                   : null),
             padding: const EdgeInsets.all(4),
             child: _MiniAvatar(auth: auth, isDark: isDark),
-          ),        // chiude Container
-        ),          // chiude BackdropFilter
-      ),            // chiude ClipRRect
-    );              // chiude GestureDetector
+          ),
+        ),
+      ),
+    );
   }
 }
 
 class _MiniAvatar extends StatelessWidget {
   final AuthProvider auth;
-  final bool isDark;
+  final bool         isDark;
   const _MiniAvatar({required this.auth, required this.isDark});
 
   @override
@@ -274,10 +274,10 @@ class _RadialDotsPainter extends CustomPainter {
   const _RadialDotsPainter(this.accent, this.isDark);
 
   static const _rings = [
-    (r: 44.0,  n: 12, dr: 1.6, opDark: 0.10, opLight: 0.07),
-    (r: 72.0,  n: 20, dr: 1.2, opDark: 0.07, opLight: 0.05),
-    (r: 100.0, n: 26, dr: 0.9, opDark: 0.05, opLight: 0.035),
-    (r: 128.0, n: 32, dr: 0.7, opDark: 0.04, opLight: 0.025),
+    (r: 44.0,  n: 12, dr: 1.6, opDk: 0.10, opLt: 0.07),
+    (r: 72.0,  n: 20, dr: 1.2, opDk: 0.07, opLt: 0.05),
+    (r: 100.0, n: 26, dr: 0.9, opDk: 0.05, opLt: 0.035),
+    (r: 128.0, n: 32, dr: 0.7, opDk: 0.04, opLt: 0.025),
   ];
 
   @override
@@ -285,7 +285,7 @@ class _RadialDotsPainter extends CustomPainter {
     final cx = size.width + 10.0;
     final cy = -10.0;
     for (final ring in _rings) {
-      final op    = isDark ? ring.opDark : ring.opLight;
+      final op    = isDark ? ring.opDk : ring.opLt;
       final paint = Paint()..color = accent.withOpacity(op);
       for (int i = 0; i < ring.n; i++) {
         final angle = (i / ring.n) * 2 * math.pi;
