@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/navigation/app_router.dart';
+import '../../core/theme/markfit_colors.dart';
 import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
 import '../../models/goal_models.dart';
@@ -21,7 +22,7 @@ import '../goals/goals_screen.dart';
 import '../session/active_session_screen.dart';
 import '../workouts/workout_detail_screen.dart';
 
-// ── Design tokens ─────────────────────────────────────────────
+// ── Accent tokens (fissi in entrambi i temi) ─────────────────
 const _cyan       = Color(0xFF00E5FF);
 const _teal       = Color(0xFF00D4AA);
 const _tealDk     = Color(0xFF00A880);
@@ -35,25 +36,10 @@ const _purple     = Color(0xFF8A2BE2);
 
 // ─────────────────────────────────────────────────────────────
 // HomeScreen
-//
-// FIX ARCHITETTURALE NAVBAR CLIPPING:
-// Non usa un Scaffold proprio. Essendo una tab dell'IndexedStack
-// dentro MainShell (che ha Scaffold + extendBody:true), aggiungere
-// un secondo Scaffold farebbe sì che quest'ultimo leggesse
-// MediaQuery.padding.bottom = systemBottom + navBarHeight e
-// riducesse il proprio body, creando un clip rettangolare netto.
-//
-// Senza Scaffold:
-// • Il body si estende fino al fondo dello schermo inclusa l'area
-//   dietro la navbar floating.
-// • Il BackdropFilter della navbar sfuma il contenuto che scorre
-//   dietro di essa esattamente come le app native iOS.
-// • ScaffoldMessenger.of(context) risale al MainShell → SnackBar ok.
 // ─────────────────────────────────────────────────────────────
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -68,10 +54,8 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _ringCtrl = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 1400));
-    _ringAnim = CurvedAnimation(
-        parent: _ringCtrl, curve: Curves.easeOutCubic);
+        vsync: this, duration: const Duration(milliseconds: 1400));
+    _ringAnim = CurvedAnimation(parent: _ringCtrl, curve: Curves.easeOutCubic);
     Future.microtask(() {
       if (!mounted) return;
       context.read<WorkoutProvider>().loadWorkouts();
@@ -82,12 +66,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   @override
-  void dispose() {
-    _ringCtrl.dispose();
-    super.dispose();
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────
+  void dispose() { _ringCtrl.dispose(); super.dispose(); }
 
   String _greeting() {
     final h = DateTime.now().hour;
@@ -97,27 +76,20 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   String _formattedDate() {
-    const days = [
-      'Lunedì','Martedì','Mercoledì','Giovedì',
-      'Venerdì','Sabato','Domenica',
-    ];
-    const months = [
-      'gennaio','febbraio','marzo','aprile','maggio','giugno',
-      'luglio','agosto','settembre','ottobre','novembre','dicembre',
-    ];
+    const days = ['Lunedì','Martedì','Mercoledì','Giovedì',
+        'Venerdì','Sabato','Domenica'];
+    const months = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+        'luglio','agosto','settembre','ottobre','novembre','dicembre'];
     final now = DateTime.now();
     return '${days[now.weekday - 1]} ${now.day} ${months[now.month - 1]}';
   }
 
   String _fmt(int s) {
-    final h = s ~/ 3600;
-    final m = (s % 3600) ~/ 60;
+    final h = s ~/ 3600; final m = (s % 3600) ~/ 60;
     if (h > 0) return '${h}h ${m}m';
     if (m > 0) return '${m}min';
     return '${s}s';
   }
-
-  // ── Navigazione ───────────────────────────────────────────────
 
   void _goToAllenamenti() =>
       context.read<NavigationNotifier>().navigateTo(1);
@@ -126,14 +98,10 @@ class _HomeScreenState extends State<HomeScreen>
     final wp = context.read<WorkoutProvider>();
     final sp = context.read<SessionProvider>();
     wp.loadWorkoutExercises(workout.key);
-
-    if (sp.hasActiveSession &&
-        sp.currentWorkout?.key == workout.key) {
+    if (sp.hasActiveSession && sp.currentWorkout?.key == workout.key) {
       final result = await showGlassDialog<String>(
-        context: context,
-        accentColor: _blue,
-        icon: Container(
-          width: 44, height: 44,
+        context: context, accentColor: _blue,
+        icon: Container(width: 44, height: 44,
           decoration: BoxDecoration(
             color: _blue.withOpacity(0.12), shape: BoxShape.circle,
             border: Border.all(color: _blue.withOpacity(0.4))),
@@ -143,17 +111,13 @@ class _HomeScreenState extends State<HomeScreen>
         message: 'Hai una sessione attiva per "${workout.name}".',
         actionsAxis: Axis.vertical,
         actions: [
-          GlassDialogAction(
-            label: 'Continua sessione', isDefault: true, color: _blue,
-            onTap: () => Navigator.pop(context, 'continue')),
-          GlassDialogAction(
-            label: 'Avvia nuova sessione', isDestructive: true,
-            onTap: () => Navigator.pop(context, 'new')),
-          GlassDialogAction(
-            label: 'Annulla',
-            onTap: () => Navigator.pop(context, 'cancel')),
-        ],
-      );
+          GlassDialogAction(label: 'Continua sessione', isDefault: true,
+              color: _blue, onTap: () => Navigator.pop(context, 'continue')),
+          GlassDialogAction(label: 'Avvia nuova sessione', isDestructive: true,
+              onTap: () => Navigator.pop(context, 'new')),
+          GlassDialogAction(label: 'Annulla',
+              onTap: () => Navigator.pop(context, 'cancel')),
+        ]);
       if (!mounted) return;
       if (result == null || result == 'cancel') return;
       if (result == 'new') await sp.abandonSession();
@@ -161,37 +125,29 @@ class _HomeScreenState extends State<HomeScreen>
       pushPage(context, ActiveSessionScreen(workout: workout));
       return;
     }
-
     if (sp.hasPausedSessionForWorkout(workout.key)) {
       final paused = sp.getMostRecentPausedForWorkout(workout.key);
       final result = await showGlassDialog<String>(
-        context: context,
-        accentColor: _orange,
-        icon: Container(
-          width: 44, height: 44,
+        context: context, accentColor: _orange,
+        icon: Container(width: 44, height: 44,
           decoration: BoxDecoration(
             color: _orange.withOpacity(0.12), shape: BoxShape.circle,
             border: Border.all(color: _orange.withOpacity(0.4)),
-            boxShadow: [
-              BoxShadow(color: _orange.withOpacity(0.2), blurRadius: 12)
-            ]),
+            boxShadow: [BoxShadow(
+                color: _orange.withOpacity(0.2), blurRadius: 12)]),
           child: const Icon(Icons.pause_circle_outline_rounded,
               color: _orange, size: 22)),
         title: 'Sessione in pausa',
         message: 'Hai una sessione in pausa per "${workout.name}".',
         actionsAxis: Axis.vertical,
         actions: [
-          GlassDialogAction(
-            label: 'Riprendi sessione', isDefault: true, color: _orange,
-            onTap: () => Navigator.pop(context, 'resume')),
-          GlassDialogAction(
-            label: 'Avvia nuova sessione',
-            onTap: () => Navigator.pop(context, 'new')),
-          GlassDialogAction(
-            label: 'Annulla',
-            onTap: () => Navigator.pop(context, 'cancel')),
-        ],
-      );
+          GlassDialogAction(label: 'Riprendi sessione', isDefault: true,
+              color: _orange, onTap: () => Navigator.pop(context, 'resume')),
+          GlassDialogAction(label: 'Avvia nuova sessione',
+              onTap: () => Navigator.pop(context, 'new')),
+          GlassDialogAction(label: 'Annulla',
+              onTap: () => Navigator.pop(context, 'cancel')),
+        ]);
       if (!mounted) return;
       if (result == null || result == 'cancel') return;
       if (result == 'resume' && paused != null) {
@@ -201,25 +157,20 @@ class _HomeScreenState extends State<HomeScreen>
       pushPage(context, ActiveSessionScreen(workout: workout));
       return;
     }
-
     pushPage(context, ActiveSessionScreen(workout: workout));
   }
 
   void _handleGoalToggle(HiveGoal goal) {
     final now   = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final sel   = DateTime(
-        _selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final sel   = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
     if (sel.isAfter(today)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text(
-            'Non puoi completare obiettivi futuri.',
-            style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.w600)),
+        content: const Text('Non puoi completare obiettivi futuri.',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         backgroundColor: const Color(0xFF0D1117),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 2)));
       return;
@@ -232,20 +183,17 @@ class _HomeScreenState extends State<HomeScreen>
       context: context,
       barrierColor: Colors.black.withOpacity(0.55),
       builder: (ctx) => _GlassCalendarDialog(
-        initialDate: _selectedDate,
+        initialDate:    _selectedDate,
         onDateSelected: (date) {
           setState(() => _selectedDate = date);
           Navigator.pop(ctx);
-        },
-      ),
-    );
+        }));
   }
 
   void _showComingSoon(String feature) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('$feature — prossimamente',
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.w600)),
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
       backgroundColor: const Color(0xFF0D1117),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -260,83 +208,52 @@ class _HomeScreenState extends State<HomeScreen>
     final ep      = context.watch<ExerciseProvider>();
     final gp      = context.watch<GoalProvider>();
     final profile = context.watch<ProfileProvider>();
+    final workouts     = wp.workouts;
+    final exCount      = ep.exercises.length;
+    final completed    = sp.completedSetsCount;
+    final total        = sp.totalSetsCount;
+    final progress     = total > 0 ? completed / total : 0.0;
+    final goalsForDay  = gp.goalsForDate(_selectedDate);
+    final dayProgress  = gp.completionPercentageForDate(_selectedDate);
+    final sysBottom    = MediaQuery.of(context).viewPadding.bottom;
 
-    final workouts    = wp.workouts;
-    final exCount     = ep.exercises.length;
-    final completed   = sp.completedSetsCount;
-    final total       = sp.totalSetsCount;
-    final progress    = total > 0 ? completed / total : 0.0;
-    final goalsForDay = gp.goalsForDate(_selectedDate);
-    final dayProgress = gp.completionPercentageForDate(_selectedDate);
-
-    // FIX: viewPadding.bottom = altezza home indicator di sistema,
-    // SENZA l'altezza della navbar (che fa parte del layout floating).
-    // Usiamo questo valore per il padding inferiore del scroll view,
-    // aggiungendo 88px per liberare l'area della glass pill (68px)
-    // + il suo margine inferiore (14px) + buffer di 6px.
-    final sysBottom = MediaQuery.of(context).viewPadding.bottom;
-
-    // FIX ARCHITETTURALE: nessun Scaffold qui.
-    // CosmicBackground riempie tutto lo spazio disponibile del body
-    // di MainShell (che ha extendBody:true), inclusa l'area dietro
-    // la navbar floating. Il contenuto scorre fisicamente dietro il
-    // BackdropFilter della navbar che lo sfuma in tempo reale.
     return CosmicBackground(
       child: SafeArea(
-        // bottom: false → non consumare l'inset inferiore qui.
-        // Lo gestiamo manualmente con il padding del scroll view.
         bottom: false,
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          // 88 = glass pill (68) + margine bottom (14) + buffer (6)
           padding: EdgeInsets.fromLTRB(20, 20, 20, 88 + sysBottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-
-              // ─── 1. Header ─────────────────────────────────────
               _HomeHeader(
-                greeting: _greeting(),
-                date: _formattedDate(),
+                greeting:         _greeting(),
+                date:             _formattedDate(),
                 profileImagePath: profile.imagePath),
               const SizedBox(height: 14),
-
-              // ─── 2. Sessioni in pausa ──────────────────────────
               if (sp.hasPausedSessions && !sp.hasActiveSession) ...[
                 _PausedSessionsBanner(
-                    sp: sp,
-                    fmt: _fmt,
+                    sp: sp, fmt: _fmt,
                     onGoToAllenamenti: _goToAllenamenti),
                 const SizedBox(height: 12),
               ],
-
-              // ─── Banner sessione attiva ────────────────────────
               if (sp.hasActiveSession) ...[
                 _ActiveSessionBanner(sp: sp, fmt: _fmt),
                 const SizedBox(height: 12),
               ],
-
-              // ─── 3. Calendario settimana ───────────────────────
               _WeekCalendarSection(
                 selectedDate:   _selectedDate,
-                onDateSelected: (d) =>
-                    setState(() => _selectedDate = d),
+                onDateSelected: (d) => setState(() => _selectedDate = d),
                 onCalendarOpen: _showCalendarPopup),
               const SizedBox(height: 14),
-
-              // ─── 4. Obiettivi del giorno ───────────────────────
               _GoalsDaySection(
                 goals:        goalsForDay,
                 selectedDate: _selectedDate,
                 dayProgress:  dayProgress,
-                isCompleted:  (g) =>
-                    gp.isCompletedOn(g, _selectedDate),
-                onToggle:  _handleGoalToggle,
-                onManage: () =>
-                    pushPage(context, const GoalsScreen())),
+                isCompleted:  (g) => gp.isCompletedOn(g, _selectedDate),
+                onToggle:     _handleGoalToggle,
+                onManage:     () => pushPage(context, const GoalsScreen())),
               const SizedBox(height: 14),
-
-              // ─── 5. Progresso giornaliero ──────────────────────
               _DailyProgressCard(
                 ringAnim:      _ringAnim,
                 progress:      sp.hasActiveSession ? progress : 0,
@@ -348,12 +265,8 @@ class _HomeScreenState extends State<HomeScreen>
                 hasActive:     sp.hasActiveSession,
                 fmt:           _fmt),
               const SizedBox(height: 14),
-
-              // ─── 6. Avvio rapido ───────────────────────────────
               _SectionHeader(
-                  icon: Icons.bolt_rounded,
-                  title: 'Avvio rapido',
-                  color: _teal),
+                  icon: Icons.bolt_rounded, title: 'Avvio rapido', color: _teal),
               const SizedBox(height: 10),
               _QuickStartGrid(
                 onPalestra: _goToAllenamenti,
@@ -361,29 +274,22 @@ class _HomeScreenState extends State<HomeScreen>
                 onCiclismo: () => _showComingSoon('Ciclismo'),
                 onNuoto:    () => _showComingSoon('Nuoto')),
               const SizedBox(height: 14),
-
-              // ─── 7. Le tue schede ──────────────────────────────
               if (workouts.isNotEmpty) ...[
                 _SectionHeader(
                   icon:          Icons.fitness_center_rounded,
                   title:         'Le tue schede',
                   color:         _indigo,
-                  trailingLabel: workouts.length > 2
-                      ? 'Vedi tutte' : null,
-                  onTrailing: _goToAllenamenti),
+                  trailingLabel: workouts.length > 2 ? 'Vedi tutte' : null,
+                  onTrailing:    _goToAllenamenti),
                 const SizedBox(height: 10),
                 ...workouts.take(2).map((w) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: _WorkoutMiniCard(
-                    workout: w,
-                    sp:      sp,
+                    workout: w, sp: sp,
                     onEdit: () {
-                      context
-                          .read<WorkoutProvider>()
-                          .loadWorkoutExercises(w.key);
+                      context.read<WorkoutProvider>().loadWorkoutExercises(w.key);
                       pushPage(context, WorkoutDetailScreen(
-                          workoutId:   w.key,
-                          workoutName: w.name));
+                          workoutId: w.key, workoutName: w.name));
                     },
                     onPlay: () => _handleWorkoutPlay(w)))),
               ],
@@ -396,37 +302,28 @@ class _HomeScreenState extends State<HomeScreen>
 }
 
 // ─────────────────────────────────────────────────────────────
-// _HomeHeader
+// _HomeHeader — ADATTIVO
 // ─────────────────────────────────────────────────────────────
 
 class _HomeHeader extends StatelessWidget {
   final String  greeting, date;
   final String? profileImagePath;
   const _HomeHeader({
-    required this.greeting,
-    required this.date,
-    this.profileImagePath,
-  });
+    required this.greeting, required this.date, this.profileImagePath});
 
   static const _phrases = [
-    'Ogni rep conta.',
-    'Il progresso è costante.',
-    'Oggi supera ieri.',
-    'Forza e costanza.',
-    'Non fermarti mai.',
-    'Il corpo segue la mente.',
+    'Ogni rep conta.', 'Il progresso è costante.', 'Oggi supera ieri.',
+    'Forza e costanza.', 'Non fermarti mai.', 'Il corpo segue la mente.',
     'Consistenza batte intensità.',
   ];
-
   String get _phrase {
-    final d = DateTime.now()
-        .difference(DateTime(DateTime.now().year))
-        .inDays;
+    final d = DateTime.now().difference(DateTime(DateTime.now().year)).inDays;
     return _phrases[d % _phrases.length];
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.mfc;
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
       child: BackdropFilter(
@@ -434,51 +331,37 @@ class _HomeHeader extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end:   Alignment.bottomRight,
-              colors: [
-                Colors.white.withOpacity(0.09),
-                Colors.white.withOpacity(0.03),
-              ]),
+            color: c.glassCard,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-                color: _cyan.withOpacity(0.2), width: 0.8),
-            boxShadow: [BoxShadow(
-                color: _teal.withOpacity(0.06),
-                blurRadius: 20, spreadRadius: 1)]),
+            border: Border.all(color: _cyan.withOpacity(0.2), width: 0.8),
+            boxShadow: c.showElevation
+                ? [BoxShadow(color: c.elevationColor, blurRadius: 18,
+                    offset: const Offset(0, 3))]
+                : [BoxShadow(color: _teal.withOpacity(0.06),
+                    blurRadius: 20, spreadRadius: 1)]),
           child: Row(children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Container(
-                      width: 7, height: 7,
+                    Container(width: 7, height: 7,
                       decoration: BoxDecoration(
                         color: _teal, shape: BoxShape.circle,
                         boxShadow: [BoxShadow(
-                            color: _teal.withOpacity(0.7),
-                            blurRadius: 5)]),
-                    ),
+                            color: _teal.withOpacity(0.7), blurRadius: 5)])),
                     const SizedBox(width: 7),
-                    Text('MARKFIT',
-                        style: TextStyle(
-                            color: _teal, fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.8)),
+                    Text('MARKFIT', style: TextStyle(
+                        color: _teal, fontSize: 10,
+                        fontWeight: FontWeight.w800, letterSpacing: 1.8)),
                   ]),
                   const SizedBox(height: 10),
-                  Text(greeting,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5)),
+                  Text(greeting, style: TextStyle(
+                      color: c.textPrimary, fontSize: 26,
+                      fontWeight: FontWeight.w800, letterSpacing: -0.5)),
                   const SizedBox(height: 3),
-                  Text(date,
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.4),
-                          fontSize: 12)),
+                  Text(date, style: TextStyle(
+                      color: c.textTertiary, fontSize: 12)),
                   const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -488,12 +371,10 @@ class _HomeHeader extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                           color: _teal.withOpacity(0.18), width: 0.7)),
-                    child: Text(_phrase,
-                        style: TextStyle(
-                            color: _teal.withOpacity(0.85),
-                            fontSize: 11, fontWeight: FontWeight.w500,
-                            fontStyle: FontStyle.italic)),
-                  ),
+                    child: Text(_phrase, style: TextStyle(
+                        color: _teal.withOpacity(0.85),
+                        fontSize: 11, fontWeight: FontWeight.w500,
+                        fontStyle: FontStyle.italic))),
                 ],
               ),
             ),
@@ -507,7 +388,7 @@ class _HomeHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _ProfileAvatar
+// _ProfileAvatar — invariato (usa accent colors)
 // ─────────────────────────────────────────────────────────────
 
 class _ProfileAvatar extends StatelessWidget {
@@ -526,24 +407,18 @@ class _ProfileAvatar extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: _teal.withOpacity(0.6), width: 1.5),
         boxShadow: [BoxShadow(
-            color: _teal.withOpacity(0.3),
-            blurRadius: 16, spreadRadius: 1)]),
+            color: _teal.withOpacity(0.3), blurRadius: 16, spreadRadius: 1)]),
       child: ClipOval(
         child: hasImage
-            ? Image.file(
-                File(imagePath!), fit: BoxFit.cover,
+            ? Image.file(File(imagePath!), fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) =>
-                    const Icon(Icons.person_rounded,
-                        color: Colors.white, size: 28))
-            : const Icon(Icons.person_rounded,
-                color: Colors.white, size: 28),
-      ),
-    );
+                    const Icon(Icons.person_rounded, color: Colors.white, size: 28))
+            : const Icon(Icons.person_rounded, color: Colors.white, size: 28)));
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _PausedSessionsBanner
+// _PausedSessionsBanner — ADATTIVO
 // ─────────────────────────────────────────────────────────────
 
 class _PausedSessionsBanner extends StatelessWidget {
@@ -551,19 +426,16 @@ class _PausedSessionsBanner extends StatelessWidget {
   final String Function(int) fmt;
   final VoidCallback onGoToAllenamenti;
   const _PausedSessionsBanner({
-    required this.sp,
-    required this.fmt,
-    required this.onGoToAllenamenti,
-  });
+    required this.sp, required this.fmt, required this.onGoToAllenamenti});
 
   @override
   Widget build(BuildContext context) {
+    final c       = context.mfc;
     final paused  = sp.pausedSessions;
     final count   = paused.length;
     final first   = count > 0 ? paused.first : null;
     final name    = first?['workoutName'] as String? ?? 'Sessione';
-    final elapsed =
-        (first?['elapsedAtPause'] as num?)?.toInt() ?? 0;
+    final elapsed = (first?['elapsedAtPause'] as num?)?.toInt() ?? 0;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -572,76 +444,59 @@ class _PausedSessionsBanner extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
-              colors: [
-                _orange.withOpacity(0.18), _orangeWarm.withOpacity(0.08)
-              ]),
+            gradient: LinearGradient(begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [_orange.withOpacity(0.18), _orangeWarm.withOpacity(0.08)]),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-                color: _orange.withOpacity(0.45), width: 1.3),
-            boxShadow: [BoxShadow(
-                color: _orange.withOpacity(0.2),
+            border: Border.all(color: _orange.withOpacity(0.45), width: 1.3),
+            boxShadow: [BoxShadow(color: _orange.withOpacity(0.2),
                 blurRadius: 24, spreadRadius: 1)]),
           child: Row(children: [
-            Container(
-              width: 46, height: 46,
+            Container(width: 46, height: 46,
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: [
-                  _orange.withOpacity(0.3), _orangeWarm.withOpacity(0.15)
-                ]),
+                  _orange.withOpacity(0.3), _orangeWarm.withOpacity(0.15)]),
                 shape: BoxShape.circle,
-                border: Border.all(
-                    color: _orange.withOpacity(0.5), width: 1.2),
+                border: Border.all(color: _orange.withOpacity(0.5), width: 1.2),
                 boxShadow: [BoxShadow(
                     color: _orange.withOpacity(0.3), blurRadius: 10)]),
               child: const Icon(Icons.pause_circle_filled_rounded,
                   color: _orange, size: 24)),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Container(
-                      width: 6, height: 6,
-                      decoration: BoxDecoration(
-                        color: _orange, shape: BoxShape.circle,
-                        boxShadow: [BoxShadow(
-                            color: _orange.withOpacity(0.7),
-                            blurRadius: 4)]),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      count == 1
-                          ? 'SESSIONE IN PAUSA'
-                          : '$count SESSIONI IN PAUSA',
-                      style: TextStyle(
-                          color: _orange, fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.1)),
-                  ]),
-                  const SizedBox(height: 4),
-                  Text(name,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 14,
-                          fontWeight: FontWeight.w700),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  if (elapsed > 0) ...[
-                    const SizedBox(height: 3),
-                    Row(children: [
-                      Icon(Icons.timer_outlined,
-                          size: 11, color: _orange.withOpacity(0.7)),
-                      const SizedBox(width: 4),
-                      Text(fmt(elapsed), style: TextStyle(
-                          color: _orange.withOpacity(0.8),
-                          fontSize: 11, fontWeight: FontWeight.w600)),
-                    ]),
-                  ],
-                ],
-              ),
-            ),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              Row(children: [
+                Container(width: 6, height: 6,
+                  decoration: BoxDecoration(
+                    color: _orange, shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(
+                        color: _orange.withOpacity(0.7), blurRadius: 4)])),
+                const SizedBox(width: 6),
+                Text(count == 1 ? 'SESSIONE IN PAUSA' : '$count SESSIONI IN PAUSA',
+                    style: TextStyle(color: _orange, fontSize: 9,
+                        fontWeight: FontWeight.w800, letterSpacing: 1.1)),
+              ]),
+              const SizedBox(height: 4),
+              // Workout name: su sfondo accent → textPrimary (visible on both themes)
+              Text(name, style: TextStyle(
+                  color: c.textPrimary, fontSize: 14,
+                  fontWeight: FontWeight.w700),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              if (elapsed > 0) ...[
+                const SizedBox(height: 3),
+                Row(children: [
+                  Icon(Icons.timer_outlined, size: 11,
+                      color: _orange.withOpacity(0.7)),
+                  const SizedBox(width: 4),
+                  Text(fmt(elapsed), style: TextStyle(
+                      color: _orange.withOpacity(0.8),
+                      fontSize: 11, fontWeight: FontWeight.w600)),
+                ]),
+              ],
+            ])),
             const SizedBox(width: 10),
+            // "Riprendi" button: white on orange gradient — keep white
             GestureDetector(
               onTap: onGoToAllenamenti,
               child: Container(
@@ -651,14 +506,11 @@ class _PausedSessionsBanner extends StatelessWidget {
                   gradient: LinearGradient(
                       colors: [_orange, _orangeWarm]),
                   borderRadius: BorderRadius.circular(12),
-                  boxShadow: [BoxShadow(
-                      color: _orange.withOpacity(0.45),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3))]),
-                child: const Text('Riprendi',
-                    style: TextStyle(color: Colors.white,
-                        fontSize: 12, fontWeight: FontWeight.w700))),
-            ),
+                  boxShadow: [BoxShadow(color: _orange.withOpacity(0.45),
+                      blurRadius: 12, offset: const Offset(0, 3))]),
+                child: const Text('Riprendi', style: TextStyle(
+                    color: Colors.white, fontSize: 12,
+                    fontWeight: FontWeight.w700)))),
           ]),
         ),
       ),
@@ -667,7 +519,7 @@ class _PausedSessionsBanner extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _ActiveSessionBanner
+// _ActiveSessionBanner — ADATTIVO
 // ─────────────────────────────────────────────────────────────
 
 class _ActiveSessionBanner extends StatelessWidget {
@@ -677,7 +529,9 @@ class _ActiveSessionBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c    = context.mfc;
     final name = sp.currentWorkout?.name ?? 'Sessione attiva';
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
@@ -686,47 +540,40 @@ class _ActiveSessionBanner extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: [
-              _blue.withOpacity(0.25), _blue.withOpacity(0.07)
-            ]),
+              _blue.withOpacity(0.25), _blue.withOpacity(0.07)]),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-                color: _blue.withOpacity(0.45), width: 1.2),
+            border: Border.all(color: _blue.withOpacity(0.45), width: 1.2),
             boxShadow: [BoxShadow(
                 color: _blue.withOpacity(0.2), blurRadius: 22)]),
           child: Row(children: [
-            Container(
-              width: 44, height: 44,
+            Container(width: 44, height: 44,
               decoration: BoxDecoration(
                   color: _blue.withOpacity(0.2), shape: BoxShape.circle),
               child: const Icon(Icons.sports_gymnastics_rounded,
                   color: Color(0xFF60A5FA), size: 23)),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('SESSIONE ATTIVA', style: TextStyle(
-                      color: const Color(0xFF60A5FA), fontSize: 9,
-                      fontWeight: FontWeight.w800, letterSpacing: 1.2)),
-                  const SizedBox(height: 3),
-                  Text(name, style: const TextStyle(
-                      color: Colors.white, fontSize: 14,
-                      fontWeight: FontWeight.w700),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 5),
-                  Row(children: [
-                    _MiniStat(icon: Icons.timer_rounded,
-                        label: fmt(sp.elapsedSeconds),
-                        color: const Color(0xFF60A5FA)),
-                    const SizedBox(width: 10),
-                    _MiniStat(icon: Icons.check_rounded,
-                        label:
-                            '${sp.completedSetsCount}/${sp.totalSetsCount} serie',
-                        color: const Color(0xFF60A5FA)),
-                  ]),
-                ],
-              ),
-            ),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              const Text('SESSIONE ATTIVA', style: TextStyle(
+                  color: Color(0xFF60A5FA), fontSize: 9,
+                  fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+              const SizedBox(height: 3),
+              Text(name, style: TextStyle(
+                  color: c.textPrimary, fontSize: 14,
+                  fontWeight: FontWeight.w700),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 5),
+              Row(children: [
+                _MiniStat(icon: Icons.timer_rounded,
+                    label: fmt(sp.elapsedSeconds),
+                    color: const Color(0xFF60A5FA)),
+                const SizedBox(width: 10),
+                _MiniStat(icon: Icons.check_rounded,
+                    label: '${sp.completedSetsCount}/${sp.totalSetsCount} serie',
+                    color: const Color(0xFF60A5FA)),
+              ]),
+            ])),
             const SizedBox(width: 10),
             GestureDetector(
               onTap: () {
@@ -740,13 +587,11 @@ class _ActiveSessionBanner extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: _blue,
                   borderRadius: BorderRadius.circular(11),
-                  boxShadow: [BoxShadow(
-                      color: _blue.withOpacity(0.45), blurRadius: 12,
-                      offset: const Offset(0, 3))]),
+                  boxShadow: [BoxShadow(color: _blue.withOpacity(0.45),
+                      blurRadius: 12, offset: const Offset(0, 3))]),
                 child: const Text('Riprendi', style: TextStyle(
                     color: Colors.white, fontSize: 12,
-                    fontWeight: FontWeight.w700))),
-            ),
+                    fontWeight: FontWeight.w700)))),
           ]),
         ),
       ),
@@ -755,64 +600,58 @@ class _ActiveSessionBanner extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WeekCalendarSection
+// _WeekCalendarSection — ADATTIVO
 // ─────────────────────────────────────────────────────────────
 
 class _WeekCalendarSection extends StatelessWidget {
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDateSelected;
   final VoidCallback onCalendarOpen;
-
   const _WeekCalendarSection({
-    required this.selectedDate,
-    required this.onDateSelected,
-    required this.onCalendarOpen,
-  });
+    required this.selectedDate, required this.onDateSelected,
+    required this.onCalendarOpen});
 
   static String _monthLabel(DateTime d) {
-    const months = [
-      'Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
-      'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre',
-    ];
+    const months = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+        'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
     return '${months[d.month - 1]} ${d.year}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final c      = context.mfc;
     const names  = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
     final now    = DateTime.now();
     final today  = DateTime(now.year, now.month, now.day);
-    final selDay = DateTime(
-        selectedDate.year, selectedDate.month, selectedDate.day);
+    final selDay = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
     final monday = today.subtract(Duration(days: now.weekday - 1));
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [
-              Colors.white.withOpacity(0.07),
-              Colors.white.withOpacity(0.02),
-            ]),
+            color: c.glassCard,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-                color: _cyan.withOpacity(0.15), width: 0.8)),
+            border: Border.all(color: _cyan.withOpacity(0.15), width: 0.8),
+            boxShadow: c.showElevation
+                ? [BoxShadow(color: c.elevationColor, blurRadius: 10,
+                    offset: const Offset(0, 2))]
+                : null),
           child: Column(children: [
             Row(children: [
               GestureDetector(
                 onTap: onCalendarOpen,
                 child: Row(children: [
-                  Text(_monthLabel(selectedDate),
-                      style: const TextStyle(color: Colors.white,
-                          fontSize: 14, fontWeight: FontWeight.w700)),
+                  Text(_monthLabel(selectedDate), style: TextStyle(
+                      color: c.textPrimary, fontSize: 14,
+                      fontWeight: FontWeight.w700)),
                   const SizedBox(width: 6),
                   Icon(Icons.keyboard_arrow_down_rounded,
                       color: _cyan.withOpacity(0.7), size: 18),
-                ]),
-              ),
+                ])),
               const Spacer(),
               GestureDetector(
                 onTap: onCalendarOpen,
@@ -824,8 +663,7 @@ class _WeekCalendarSection extends StatelessWidget {
                     border: Border.all(
                         color: _cyan.withOpacity(0.2), width: 0.7)),
                   child: Icon(Icons.calendar_month_rounded,
-                      color: _cyan, size: 16)),
-              ),
+                      color: _cyan, size: 16))),
             ]),
             const SizedBox(height: 12),
             Row(
@@ -836,7 +674,6 @@ class _WeekCalendarSection extends StatelessWidget {
                 final isSel   = dayNorm == selDay;
                 final isToday = dayNorm == today;
                 final isPast  = dayNorm.isBefore(today);
-
                 return GestureDetector(
                   onTap: () => onDateSelected(day),
                   child: AnimatedContainer(
@@ -844,9 +681,7 @@ class _WeekCalendarSection extends StatelessWidget {
                     width: 38,
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
-                      color: isSel
-                          ? _teal.withOpacity(0.18)
-                          : Colors.transparent,
+                      color: isSel ? _teal.withOpacity(0.18) : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isSel
@@ -856,49 +691,37 @@ class _WeekCalendarSection extends StatelessWidget {
                                 : Colors.transparent,
                         width: 1),
                       boxShadow: isSel
-                          ? [BoxShadow(
-                              color: _teal.withOpacity(0.2),
-                              blurRadius: 8)] : null),
-                    child: Column(mainAxisSize: MainAxisSize.min,
-                      children: [
+                          ? [BoxShadow(color: _teal.withOpacity(0.2), blurRadius: 8)]
+                          : null),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
                       Text(names[i], style: TextStyle(
                           color: isSel ? _teal
                               : isToday ? _cyan
-                              : Colors.white.withOpacity(0.3),
+                              : c.textTertiary,   // was white.withOpacity(0.3)
                           fontSize: 9, fontWeight: FontWeight.w700,
                           letterSpacing: 0.3)),
                       const SizedBox(height: 7),
-                      Container(
-                        width: 26, height: 26,
+                      Container(width: 26, height: 26,
                         decoration: BoxDecoration(
                           color: isSel ? _teal : Colors.transparent,
                           shape: BoxShape.circle),
-                        child: Center(
-                          child: Text('${day.day}', style: TextStyle(
-                              color: isSel
-                                  ? Colors.white
-                                  : Colors.white.withOpacity(0.7),
-                              fontSize: 13,
-                              fontWeight: isSel || isToday
-                                  ? FontWeight.w800
-                                  : FontWeight.w500)))),
+                        child: Center(child: Text('${day.day}', style: TextStyle(
+                            color: isSel ? Colors.white : c.textPrimary,  // was white.withOpacity(0.7)
+                            fontSize: 13,
+                            fontWeight: isSel || isToday
+                                ? FontWeight.w800 : FontWeight.w500)))),
                       const SizedBox(height: 5),
-                      Container(
-                        width: 4, height: 4,
+                      Container(width: 4, height: 4,
                         decoration: BoxDecoration(
-                          color: isToday
-                              ? _cyan
-                              : isPast
-                                  ? _teal.withOpacity(0.4)
-                                  : Colors.transparent,
+                          color: isToday ? _cyan
+                              : isPast ? _teal.withOpacity(0.4)
+                              : Colors.transparent,
                           shape: BoxShape.circle,
                           boxShadow: isToday
-                              ? [BoxShadow(
-                                  color: _cyan.withOpacity(0.6),
-                                  blurRadius: 3)] : null)),
+                              ? [BoxShadow(color: _cyan.withOpacity(0.6), blurRadius: 3)]
+                              : null)),
                     ]),
-                  ),
-                );
+                  ));
               }),
             ),
           ]),
@@ -909,83 +732,60 @@ class _WeekCalendarSection extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GlassCalendarDialog — 4 livelli: giorni → mesi → anni → decenni
+// _GlassCalendarDialog — SEMPRE SCURO (modal overlay)
 // ─────────────────────────────────────────────────────────────
 
 class _GlassCalendarDialog extends StatefulWidget {
   final DateTime initialDate;
   final ValueChanged<DateTime> onDateSelected;
   const _GlassCalendarDialog({
-    required this.initialDate,
-    required this.onDateSelected,
-  });
-
+    required this.initialDate, required this.onDateSelected});
   @override
-  State<_GlassCalendarDialog> createState() =>
-      _GlassCalendarDialogState();
+  State<_GlassCalendarDialog> createState() => _GlassCalendarDialogState();
 }
 
 enum _CalView { days, months, years, decades }
 
-class _GlassCalendarDialogState
-    extends State<_GlassCalendarDialog> {
+class _GlassCalendarDialogState extends State<_GlassCalendarDialog> {
   late DateTime _focus;
   _CalView _view = _CalView.days;
-
   static const _dayNames = ['L','M','M','G','V','S','D'];
-  static const _monthNames = [
-    'Gen','Feb','Mar','Apr','Mag','Giu',
-    'Lug','Ago','Set','Ott','Nov','Dic',
-  ];
-  static const _monthNamesFull = [
-    'Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
-    'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre',
-  ];
+  static const _monthNames = ['Gen','Feb','Mar','Apr','Mag','Giu',
+      'Lug','Ago','Set','Ott','Nov','Dic'];
+  static const _monthNamesFull = ['Gennaio','Febbraio','Marzo','Aprile',
+      'Maggio','Giugno','Luglio','Agosto','Settembre',
+      'Ottobre','Novembre','Dicembre'];
 
   @override
-  void initState() {
-    super.initState();
-    _focus = widget.initialDate;
-  }
+  void initState() { super.initState(); _focus = widget.initialDate; }
 
   String get _headerLabel {
     switch (_view) {
       case _CalView.days:
         return '${_monthNamesFull[_focus.month - 1]} ${_focus.year}';
-      case _CalView.months:
-        return '${_focus.year}';
+      case _CalView.months: return '${_focus.year}';
       case _CalView.years:
-        final dec = (_focus.year ~/ 10) * 10;
-        return '$dec – ${dec + 9}';
+        final dec = (_focus.year ~/ 10) * 10; return '$dec – ${dec + 9}';
       case _CalView.decades:
-        final cent = (_focus.year ~/ 100) * 100;
-        return '$cent – ${cent + 99}';
+        final cent = (_focus.year ~/ 100) * 100; return '$cent – ${cent + 99}';
     }
   }
 
   void _prev() => setState(() {
     switch (_view) {
-      case _CalView.days:
-        _focus = DateTime(_focus.year, _focus.month - 1); break;
-      case _CalView.months:
-        _focus = DateTime(_focus.year - 1, _focus.month); break;
-      case _CalView.years:
-        _focus = DateTime(_focus.year - 10, _focus.month); break;
-      case _CalView.decades:
-        _focus = DateTime(_focus.year - 100, _focus.month); break;
+      case _CalView.days:    _focus = DateTime(_focus.year, _focus.month - 1); break;
+      case _CalView.months:  _focus = DateTime(_focus.year - 1, _focus.month); break;
+      case _CalView.years:   _focus = DateTime(_focus.year - 10, _focus.month); break;
+      case _CalView.decades: _focus = DateTime(_focus.year - 100, _focus.month); break;
     }
   });
 
   void _next() => setState(() {
     switch (_view) {
-      case _CalView.days:
-        _focus = DateTime(_focus.year, _focus.month + 1); break;
-      case _CalView.months:
-        _focus = DateTime(_focus.year + 1, _focus.month); break;
-      case _CalView.years:
-        _focus = DateTime(_focus.year + 10, _focus.month); break;
-      case _CalView.decades:
-        _focus = DateTime(_focus.year + 100, _focus.month); break;
+      case _CalView.days:    _focus = DateTime(_focus.year, _focus.month + 1); break;
+      case _CalView.months:  _focus = DateTime(_focus.year + 1, _focus.month); break;
+      case _CalView.years:   _focus = DateTime(_focus.year + 10, _focus.month); break;
+      case _CalView.decades: _focus = DateTime(_focus.year + 100, _focus.month); break;
     }
   });
 
@@ -1002,58 +802,43 @@ class _GlassCalendarDialogState
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(
-          horizontal: 24, vertical: 60),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 60),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end:   Alignment.bottomRight,
-                colors: [Color(0xFF0D1117), Color(0xFF060B14)]),
+              // Always dark: this is a modal overlay
+              gradient: const LinearGradient(begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0D1117), Color(0xFF060B14)]),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                  color: _cyan.withOpacity(0.25), width: 1),
-              boxShadow: [BoxShadow(
-                  color: _cyan.withOpacity(0.06),
+              border: Border.all(color: _cyan.withOpacity(0.25), width: 1),
+              boxShadow: [BoxShadow(color: _cyan.withOpacity(0.06),
                   blurRadius: 28, spreadRadius: 4)]),
             padding: const EdgeInsets.all(20),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Row(children: [
-                _CalNavBtn(
-                    icon: Icons.chevron_left_rounded, onTap: _prev),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _drillUp,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 8, horizontal: 4),
-                      child: Text(_headerLabel,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white,
-                              fontSize: 15, fontWeight: FontWeight.w800))),
-                  ),
-                ),
-                _CalNavBtn(
-                    icon: Icons.chevron_right_rounded, onTap: _next),
+                _CalNavBtn(icon: Icons.chevron_left_rounded, onTap: _prev),
+                Expanded(child: GestureDetector(
+                  onTap: _drillUp,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    child: Text(_headerLabel, textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white,
+                            fontSize: 15, fontWeight: FontWeight.w800))))),
+                _CalNavBtn(icon: Icons.chevron_right_rounded, onTap: _next),
               ]),
               const SizedBox(height: 12),
               Container(height: 0.7,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [
-                    Colors.transparent,
-                    _cyan.withOpacity(0.3),
-                    Colors.transparent,
-                  ]))),
+                decoration: BoxDecoration(gradient: LinearGradient(colors: [
+                  Colors.transparent, _cyan.withOpacity(0.3), Colors.transparent]))),
               const SizedBox(height: 12),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 child: KeyedSubtree(
-                  key: ValueKey(
-                      '${_view}_${_focus.year}_${_focus.month}'),
+                  key: ValueKey('${_view}_${_focus.year}_${_focus.month}'),
                   child: _buildGrid())),
             ]),
           ),
@@ -1073,14 +858,12 @@ class _GlassCalendarDialogState
 
   Widget _buildDaysGrid() {
     final firstDay  = DateTime(_focus.year, _focus.month, 1);
-    final daysCount =
-        DateTime(_focus.year, _focus.month + 1, 0).day;
-    final offset  = (firstDay.weekday - 1) % 7;
-    final now     = DateTime.now();
-    final today   = DateTime(now.year, now.month, now.day);
-    final selNorm = DateTime(widget.initialDate.year,
+    final daysCount = DateTime(_focus.year, _focus.month + 1, 0).day;
+    final offset    = (firstDay.weekday - 1) % 7;
+    final now       = DateTime.now();
+    final today     = DateTime(now.year, now.month, now.day);
+    final selNorm   = DateTime(widget.initialDate.year,
         widget.initialDate.month, widget.initialDate.day);
-
     return Column(children: [
       Row(children: _dayNames.map((n) => Expanded(
         child: Center(child: Text(n, style: TextStyle(
@@ -1090,16 +873,14 @@ class _GlassCalendarDialogState
       GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        gridDelegate:
-            const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7, childAspectRatio: 1,
-                mainAxisSpacing: 4, crossAxisSpacing: 0),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7, childAspectRatio: 1, mainAxisSpacing: 4),
         itemCount: offset + daysCount,
         itemBuilder: (_, idx) {
           if (idx < offset) return const SizedBox.shrink();
-          final day  = idx - offset + 1;
-          final date = DateTime(_focus.year, _focus.month, day);
-          final norm = DateTime(date.year, date.month, date.day);
+          final day   = idx - offset + 1;
+          final date  = DateTime(_focus.year, _focus.month, day);
+          final norm  = DateTime(date.year, date.month, date.day);
           final isSel   = norm == selNorm;
           final isToday = norm == today;
           return GestureDetector(
@@ -1113,16 +894,13 @@ class _GlassCalendarDialogState
                     : Colors.transparent,
                 shape: BoxShape.circle,
                 border: isToday && !isSel
-                    ? Border.all(
-                        color: _cyan.withOpacity(0.5), width: 1)
+                    ? Border.all(color: _cyan.withOpacity(0.5), width: 1)
                     : null,
                 boxShadow: isSel
-                    ? [BoxShadow(
-                        color: _teal.withOpacity(0.4), blurRadius: 8)]
+                    ? [BoxShadow(color: _teal.withOpacity(0.4), blurRadius: 8)]
                     : null),
               child: Center(child: Text('$day', style: TextStyle(
-                  color: isSel ? Colors.white
-                      : Colors.white.withOpacity(0.8),
+                  color: isSel ? Colors.white : Colors.white.withOpacity(0.8),
                   fontSize: 13,
                   fontWeight: isSel || isToday
                       ? FontWeight.w800 : FontWeight.w500)))));
@@ -1140,22 +918,20 @@ class _GlassCalendarDialogState
           mainAxisSpacing: 8, crossAxisSpacing: 8),
       itemCount: 12,
       itemBuilder: (_, i) {
-        final isCurrent = _focus.year == now.year && i + 1 == now.month;
+        final isCur = _focus.year == now.year && i + 1 == now.month;
         final isSel = i + 1 == widget.initialDate.month &&
             _focus.year == widget.initialDate.year;
         return GestureDetector(
           onTap: () => setState(() {
-            _focus = DateTime(_focus.year, i + 1);
-            _view  = _CalView.days;
+            _focus = DateTime(_focus.year, i + 1); _view = _CalView.days;
           }),
           child: _CalCell(label: _monthNames[i],
-              isSelected: isSel, isCurrent: isCurrent));
+              isSelected: isSel, isCurrent: isCur));
       });
   }
 
   Widget _buildYearsGrid() {
-    final dec = (_focus.year ~/ 10) * 10;
-    final now = DateTime.now();
+    final dec = (_focus.year ~/ 10) * 10; final now = DateTime.now();
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -1165,22 +941,20 @@ class _GlassCalendarDialogState
       itemCount: 12,
       itemBuilder: (_, i) {
         final year = dec - 1 + i;
-        final isCurrent = year == now.year;
+        final isCur = year == now.year;
         final isSel = year == widget.initialDate.year;
         final isOut = i == 0 || i == 11;
         return GestureDetector(
           onTap: () => setState(() {
-            _focus = DateTime(year, _focus.month);
-            _view  = _CalView.months;
+            _focus = DateTime(year, _focus.month); _view = _CalView.months;
           }),
-          child: _CalCell(label: '$year', isSelected: isSel,
-              isCurrent: isCurrent, isOutOfRange: isOut));
+          child: _CalCell(label: '$year',
+              isSelected: isSel, isCurrent: isCur, isOutOfRange: isOut));
       });
   }
 
   Widget _buildDecadesGrid() {
-    final cent = (_focus.year ~/ 100) * 100;
-    final now  = DateTime.now();
+    final cent = (_focus.year ~/ 100) * 100; final now = DateTime.now();
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -1190,24 +964,21 @@ class _GlassCalendarDialogState
       itemCount: 12,
       itemBuilder: (_, i) {
         final decStart = cent - 10 + (i * 10);
-        final isCurrent =
-            now.year >= decStart && now.year < decStart + 10;
+        final isCur = now.year >= decStart && now.year < decStart + 10;
         final isSel = widget.initialDate.year >= decStart &&
             widget.initialDate.year < decStart + 10;
         final isOut = i == 0 || i == 11;
         return GestureDetector(
           onTap: () => setState(() {
-            _focus = DateTime(decStart, _focus.month);
-            _view  = _CalView.years;
+            _focus = DateTime(decStart, _focus.month); _view = _CalView.years;
           }),
-          child: _CalCell(
-              label: '$decStart–${decStart + 9}',
-              isSelected: isSel, isCurrent: isCurrent,
-              isOutOfRange: isOut));
+          child: _CalCell(label: '$decStart–${decStart + 9}',
+              isSelected: isSel, isCurrent: isCur, isOutOfRange: isOut));
       });
   }
 }
 
+// Sempre scuri — parte del dialog dark
 class _CalNavBtn extends StatelessWidget {
   final IconData icon; final VoidCallback onTap;
   const _CalNavBtn({required this.icon, required this.onTap});
@@ -1218,8 +989,7 @@ class _CalNavBtn extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.07),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.12), width: 0.8)),
+        border: Border.all(color: Colors.white.withOpacity(0.12), width: 0.8)),
       child: Icon(icon, color: Colors.white, size: 20)));
 }
 
@@ -1229,7 +999,6 @@ class _CalCell extends StatelessWidget {
   const _CalCell({required this.label,
       this.isSelected = false, this.isCurrent = false,
       this.isOutOfRange = false});
-
   @override
   Widget build(BuildContext context) => AnimatedContainer(
     duration: const Duration(milliseconds: 140),
@@ -1244,21 +1013,18 @@ class _CalCell extends StatelessWidget {
             : Colors.white.withOpacity(isOutOfRange ? 0.06 : 0.12),
         width: isSelected ? 1.3 : 1),
       boxShadow: isSelected
-          ? [BoxShadow(color: _teal.withOpacity(0.25), blurRadius: 8)]
-          : null),
-    child: Center(child: Text(label,
-        textAlign: TextAlign.center,
+          ? [BoxShadow(color: _teal.withOpacity(0.25), blurRadius: 8)] : null),
+    child: Center(child: Text(label, textAlign: TextAlign.center,
         style: TextStyle(
             color: isOutOfRange ? Colors.white.withOpacity(0.3)
-                : isSelected ? _teal
-                : Colors.white.withOpacity(0.8),
+                : isSelected ? _teal : Colors.white.withOpacity(0.8),
             fontSize: 12,
             fontWeight: isSelected || isCurrent
                 ? FontWeight.w700 : FontWeight.w500))));
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GoalsDaySection
+// _GoalsDaySection — ADATTIVO
 // ─────────────────────────────────────────────────────────────
 
 class _GoalsDaySection extends StatelessWidget {
@@ -1268,34 +1034,32 @@ class _GoalsDaySection extends StatelessWidget {
   final bool Function(HiveGoal) isCompleted;
   final void Function(HiveGoal) onToggle;
   final VoidCallback onManage;
-
   const _GoalsDaySection({
     required this.goals, required this.selectedDate,
     required this.dayProgress, required this.isCompleted,
-    required this.onToggle, required this.onManage,
-  });
+    required this.onToggle, required this.onManage});
 
   @override
   Widget build(BuildContext context) {
+    final c        = context.mfc;
     final now      = DateTime.now();
     final today    = DateTime(now.year, now.month, now.day);
-    final sel      = DateTime(
-        selectedDate.year, selectedDate.month, selectedDate.day);
+    final sel      = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
     final isFuture = sel.isAfter(today);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
         child: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [
-              Colors.white.withOpacity(0.07),
-              Colors.white.withOpacity(0.02),
-            ]),
+            color: c.glassCard,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-                color: _orange.withOpacity(0.18), width: 0.8)),
+            border: Border.all(color: _orange.withOpacity(0.18), width: 0.8),
+            boxShadow: c.showElevation
+                ? [BoxShadow(color: c.elevationColor, blurRadius: 10,
+                    offset: const Offset(0, 2))]
+                : null),
           child: Column(children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
@@ -1307,13 +1071,15 @@ class _GoalsDaySection extends StatelessWidget {
                   child: const Icon(Icons.track_changes_rounded,
                       size: 16, color: _orange)),
                 const SizedBox(width: 10),
-                const Text('Obiettivi del giorno',
-                    style: TextStyle(color: Colors.white,
-                        fontSize: 15, fontWeight: FontWeight.w800)),
+                Text('Obiettivi del giorno', style: TextStyle(
+                    color: c.textPrimary, fontSize: 15,
+                    fontWeight: FontWeight.w800)),
                 const Spacer(),
                 if (goals.isNotEmpty) ...[
                   _MiniProgressRing(
-                      progress: dayProgress, color: _orange),
+                      progress:   dayProgress,
+                      color:      _orange,
+                      trackColor: c.divider),
                   const SizedBox(width: 8),
                 ],
                 GestureDetector(
@@ -1329,21 +1095,18 @@ class _GoalsDaySection extends StatelessWidget {
                     child: Text('Gestisci', style: TextStyle(
                         color: _orange, fontSize: 11,
                         fontWeight: FontWeight.w700)))),
-              ]),
-            ),
+              ])),
             if (goals.isEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: Row(children: [
                   Icon(Icons.check_circle_outline_rounded,
-                      color: Colors.white.withOpacity(0.25), size: 18),
+                      color: c.textTertiary, size: 18),
                   const SizedBox(width: 10),
                   Text(isFuture
                       ? 'Nessun obiettivo per questa data'
                       : 'Nessun obiettivo pianificato',
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.4),
-                          fontSize: 13)),
+                      style: TextStyle(color: c.textTertiary, fontSize: 13)),
                 ]))
             else
               ...goals.asMap().entries.map((e) {
@@ -1353,14 +1116,12 @@ class _GoalsDaySection extends StatelessWidget {
                 return Column(children: [
                   if (i > 0)
                     Divider(height: 0, thickness: 0.5,
-                        indent: 16, endIndent: 16,
-                        color: Colors.white.withOpacity(0.05)),
+                        indent: 16, endIndent: 16, color: c.divider),
                   _GoalTileGlass(
                     goal: goal, completed: done,
                     isFuture: isFuture,
                     onToggle: () => onToggle(goal)),
-                  if (i == goals.length - 1)
-                    const SizedBox(height: 4),
+                  if (i == goals.length - 1) const SizedBox(height: 4),
                 ]);
               }),
           ]),
@@ -1370,37 +1131,32 @@ class _GoalsDaySection extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// _GoalTileGlass — ADATTIVO
+// ─────────────────────────────────────────────────────────────
+
 class _GoalTileGlass extends StatelessWidget {
   final HiveGoal goal;
   final bool completed, isFuture;
   final VoidCallback onToggle;
   const _GoalTileGlass({
     required this.goal, required this.completed,
-    required this.isFuture, required this.onToggle,
-  });
+    required this.isFuture, required this.onToggle});
 
   static const _catColors = <String, Color>{
-    'Studio':        Color(0xFF6366F1),
-    'Sport':         Color(0xFF00D4AA),
-    'Salute':        Color(0xFF22C55E),
-    'Lavoro':        Color(0xFF3B82F6),
-    'Alimentazione': Color(0xFFFF8C00),
-    'Benessere':     Color(0xFFEC4899),
-    'Produttività':  Color(0xFF8B5CF6),
-    'Hobby':         Color(0xFFF59E0B),
-    'Tempo libero':  Color(0xFF06B6D4),
-    'Finanze':       Color(0xFF10B981),
-    'Lettura':       Color(0xFF6B7280),
-    'Meditazione':   Color(0xFF8A2BE2),
-    'Personale':     Color(0xFFFF6B6B),
-    'Altro':         Color(0xFF9CA3AF),
+    'Studio': Color(0xFF6366F1), 'Sport': Color(0xFF00D4AA),
+    'Salute': Color(0xFF22C55E), 'Lavoro': Color(0xFF3B82F6),
+    'Alimentazione': Color(0xFFFF8C00), 'Benessere': Color(0xFFEC4899),
+    'Produttività': Color(0xFF8B5CF6), 'Hobby': Color(0xFFF59E0B),
+    'Tempo libero': Color(0xFF06B6D4), 'Finanze': Color(0xFF10B981),
+    'Lettura': Color(0xFF6B7280), 'Meditazione': Color(0xFF8A2BE2),
+    'Personale': Color(0xFFFF6B6B), 'Altro': Color(0xFF9CA3AF),
   };
-
-  Color get _catColor =>
-      _catColors[goal.category] ?? const Color(0xFF9CA3AF);
+  Color get _catColor => _catColors[goal.category] ?? const Color(0xFF9CA3AF);
 
   @override
   Widget build(BuildContext context) {
+    final c = context.mfc;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(children: [
@@ -1416,40 +1172,33 @@ class _GoalTileGlass extends StatelessWidget {
               borderRadius: BorderRadius.circular(9)),
           child: Icon(Icons.flag_rounded, size: 16, color: _catColor)),
         const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-            Text(goal.title, style: TextStyle(
-                color: completed
-                    ? Colors.white.withOpacity(0.35)
-                    : Colors.white,
-                fontSize: 13, fontWeight: FontWeight.w600,
-                decoration: completed
-                    ? TextDecoration.lineThrough : null,
-                decorationColor: Colors.white.withOpacity(0.3)),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-            if (goal.category.isNotEmpty)
-              Text(goal.category, style: TextStyle(
-                  color: _catColor.withOpacity(0.7), fontSize: 10,
-                  fontWeight: FontWeight.w500)),
-          ])),
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+          Text(goal.title, style: TextStyle(
+              color: completed ? c.textTertiary : c.textPrimary,
+              fontSize: 13, fontWeight: FontWeight.w600,
+              decoration: completed ? TextDecoration.lineThrough : null,
+              decorationColor: c.textTertiary),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (goal.category.isNotEmpty)
+            Text(goal.category, style: TextStyle(
+                color: _catColor.withOpacity(0.7), fontSize: 10,
+                fontWeight: FontWeight.w500)),
+        ])),
         const SizedBox(width: 10),
         if (goal.currentStreak > 0) ...[
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 7, vertical: 3),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
             decoration: BoxDecoration(
               color: _orange.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                  color: _orange.withOpacity(0.3), width: 0.7)),
+              border: Border.all(color: _orange.withOpacity(0.3), width: 0.7)),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Text('🔥', style: TextStyle(fontSize: 10)),
               const SizedBox(width: 3),
               Text('${goal.currentStreak}', style: const TextStyle(
-                  color: _orange, fontSize: 10,
-                  fontWeight: FontWeight.w700)),
+                  color: _orange, fontSize: 10, fontWeight: FontWeight.w700)),
             ])),
           const SizedBox(width: 8),
         ],
@@ -1462,27 +1211,32 @@ class _GoalTileGlass extends StatelessWidget {
               color: completed ? _catColor : Colors.transparent,
               shape: BoxShape.circle,
               border: Border.all(
-                color: isFuture ? Colors.white.withOpacity(0.12)
+                color: isFuture ? c.divider
                     : completed ? _catColor
-                    : Colors.white.withOpacity(0.25),
+                    : c.glassBorder,
                 width: 1.5),
               boxShadow: completed
-                  ? [BoxShadow(
-                      color: _catColor.withOpacity(0.45), blurRadius: 8)]
+                  ? [BoxShadow(color: _catColor.withOpacity(0.45), blurRadius: 8)]
                   : null),
             child: completed
-                ? const Icon(Icons.check_rounded,
-                    color: Colors.white, size: 14)
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 14)
                 : null)),
       ]),
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// _MiniProgressRing + _MiniRingPainter — trackColor aggiunto
+// ─────────────────────────────────────────────────────────────
+
 class _MiniProgressRing extends StatelessWidget {
-  final double progress; final Color color;
-  const _MiniProgressRing(
-      {required this.progress, required this.color});
+  final double progress;
+  final Color  color;
+  final Color  trackColor;
+  const _MiniProgressRing({
+    required this.progress, required this.color, required this.trackColor});
+
   @override
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
@@ -1492,36 +1246,38 @@ class _MiniProgressRing extends StatelessWidget {
     const SizedBox(width: 6),
     SizedBox(width: 28, height: 28,
       child: CustomPaint(painter: _MiniRingPainter(
-          progress: progress, color: color))),
+          progress: progress, color: color, trackColor: trackColor))),
   ]);
 }
 
 class _MiniRingPainter extends CustomPainter {
-  final double progress; final Color color;
-  const _MiniRingPainter({required this.progress, required this.color});
+  final double progress;
+  final Color  color;
+  final Color  trackColor;
+  const _MiniRingPainter({
+    required this.progress, required this.color, required this.trackColor});
+
   @override
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
     final r = size.width / 2 - 3;
     canvas.drawCircle(c, r,
-      Paint()
-        ..color = Colors.white.withOpacity(0.07)
+      Paint()..color = trackColor   // was Colors.white.withOpacity(0.07)
         ..style = PaintingStyle.stroke ..strokeWidth = 3);
     if (progress > 0) {
       canvas.drawArc(Rect.fromCircle(center: c, radius: r),
         -math.pi / 2, 2 * math.pi * progress, false,
-        Paint()
-          ..color = color ..style = PaintingStyle.stroke
+        Paint()..color = color ..style = PaintingStyle.stroke
           ..strokeWidth = 3 ..strokeCap = StrokeCap.round);
     }
   }
+
   @override
-  bool shouldRepaint(_MiniRingPainter old) =>
-      old.progress != progress;
+  bool shouldRepaint(_MiniRingPainter old) => old.progress != progress;
 }
 
 // ─────────────────────────────────────────────────────────────
-// _DailyProgressCard
+// _DailyProgressCard — ADATTIVO
 // ─────────────────────────────────────────────────────────────
 
 class _DailyProgressCard extends StatelessWidget {
@@ -1531,19 +1287,18 @@ class _DailyProgressCard extends StatelessWidget {
   final int workoutCount, exerciseCount;
   final bool hasActive;
   final String Function(int) fmt;
-
   const _DailyProgressCard({
     required this.ringAnim, required this.progress,
     required this.completedSets, required this.totalSets,
     required this.elapsedSec, required this.workoutCount,
     required this.exerciseCount, required this.hasActive,
-    required this.fmt,
-  });
+    required this.fmt});
 
   @override
   Widget build(BuildContext context) {
-    final ringColor = hasActive ? _teal : _cyan.withOpacity(0.4);
-    final glowColor = hasActive ? _teal : _cyan;
+    final c          = context.mfc;
+    final ringColor  = hasActive ? _teal : _cyan.withOpacity(0.4);
+    final glowColor  = hasActive ? _teal : _cyan;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
@@ -1552,16 +1307,14 @@ class _DailyProgressCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            gradient: LinearGradient(begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Colors.white.withOpacity(0.09),
-                Colors.white.withOpacity(0.03)]),
+            color: c.glassCard,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-                color: _cyan.withOpacity(0.22), width: 1),
-            boxShadow: [BoxShadow(
-                color: _cyan.withOpacity(0.07),
-                blurRadius: 30, spreadRadius: 2)]),
+            border: Border.all(color: _cyan.withOpacity(0.22), width: 1),
+            boxShadow: c.showElevation
+                ? [BoxShadow(color: c.elevationColor, blurRadius: 20,
+                    offset: const Offset(0, 3))]
+                : [BoxShadow(color: _cyan.withOpacity(0.07),
+                    blurRadius: 30, spreadRadius: 2)]),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1572,9 +1325,7 @@ class _DailyProgressCard extends StatelessWidget {
                   boxShadow: [BoxShadow(
                       color: _cyan.withOpacity(0.6), blurRadius: 4)])),
               const SizedBox(width: 8),
-              Text(hasActive
-                  ? 'SESSIONE IN CORSO'
-                  : 'PROGRESSO GIORNALIERO',
+              Text(hasActive ? 'SESSIONE IN CORSO' : 'PROGRESSO GIORNALIERO',
                 style: TextStyle(color: _cyan, fontSize: 10,
                     fontWeight: FontWeight.w800, letterSpacing: 1.2)),
             ]),
@@ -1585,15 +1336,14 @@ class _DailyProgressCard extends StatelessWidget {
                 targetProgress: progress,
                 ringColor:      ringColor,
                 glowColor:      glowColor,
+                trackColor:     c.divider,
                 size:           118,
-                centerLabel: hasActive ? 'Serie' : 'Pronto'),
+                centerLabel:    hasActive ? 'Serie' : 'Pronto'),
               const SizedBox(width: 18),
               Expanded(child: Column(children: [
                 _StatMicroCard(
                   icon: Icons.fitness_center_rounded, label: 'Schede',
-                  value: hasActive
-                      ? '$completedSets/$totalSets'
-                      : '$workoutCount',
+                  value: hasActive ? '$completedSets/$totalSets' : '$workoutCount',
                   color: _teal),
                 const SizedBox(height: 8),
                 _StatMicroCard(
@@ -1614,32 +1364,32 @@ class _DailyProgressCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _NeonProgressRing + _RingPainter
+// _NeonProgressRing + _RingPainter — trackColor aggiunto
 // ─────────────────────────────────────────────────────────────
 
 class _NeonProgressRing extends StatelessWidget {
   final Animation<double> animation;
   final double targetProgress;
-  final Color ringColor, glowColor;
+  final Color  ringColor, glowColor, trackColor;
   final double size;
   final String centerLabel;
   const _NeonProgressRing({
     required this.animation, required this.targetProgress,
     required this.ringColor, required this.glowColor,
-    required this.size, required this.centerLabel,
-  });
+    required this.trackColor, required this.size, required this.centerLabel});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.mfc;
     return AnimatedBuilder(
       animation: animation,
       builder: (_, __) {
-        final p =
-            (animation.value * targetProgress).clamp(0.0, 1.0);
+        final p = (animation.value * targetProgress).clamp(0.0, 1.0);
         return SizedBox(width: size, height: size,
           child: CustomPaint(
-            painter: _RingPainter(progress: p,
-                ringColor: ringColor, glowColor: glowColor),
+            painter: _RingPainter(
+                progress: p, ringColor: ringColor,
+                glowColor: glowColor, trackColor: trackColor),
             child: Center(child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1647,9 +1397,8 @@ class _NeonProgressRing extends StatelessWidget {
                   color: ringColor, fontSize: size * 0.21,
                   fontWeight: FontWeight.w800, letterSpacing: -1)),
               Text(centerLabel, style: TextStyle(
-                  color: Colors.white.withOpacity(0.4),
-                  fontSize: size * 0.09,
-                  fontWeight: FontWeight.w500)),
+                  color: c.textTertiary,   // was Colors.white.withOpacity(0.4)
+                  fontSize: size * 0.09, fontWeight: FontWeight.w500)),
             ]))));
       });
   }
@@ -1657,9 +1406,9 @@ class _NeonProgressRing extends StatelessWidget {
 
 class _RingPainter extends CustomPainter {
   final double progress;
-  final Color ringColor, glowColor;
-  const _RingPainter({required this.progress,
-      required this.ringColor, required this.glowColor});
+  final Color  ringColor, glowColor, trackColor;
+  const _RingPainter({required this.progress, required this.ringColor,
+      required this.glowColor, required this.trackColor});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1667,9 +1416,11 @@ class _RingPainter extends CustomPainter {
     final radius = size.width / 2 - 10;
     const start  = -math.pi / 2;
     final sweep  = 2 * math.pi * progress;
+
     canvas.drawCircle(center, radius,
-      Paint()..color = Colors.white.withOpacity(0.07)
+      Paint()..color = trackColor   // was Colors.white.withOpacity(0.07)
         ..style = PaintingStyle.stroke ..strokeWidth = 9);
+
     if (progress <= 0.01) return;
     canvas.drawArc(Rect.fromCircle(center: center, radius: radius),
       start, sweep, false,
@@ -1693,8 +1444,7 @@ class _RingPainter extends CustomPainter {
       canvas.drawCircle(Offset(ex, ey), 5,
         Paint()..color = ringColor
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
-      canvas.drawCircle(
-          Offset(ex, ey), 3, Paint()..color = Colors.white);
+      canvas.drawCircle(Offset(ex, ey), 3, Paint()..color = Colors.white);
     }
   }
 
@@ -1703,7 +1453,7 @@ class _RingPainter extends CustomPainter {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _StatMicroCard
+// _StatMicroCard — ADATTIVO
 // ─────────────────────────────────────────────────────────────
 
 class _StatMicroCard extends StatelessWidget {
@@ -1712,38 +1462,41 @@ class _StatMicroCard extends StatelessWidget {
       required this.value, required this.color});
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(12),
-    child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.07),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2), width: 0.8)),
-        child: Row(children: [
-          Container(width: 28, height: 28,
-            decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(7)),
-            child: Icon(icon, size: 14, color: color)),
-          const SizedBox(width: 8),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-            Text(value, style: TextStyle(color: color, fontSize: 14,
-                fontWeight: FontWeight.w800),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(label, style: TextStyle(
-                color: Colors.white.withOpacity(0.38), fontSize: 9,
-                fontWeight: FontWeight.w500)),
-          ])),
-        ]))));
+  Widget build(BuildContext context) {
+    final c = context.mfc;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withOpacity(0.2), width: 0.8)),
+          child: Row(children: [
+            Container(width: 28, height: 28,
+              decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(7)),
+              child: Icon(icon, size: 14, color: color)),
+            const SizedBox(width: 8),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              Text(value, style: TextStyle(
+                  color: color, fontSize: 14, fontWeight: FontWeight.w800),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(label, style: TextStyle(
+                  color: c.textTertiary,  // was Colors.white.withOpacity(0.38)
+                  fontSize: 9, fontWeight: FontWeight.w500)),
+            ])),
+          ]))));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _SectionHeader
+// _SectionHeader — ADATTIVO
 // ─────────────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
@@ -1753,30 +1506,32 @@ class _SectionHeader extends StatelessWidget {
       required this.color, this.trailingLabel, this.onTrailing});
 
   @override
-  Widget build(BuildContext context) => Row(children: [
-    Container(width: 32, height: 32,
-      decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(9)),
-      child: Icon(icon, size: 16, color: color)),
-    const SizedBox(width: 10),
-    Text(title, style: const TextStyle(color: Colors.white,
-        fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
-    const Spacer(),
-    if (trailingLabel != null && onTrailing != null)
-      GestureDetector(
-        onTap: onTrailing,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-                color: color.withOpacity(0.3), width: 0.8)),
-          child: Text(trailingLabel!, style: TextStyle(
-              color: color, fontSize: 11, fontWeight: FontWeight.w700)))),
-  ]);
+  Widget build(BuildContext context) {
+    final c = context.mfc;
+    return Row(children: [
+      Container(width: 32, height: 32,
+        decoration: BoxDecoration(
+            color: color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(9)),
+        child: Icon(icon, size: 16, color: color)),
+      const SizedBox(width: 10),
+      Text(title, style: TextStyle(
+          color: c.textPrimary,   // was Colors.white
+          fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
+      const Spacer(),
+      if (trailingLabel != null && onTrailing != null)
+        GestureDetector(
+          onTap: onTrailing,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withOpacity(0.3), width: 0.8)),
+            child: Text(trailingLabel!, style: TextStyle(
+                color: color, fontSize: 11, fontWeight: FontWeight.w700)))),
+    ]);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1787,8 +1542,7 @@ class _QuickStartGrid extends StatelessWidget {
   final VoidCallback onPalestra, onRunning, onCiclismo, onNuoto;
   const _QuickStartGrid({
     required this.onPalestra, required this.onRunning,
-    required this.onCiclismo, required this.onNuoto,
-  });
+    required this.onCiclismo, required this.onNuoto});
 
   @override
   Widget build(BuildContext context) => GridView.count(
@@ -1808,6 +1562,10 @@ class _QuickStartGrid extends StatelessWidget {
     ]);
 }
 
+// ─────────────────────────────────────────────────────────────
+// _QuickCard — ADATTIVO
+// ─────────────────────────────────────────────────────────────
+
 class _QuickCard extends StatelessWidget {
   final IconData icon; final String label, sublabel;
   final Color color; final VoidCallback onTap;
@@ -1815,50 +1573,56 @@ class _QuickCard extends StatelessWidget {
       required this.sublabel, required this.color, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [color.withOpacity(0.15),
-                Colors.white.withOpacity(0.02)]),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: color.withOpacity(0.35), width: 1),
-            boxShadow: [BoxShadow(
-                color: color.withOpacity(0.14), blurRadius: 18,
-                spreadRadius: 1)]),
-          child: Padding(
-            padding: const EdgeInsets.all(15),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-              Container(width: 40, height: 40,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [BoxShadow(
-                      color: color.withOpacity(0.3), blurRadius: 10)]),
-                child: Icon(icon, color: color, size: 22)),
-              Column(crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                Text(label, style: const TextStyle(
-                    color: Colors.white, fontSize: 14,
-                    fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
-                Text(sublabel, style: TextStyle(
-                    color: Colors.white.withOpacity(0.38), fontSize: 10)),
+  Widget build(BuildContext context) {
+    final c = context.mfc;
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [color.withOpacity(0.15), color.withOpacity(0.04)]),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: color.withOpacity(0.35), width: 1),
+              boxShadow: [
+                if (c.showElevation)
+                  BoxShadow(color: c.elevationColor, blurRadius: 8,
+                      offset: const Offset(0, 2)),
+                BoxShadow(color: color.withOpacity(0.14), blurRadius: 18,
+                    spreadRadius: 1),
               ]),
-            ]))))));
+            child: Padding(
+              padding: const EdgeInsets.all(15),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                Container(width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [BoxShadow(
+                        color: color.withOpacity(0.3), blurRadius: 10)]),
+                  child: Icon(icon, color: color, size: 22)),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(label, style: TextStyle(
+                      color: c.textPrimary,   // was Colors.white
+                      fontSize: 14, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text(sublabel, style: TextStyle(
+                      color: c.textTertiary,   // was Colors.white.withOpacity(0.38)
+                      fontSize: 10)),
+                ]),
+              ]))))));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutMiniCard
+// _WorkoutMiniCard — ADATTIVO
 // ─────────────────────────────────────────────────────────────
 
 class _WorkoutMiniCard extends StatelessWidget {
@@ -1869,37 +1633,37 @@ class _WorkoutMiniCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c         = context.mfc;
     final hasPaused = sp.hasPausedSessionForWorkout(workout.key);
     final hasActive = sp.hasActiveSession &&
         sp.currentWorkout?.key == workout.key;
-    final indicator =
-        hasPaused ? _orange : hasActive ? _blue : null;
-    final exercises =
-        HiveDatabase.instance.getWorkoutExercises(workout.key);
-    final free     = exercises.where((e) => !e.isInCircuit).length;
-    final circuits = HiveDatabase.instance.getCircuits(workout.key);
+    final indicator = hasPaused ? _orange : hasActive ? _blue : null;
+    final exercises = HiveDatabase.instance.getWorkoutExercises(workout.key);
+    final free      = exercises.where((e) => !e.isInCircuit).length;
+    final circuits  = HiveDatabase.instance.getCircuits(workout.key);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [
-              Colors.white.withOpacity(0.08),
-              Colors.white.withOpacity(0.02),
-            ]),
+            color: c.glassCard,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: indicator != null
                   ? indicator.withOpacity(0.38)
                   : _teal.withOpacity(0.18),
-              width: 0.8)),
+              width: 0.8),
+            boxShadow: c.showElevation
+                ? [BoxShadow(color: c.elevationColor, blurRadius: 8,
+                    offset: const Offset(0, 2))]
+                : null),
           child: Row(children: [
             WorkoutAvatar(
-              iconId:          workout.iconId ?? 'dumbbell',
-              iconColorIndex:  workout.iconColorIndex ?? 0,
+              iconId: workout.iconId ?? 'dumbbell',
+              iconColorIndex: workout.iconColorIndex ?? 0,
               customImagePath: workout.customImagePath,
               size: 42, iconSize: 21, borderRadius: 11),
             const SizedBox(width: 12),
@@ -1907,9 +1671,9 @@ class _WorkoutMiniCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
               Row(children: [
-                Expanded(child: Text(workout.name,
-                    style: const TextStyle(color: Colors.white,
-                        fontSize: 14, fontWeight: FontWeight.w700),
+                Expanded(child: Text(workout.name, style: TextStyle(
+                    color: c.textPrimary,   // was Colors.white
+                    fontSize: 14, fontWeight: FontWeight.w700),
                     maxLines: 1, overflow: TextOverflow.ellipsis)),
                 if (indicator != null)
                   Container(
@@ -1935,12 +1699,11 @@ class _WorkoutMiniCard extends StatelessWidget {
             GestureDetector(onTap: onEdit,
               child: Container(width: 34, height: 34,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.06),
+                  color: c.glassCardInset,
                   borderRadius: BorderRadius.circular(9),
-                  border: Border.all(
-                      color: Colors.white.withOpacity(0.12))),
+                  border: Border.all(color: c.glassBorder)),
                 child: Icon(Icons.edit_outlined,
-                    color: Colors.white.withOpacity(0.5), size: 16))),
+                    color: c.iconSecondary, size: 16))),   // was Colors.white.withOpacity(0.5)
             const SizedBox(width: 8),
             GestureDetector(onTap: onPlay,
               child: Container(width: 38, height: 38,
@@ -1950,10 +1713,8 @@ class _WorkoutMiniCard extends StatelessWidget {
                       : [_green, const Color(0xFF16A34A)]),
                   shape: BoxShape.circle,
                   boxShadow: [BoxShadow(
-                      color: (hasPaused ? _orange : _green)
-                          .withOpacity(0.4),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2))]),
+                      color: (hasPaused ? _orange : _green).withOpacity(0.4),
+                      blurRadius: 10, offset: const Offset(0, 2))]),
                 child: const Icon(Icons.play_arrow_rounded,
                     color: Colors.white, size: 20))),
           ]))));
@@ -1980,18 +1741,24 @@ class _MiniStat extends StatelessWidget {
   ]);
 }
 
+// ─────────────────────────────────────────────────────────────
+// _TinyPill — ADATTIVO
+// ─────────────────────────────────────────────────────────────
+
 class _TinyPill extends StatelessWidget {
   final String label;
   const _TinyPill({required this.label});
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-    decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.07),
-      borderRadius: BorderRadius.circular(5),
-      border: Border.all(
-          color: Colors.white.withOpacity(0.12), width: 0.7)),
-    child: Text(label, style: TextStyle(
-        color: Colors.white.withOpacity(0.5), fontSize: 10,
-        fontWeight: FontWeight.w600)));
+  Widget build(BuildContext context) {
+    final c = context.mfc;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.glassCardInset,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: c.glassBorder, width: 0.7)),
+      child: Text(label, style: TextStyle(
+          color: c.textTertiary,  // was Colors.white.withOpacity(0.5)
+          fontSize: 10, fontWeight: FontWeight.w600)));
+  }
 }
