@@ -15,7 +15,7 @@ import '../../providers/theme_provider.dart';
 import '../../providers/workout_provider.dart';
 import '../../services/backup_service.dart';
 import '../../widgets/cosmic_background.dart';
-import '../../widgets/glass_main_app_bar.dart';
+import '../../widgets/glass_widgets.dart';
 import '../../widgets/shared_sheets.dart';
 import '../import/activity_import_screen.dart';
 import 'image_picker_helper.dart';
@@ -37,151 +37,175 @@ class SettingsScreen extends StatelessWidget {
     return CosmicBackground(
       child: SafeArea(
         bottom: false,
-        child: Column(children: [
+        // ── SingleChildScrollView: stessa architettura di Home ─
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(20, 24, 20, 88 + sysBottom),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
 
-          // ── iOS 26 Glass AppBar ─────────────────────────────
-          GlassMainAppBar(
-            title:       'Impostazioni',
-            subtitle:    auth.currentIdentifier ?? '',
-            accentColor: MarkFitColors.indigo,
-            screenIcon:  Icons.settings_rounded,
-            primaryActions: [
-              GlassToolbarAction(
-                icon:    Icons.download_rounded,
-                tooltip: 'Esporta backup',
-                color:   MarkFitColors.teal,
-                onTap:   () => _exportBackup(context, tp, auth)),
-              GlassToolbarAction(
-                icon:    Icons.upload_rounded,
-                tooltip: 'Importa backup',
-                color:   MarkFitColors.indigo,
-                onTap:   () => _importBackup(context)),
-            ],
-            onProfileTap: () => pushPage(context,
-                ChangeNotifierProvider.value(
-                  value: auth,
-                  child: const EditProfileScreen()))),
-
-          // ── Contenuto ───────────────────────────────────────
-          Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(16, 12, 16, 88 + sysBottom),
-              child: Column(
+              // ── Header inline — identico ad AllenamentiScreen ─
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                      Text('Impostazioni', style: TextStyle(
+                          color:        c.textPrimary,
+                          fontSize:     32,
+                          fontWeight:   FontWeight.w800,
+                          letterSpacing: -0.5)),
+                      if ((auth.currentIdentifier ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          auth.currentIdentifier!,
+                          style: TextStyle(
+                              color: c.textTertiary, fontSize: 14),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1),
+                      ],
+                    ])),
+                  const SizedBox(width: 12),
 
-                  _ProfileCard(auth: auth, c: c),
-                  const SizedBox(height: 20),
-
-                  _SectionLabel('Aspetto', c: c),
-                  const SizedBox(height: 8),
-                  _ThemeToggle(isDark: tp.isDark, onToggle: tp.toggle, c: c),
-                  const SizedBox(height: 18),
-
-                  _SectionLabel('Backup dati', c: c),
-                  const SizedBox(height: 8),
-                  _Section(c: c, tiles: [
-                    _Tile(
-                      icon:     Icons.download_outlined,
-                      color:    MarkFitColors.teal,
-                      title:    'Esporta backup',
-                      subtitle: 'Salva tutti i tuoi dati in un file JSON',
-                      c:        c,
-                      onTap:    () => _exportBackup(context, tp, auth)),
-                    _Divider(c: c),
-                    _Tile(
-                      icon:     Icons.upload_outlined,
-                      color:    MarkFitColors.indigo,
-                      title:    'Importa backup',
-                      subtitle: 'Ripristina da un file di backup MarkFit',
-                      c:        c,
-                      onTap:    () => _importBackup(context)),
-                  ]),
-                  const SizedBox(height: 18),
-
-                  _SectionLabel('Sincronizzazione', c: c),
-                  const SizedBox(height: 8),
-                  _Section(c: c, tiles: [
-                    _Tile(
-                      icon:     Icons.upload_file_rounded,
-                      color:    MarkFitColors.blue,
-                      title:    'Importa attività GPS',
-                      subtitle: 'Da file TCX o GPX (Garmin, Suunto, Polar...)',
-                      c:        c,
-                      onTap:    () =>
-                          pushPage(context, const ActivityImportScreen())),
-                  ]),
-                  const SizedBox(height: 18),
-
-                  _SectionLabel('Dati', c: c),
-                  const SizedBox(height: 8),
-                  _Section(c: c, tiles: [
-                    _Tile(
-                      icon:     Icons.delete_sweep_outlined,
-                      color:    MarkFitColors.red,
-                      title:    'Elimina sessioni',
-                      subtitle: 'Rimuove lo storico allenamenti',
-                      c:        c,
-                      onTap:    () => _confirmDeleteSessions(context, c)),
-                    _Divider(c: c),
-                    _Tile(
-                      icon:     Icons.note_alt_outlined,
-                      color:    MarkFitColors.orange,
-                      title:    'Elimina note esercizi',
-                      subtitle: 'Rimuove tutte le note degli esercizi',
-                      c:        c,
-                      onTap:    () => _confirmDeleteNotes(context, c)),
-                  ]),
-                  const SizedBox(height: 18),
-
-                  _SectionLabel('Account', c: c),
-                  const SizedBox(height: 8),
-                  _Section(c: c, tiles: [
-                    if (auth.accounts.length > 1) ...[
-                      _Tile(
-                        icon:     Icons.switch_account_outlined,
-                        color:    MarkFitColors.blue,
-                        title:    'Cambia account',
-                        subtitle: '${auth.accounts.length} account salvati',
-                        c:        c,
-                        onTap:    () => _showSwitchAccount(context)),
-                      _Divider(c: c),
-                    ],
-                    _Tile(
-                      icon:       Icons.logout_rounded,
-                      color:      MarkFitColors.red,
-                      title:      'Logout',
-                      titleColor: MarkFitColors.red,
-                      c:          c,
-                      onTap:      () => _confirmLogout(context, c)),
-                  ]),
-                  const SizedBox(height: 18),
-
-                  _SectionLabel('Info', c: c),
-                  const SizedBox(height: 8),
-                  _Section(c: c, tiles: [
-                    _Tile(
-                      icon:  Icons.info_outline_rounded,
-                      color: MarkFitColors.cyan,
-                      title: 'Versione',
-                      c:     c,
-                      trailing: Text('1.0.0', style: TextStyle(
-                          color: c.textTertiary, fontSize: 13,
-                          fontWeight: FontWeight.w500))),
-                    _Divider(c: c),
-                    _Tile(
-                      icon:     Icons.fitness_center_rounded,
-                      color:    MarkFitColors.teal,
-                      title:    'MarkFit',
-                      subtitle: 'Traccia i tuoi allenamenti',
-                      c:        c),
+                  // Pill: Download + Upload
+                  GlassHeaderPill(children: [
+                    GlassHeaderPillBtn(
+                      icon:    Icons.download_rounded,
+                      color:   MarkFitColors.teal,
+                      tooltip: 'Esporta backup',
+                      onTap:   () => _exportBackup(context, tp, auth)),
+                    Container(
+                        width: 1, height: 20, color: c.divider),
+                    GlassHeaderPillBtn(
+                      icon:    Icons.upload_rounded,
+                      color:   MarkFitColors.indigo,
+                      tooltip: 'Importa backup',
+                      onTap:   () => _importBackup(context)),
                   ]),
                 ],
               ),
-            ),
+              const SizedBox(height: 28),
+
+              // ── Profilo ───────────────────────────────────────
+              _ProfileCard(auth: auth, c: c),
+              const SizedBox(height: 20),
+
+              // ── Aspetto ───────────────────────────────────────
+              _SectionLabel('Aspetto', c: c),
+              const SizedBox(height: 8),
+              _ThemeToggle(isDark: tp.isDark, onToggle: tp.toggle, c: c),
+              const SizedBox(height: 18),
+
+              // ── Backup dati ───────────────────────────────────
+              _SectionLabel('Backup dati', c: c),
+              const SizedBox(height: 8),
+              _Section(c: c, tiles: [
+                _Tile(
+                  icon:     Icons.download_outlined,
+                  color:    MarkFitColors.teal,
+                  title:    'Esporta backup',
+                  subtitle: 'Salva tutti i tuoi dati in un file JSON',
+                  c:        c,
+                  onTap:    () => _exportBackup(context, tp, auth)),
+                _Divider(c: c),
+                _Tile(
+                  icon:     Icons.upload_outlined,
+                  color:    MarkFitColors.indigo,
+                  title:    'Importa backup',
+                  subtitle: 'Ripristina da un file di backup MarkFit',
+                  c:        c,
+                  onTap:    () => _importBackup(context)),
+              ]),
+              const SizedBox(height: 18),
+
+              // ── Sincronizzazione ──────────────────────────────
+              _SectionLabel('Sincronizzazione', c: c),
+              const SizedBox(height: 8),
+              _Section(c: c, tiles: [
+                _Tile(
+                  icon:     Icons.upload_file_rounded,
+                  color:    MarkFitColors.blue,
+                  title:    'Importa attività GPS',
+                  subtitle: 'Da file TCX o GPX (Garmin, Suunto, Polar...)',
+                  c:        c,
+                  onTap:    () =>
+                      pushPage(context, const ActivityImportScreen())),
+              ]),
+              const SizedBox(height: 18),
+
+              // ── Dati ─────────────────────────────────────────
+              _SectionLabel('Dati', c: c),
+              const SizedBox(height: 8),
+              _Section(c: c, tiles: [
+                _Tile(
+                  icon:     Icons.delete_sweep_outlined,
+                  color:    MarkFitColors.red,
+                  title:    'Elimina sessioni',
+                  subtitle: 'Rimuove lo storico allenamenti',
+                  c:        c,
+                  onTap:    () => _confirmDeleteSessions(context, c)),
+                _Divider(c: c),
+                _Tile(
+                  icon:     Icons.note_alt_outlined,
+                  color:    MarkFitColors.orange,
+                  title:    'Elimina note esercizi',
+                  subtitle: 'Rimuove tutte le note degli esercizi',
+                  c:        c,
+                  onTap:    () => _confirmDeleteNotes(context, c)),
+              ]),
+              const SizedBox(height: 18),
+
+              // ── Account ───────────────────────────────────────
+              _SectionLabel('Account', c: c),
+              const SizedBox(height: 8),
+              _Section(c: c, tiles: [
+                if (auth.accounts.length > 1) ...[
+                  _Tile(
+                    icon:     Icons.switch_account_outlined,
+                    color:    MarkFitColors.blue,
+                    title:    'Cambia account',
+                    subtitle: '${auth.accounts.length} account salvati',
+                    c:        c,
+                    onTap:    () => _showSwitchAccount(context)),
+                  _Divider(c: c),
+                ],
+                _Tile(
+                  icon:       Icons.logout_rounded,
+                  color:      MarkFitColors.red,
+                  title:      'Logout',
+                  titleColor: MarkFitColors.red,
+                  c:          c,
+                  onTap:      () => _confirmLogout(context, c)),
+              ]),
+              const SizedBox(height: 18),
+
+              // ── Info ──────────────────────────────────────────
+              _SectionLabel('Info', c: c),
+              const SizedBox(height: 8),
+              _Section(c: c, tiles: [
+                _Tile(
+                  icon:  Icons.info_outline_rounded,
+                  color: MarkFitColors.cyan,
+                  title: 'Versione',
+                  c:     c,
+                  trailing: Text('1.0.0', style: TextStyle(
+                      color:      c.textTertiary,
+                      fontSize:   13,
+                      fontWeight: FontWeight.w500))),
+                _Divider(c: c),
+                _Tile(
+                  icon:     Icons.fitness_center_rounded,
+                  color:    MarkFitColors.teal,
+                  title:    'MarkFit',
+                  subtitle: 'Traccia i tuoi allenamenti',
+                  c:        c),
+              ]),
+            ],
           ),
-        ]),
+        ),
       ),
     );
   }
@@ -224,17 +248,20 @@ class SettingsScreen extends StatelessWidget {
             child: const Icon(Icons.error_outline_rounded,
                 color: MarkFitColors.red, size: 22)),
           title:   'Impossibile importare il file',
-          message: 'I dati non sono compatibili con questa versione di MarkFit.'
-              '\n\n${e.message}',
+          message: 'I dati non sono compatibili con questa versione di '
+              'MarkFit.\n\n${e.message}',
           actions: [
             GlassDialogAction(
-                label: 'OK', onTap: () => Navigator.pop(context)),
+                label: 'OK',
+                onTap: () => Navigator.pop(context)),
           ]);
       }
       return;
     } catch (_) {
       if (context.mounted) {
-        _showSnack(context, c, 'Impossibile leggere il file', MarkFitColors.red);
+        _showSnack(
+            context, context.mfc, 'Impossibile leggere il file',
+            MarkFitColors.red);
       }
       return;
     }
@@ -256,7 +283,8 @@ class SettingsScreen extends StatelessWidget {
           '\n\nI dati attuali verranno sostituiti. Vuoi procedere?',
       actions: [
         GlassDialogAction(
-            label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+            label: 'Annulla',
+            onTap: () => Navigator.pop(context, false)),
         GlassDialogAction(
             label: 'Importa', isDestructive: false,
             color: MarkFitColors.indigo,
@@ -266,10 +294,10 @@ class SettingsScreen extends StatelessWidget {
     if (ok != true || !context.mounted) return;
 
     showDialog(
-      context:          context,
+      context:            context,
       barrierDismissible: false,
-      barrierColor:     Colors.black.withOpacity(0.55),
-      builder: (ctx) => _LoadingDialog(c: c));
+      barrierColor:       Colors.black.withOpacity(0.55),
+      builder: (ctx) => _LoadingDialog(c: context.mfc));
 
     try {
       await BackupService.instance.restoreBackup(data);
@@ -281,12 +309,14 @@ class SettingsScreen extends StatelessWidget {
       }
       if (context.mounted) Navigator.pop(context);
       if (context.mounted) {
-        _showSnack(context, c, '✓ Backup ripristinato', MarkFitColors.teal);
+        _showSnack(context, context.mfc,
+            '✓ Backup ripristinato', MarkFitColors.teal);
       }
     } catch (e) {
       if (context.mounted) Navigator.pop(context);
       if (context.mounted) {
-        _showSnack(context, c, "Errore durante l'import", MarkFitColors.red);
+        _showSnack(context, context.mfc,
+            "Errore durante l'import", MarkFitColors.red);
       }
     }
   }
@@ -301,27 +331,33 @@ class SettingsScreen extends StatelessWidget {
 
   // ── Dialog helpers ────────────────────────────────────────
 
-  Future<void> _confirmLogout(BuildContext context, MarkFitColors c) async {
+  Future<void> _confirmLogout(
+      BuildContext context, MarkFitColors c) async {
     final ok = await showGlassDialog<bool>(
-      context: context, accentColor: MarkFitColors.red,
+      context:     context,
+      accentColor: MarkFitColors.red,
       icon: Container(width: 44, height: 44,
         decoration: BoxDecoration(
-          color: MarkFitColors.red.withOpacity(0.12),
-          shape: BoxShape.circle,
-          border: Border.all(color: MarkFitColors.red.withOpacity(0.4)),
+          color:     MarkFitColors.red.withOpacity(0.12),
+          shape:     BoxShape.circle,
+          border:    Border.all(color: MarkFitColors.red.withOpacity(0.4)),
           boxShadow: [BoxShadow(
               color: MarkFitColors.red.withOpacity(0.2), blurRadius: 12)]),
-        child: const Icon(Icons.logout_rounded, color: MarkFitColors.red, size: 22)),
+        child: const Icon(Icons.logout_rounded,
+            color: MarkFitColors.red, size: 22)),
       title:   'Logout',
       message: "Vuoi uscire dall'account corrente?",
       actions: [
         GlassDialogAction(
-            label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+            label: 'Annulla',
+            onTap: () => Navigator.pop(context, false)),
         GlassDialogAction(
             label: 'Logout', isDestructive: true,
             onTap: () => Navigator.pop(context, true)),
       ]);
-    if (ok == true && context.mounted) context.read<AuthProvider>().logout();
+    if (ok == true && context.mounted) {
+      context.read<AuthProvider>().logout();
+    }
   }
 
   void _showSwitchAccount(BuildContext context) {
@@ -337,11 +373,12 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _confirmDeleteSessions(
       BuildContext context, MarkFitColors c) async {
     final ok = await showGlassDialog<bool>(
-      context: context, accentColor: MarkFitColors.red,
+      context:     context,
+      accentColor: MarkFitColors.red,
       icon: Container(width: 44, height: 44,
         decoration: BoxDecoration(
-          color: MarkFitColors.red.withOpacity(0.12),
-          shape: BoxShape.circle,
+          color:  MarkFitColors.red.withOpacity(0.12),
+          shape:  BoxShape.circle,
           border: Border.all(color: MarkFitColors.red.withOpacity(0.4))),
         child: const Icon(Icons.delete_sweep_outlined,
             color: MarkFitColors.red, size: 22)),
@@ -349,7 +386,8 @@ class SettingsScreen extends StatelessWidget {
       message: 'Tutte le sessioni verranno rimosse definitivamente.',
       actions: [
         GlassDialogAction(
-            label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+            label: 'Annulla',
+            onTap: () => Navigator.pop(context, false)),
         GlassDialogAction(
             label: 'Elimina tutto', isDestructive: true,
             onTap: () => Navigator.pop(context, true)),
@@ -365,11 +403,12 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _confirmDeleteNotes(
       BuildContext context, MarkFitColors c) async {
     final ok = await showGlassDialog<bool>(
-      context: context, accentColor: MarkFitColors.orange,
+      context:     context,
+      accentColor: MarkFitColors.orange,
       icon: Container(width: 44, height: 44,
         decoration: BoxDecoration(
-          color: MarkFitColors.orange.withOpacity(0.12),
-          shape: BoxShape.circle,
+          color:  MarkFitColors.orange.withOpacity(0.12),
+          shape:  BoxShape.circle,
           border: Border.all(color: MarkFitColors.orange.withOpacity(0.4))),
         child: const Icon(Icons.note_alt_outlined,
             color: MarkFitColors.orange, size: 22)),
@@ -377,7 +416,8 @@ class SettingsScreen extends StatelessWidget {
       message: 'Tutte le note degli esercizi verranno rimosse.',
       actions: [
         GlassDialogAction(
-            label: 'Annulla', onTap: () => Navigator.pop(context, false)),
+            label: 'Annulla',
+            onTap: () => Navigator.pop(context, false)),
         GlassDialogAction(
             label: 'Elimina', isDestructive: true,
             onTap: () => Navigator.pop(context, true)),
@@ -423,16 +463,17 @@ class _LoadingDialog extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(28),
             decoration: BoxDecoration(
-              color: c.glassCardStrong,
+              color:        c.glassCardStrong,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: c.glassBorder)),
+              border:       Border.all(color: c.glassBorder)),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               const CircularProgressIndicator(
                   color: MarkFitColors.teal, strokeWidth: 3),
               const SizedBox(height: 16),
               Text('Importazione in corso...',
-                  style: TextStyle(color: c.textPrimary,
-                      fontSize: 14, fontWeight: FontWeight.w600)),
+                  style: TextStyle(
+                      color: c.textPrimary, fontSize: 14,
+                      fontWeight: FontWeight.w600)),
             ])))));
   }
 }
@@ -456,7 +497,6 @@ class _ProfileCard extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
       child: BackdropFilter(
-        // FIX: glassBlurStrong (era blurStrong)
         filter: ImageFilter.blur(
             sigmaX: c.glassBlurStrong, sigmaY: c.glassBlurStrong),
         child: Container(
@@ -469,10 +509,10 @@ class _ProfileCard extends StatelessWidget {
             boxShadow: c.showElevation
                 ? [BoxShadow(color: c.elevationColor, blurRadius: 20)]
                 : [BoxShadow(
-                    color: MarkFitColors.teal.withOpacity(0.06),
-                    blurRadius: 20, spreadRadius: 2)]),
+                    color:        MarkFitColors.teal.withOpacity(0.06),
+                    blurRadius:   20,
+                    spreadRadius: 2)]),
           child: Column(children: [
-
             Row(children: [
               GestureDetector(
                 onTap: () => _goToEdit(context),
@@ -482,10 +522,10 @@ class _ProfileCard extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                            colors: [MarkFitColors.teal, MarkFitColors.tealDk]),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: c.scaffoldBg, width: 2),
+                        gradient: const LinearGradient(colors: [
+                          MarkFitColors.teal, MarkFitColors.tealDk]),
+                        shape:     BoxShape.circle,
+                        border:    Border.all(color: c.scaffoldBg, width: 2),
                         boxShadow: [BoxShadow(
                             color: MarkFitColors.teal.withOpacity(0.4),
                             blurRadius: 6)]),
@@ -497,8 +537,10 @@ class _ProfileCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                 Text(name, style: TextStyle(
-                    color: c.textPrimary, fontSize: 18,
-                    fontWeight: FontWeight.w800, letterSpacing: -0.3),
+                    color:        c.textPrimary,
+                    fontSize:     18,
+                    fontWeight:   FontWeight.w800,
+                    letterSpacing: -0.3),
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 if (bio != null && bio.isNotEmpty) ...[
                   const SizedBox(height: 2),
@@ -517,16 +559,16 @@ class _ProfileCard extends StatelessWidget {
                         color: MarkFitColors.teal.withOpacity(0.25),
                         width: 0.7)),
                   child: Text(email, style: TextStyle(
-                      color: MarkFitColors.teal.withOpacity(0.9),
-                      fontSize: 10, fontWeight: FontWeight.w600),
+                      color:      MarkFitColors.teal.withOpacity(0.9),
+                      fontSize:   10,
+                      fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis)),
               ])),
             ]),
-
             if (account != null &&
                 (account.firstName != null ||
-                 account.birthDate != null ||
-                 account.phone     != null)) ...[
+                 account.birthDate  != null ||
+                 account.phone      != null)) ...[
               const SizedBox(height: 12),
               Container(height: 0.6, color: c.divider),
               const SizedBox(height: 10),
@@ -550,7 +592,6 @@ class _ProfileCard extends StatelessWidget {
                       label: account.birthPlace!, c: c),
               ]),
             ],
-
             const SizedBox(height: 14),
             GestureDetector(
               onTap: () => _goToEdit(context),
@@ -568,7 +609,8 @@ class _ProfileCard extends StatelessWidget {
                   Icon(Icons.edit_outlined, size: 15, color: MarkFitColors.teal),
                   SizedBox(width: 7),
                   Text('Modifica profilo', style: TextStyle(
-                      color: MarkFitColors.teal, fontSize: 13,
+                      color:      MarkFitColors.teal,
+                      fontSize:   13,
                       fontWeight: FontWeight.w700)),
                 ]))),
           ]),
@@ -621,8 +663,9 @@ class _SectionLabel extends StatelessWidget {
       padding: const EdgeInsets.only(left: 4),
       child: Text(label.toUpperCase(), style: TextStyle(
           color: MarkFitColors.cyan.withOpacity(
-              context.isDarkMode ? 0.65 : 0.70),
-          fontSize: 10, fontWeight: FontWeight.w800,
+              context.isDarkMode ? 0.65 : 0.75),
+          fontSize:    10,
+          fontWeight:  FontWeight.w800,
           letterSpacing: 1.4)));
   }
 }
@@ -636,7 +679,6 @@ class _Section extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
-        // FIX: glassBlur (era blur)
         filter: ImageFilter.blur(
             sigmaX: c.glassBlur, sigmaY: c.glassBlur),
         child: Container(
@@ -673,8 +715,7 @@ class _Tile extends StatelessWidget {
           ? () { HapticFeedback.selectionClick(); onTap!(); }
           : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 14, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         child: Row(children: [
           Container(width: 36, height: 36,
             decoration: BoxDecoration(
@@ -686,8 +727,9 @@ class _Tile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
             Text(title, style: TextStyle(
-                color: titleColor ?? c.textPrimary,
-                fontSize: 14, fontWeight: FontWeight.w600)),
+                color:      titleColor ?? c.textPrimary,
+                fontSize:   14,
+                fontWeight: FontWeight.w600)),
             if (subtitle != null) ...[
               const SizedBox(height: 2),
               Text(subtitle!, style: TextStyle(
@@ -710,9 +752,9 @@ class _Divider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 0.5,
-      margin: const EdgeInsets.symmetric(horizontal: 14),
-      color: c.divider);
+        height: 0.5,
+        margin: const EdgeInsets.symmetric(horizontal: 14),
+        color: c.divider);
   }
 }
 
@@ -730,9 +772,7 @@ class _ThemeToggle extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
-        // FIX: glassBlur (era blur)
-        filter: ImageFilter.blur(
-            sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+        filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
         child: GestureDetector(
           onTap: () { HapticFeedback.selectionClick(); onToggle(); },
           child: Container(
@@ -764,11 +804,12 @@ class _ThemeToggle extends StatelessWidget {
                     color: c.textPrimary, fontSize: 14,
                     fontWeight: FontWeight.w600)),
                 Text(isDark ? 'Modalità scura' : 'Modalità chiara',
-                    style: TextStyle(fontSize: 11, color: c.textTertiary)),
+                    style: TextStyle(
+                        fontSize: 11, color: c.textTertiary)),
               ])),
               AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
+                curve:    Curves.easeInOut,
                 width: 50, height: 28,
                 decoration: BoxDecoration(
                   color: isDark
@@ -781,8 +822,8 @@ class _ThemeToggle extends StatelessWidget {
                         : MarkFitColors.orange.withOpacity(0.4),
                     width: 1)),
                 child: AnimatedAlign(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeInOut,
+                  duration:  const Duration(milliseconds: 250),
+                  curve:     Curves.easeInOut,
                   alignment: isDark
                       ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
@@ -791,11 +832,13 @@ class _ThemeToggle extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.white, shape: BoxShape.circle,
                       boxShadow: [BoxShadow(
-                          color: Colors.black.withOpacity(0.2), blurRadius: 4)]),
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 4)]),
                     child: Icon(
                       isDark ? Icons.dark_mode : Icons.light_mode,
-                      size: 12,
-                      color: isDark ? MarkFitColors.indigo : MarkFitColors.orange)))),
+                      size:  12,
+                      color: isDark
+                          ? MarkFitColors.indigo : MarkFitColors.orange)))),
             ]),
           ),
         ),
@@ -852,7 +895,8 @@ class _SwitchAccountSheet extends StatelessWidget {
                           shape: BoxShape.circle),
                         child: Center(child: Text(a.initials,
                             style: TextStyle(
-                                color: c.textPrimary, fontSize: 14,
+                                color:      c.textPrimary,
+                                fontSize:   14,
                                 fontWeight: FontWeight.w800)))),
                       const SizedBox(width: 12),
                       Expanded(child: Column(
@@ -860,7 +904,8 @@ class _SwitchAccountSheet extends StatelessWidget {
                         children: [
                         Text(a.displayName ?? a.identifier,
                             style: TextStyle(
-                                color: c.textPrimary, fontSize: 14,
+                                color:      c.textPrimary,
+                                fontSize:   14,
                                 fontWeight: isCurrent
                                     ? FontWeight.w700 : FontWeight.w500),
                             maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -878,7 +923,8 @@ class _SwitchAccountSheet extends StatelessWidget {
                                 color: MarkFitColors.blue.withOpacity(0.35),
                                 width: 0.8)),
                           child: const Text('Attivo', style: TextStyle(
-                              color: MarkFitColors.blue, fontSize: 10,
+                              color:      MarkFitColors.blue,
+                              fontSize:   10,
                               fontWeight: FontWeight.w700))),
                     ]))))));
         }),
@@ -903,11 +949,10 @@ class _SwitchAccountSheet extends StatelessWidget {
           accentColor: MarkFitColors.teal,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             _GlassInput(
-              ctrl:        pwCtrl,
-              c:           c,
-              hint:        'Password',
-              icon:        Icons.lock_outline_rounded,
-              obscure:     true),
+              ctrl:    pwCtrl, c: c,
+              hint:    'Password',
+              icon:    Icons.lock_outline_rounded,
+              obscure: true),
             SizedBox(height: kb > 0 ? 12 : 16),
             GestureDetector(
               onTap: () async {
@@ -916,7 +961,7 @@ class _SwitchAccountSheet extends StatelessWidget {
                     password:   pwCtrl.text);
                 if (err != null && ctx.mounted) {
                   ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                    content: Text(err),
+                    content:         Text(err),
                     backgroundColor: MarkFitColors.red));
                 } else if (ctx.mounted) {
                   Navigator.pop(ctx);
@@ -926,11 +971,11 @@ class _SwitchAccountSheet extends StatelessWidget {
                 width:   double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                      colors: [MarkFitColors.teal, MarkFitColors.tealDk]),
+                  gradient: const LinearGradient(colors: [
+                    MarkFitColors.teal, MarkFitColors.tealDk]),
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [BoxShadow(
-                      color: MarkFitColors.teal.withOpacity(0.4),
+                      color:  MarkFitColors.teal.withOpacity(0.4),
                       blurRadius: 12, offset: const Offset(0, 3))]),
                 child: Text('Accedi', textAlign: TextAlign.center,
                     style: TextStyle(
@@ -963,7 +1008,7 @@ class AvatarWidget extends StatelessWidget {
         return Container(
           width: radius * 2, height: radius * 2,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            shape:     BoxShape.circle,
             border: Border.all(
                 color: MarkFitColors.teal.withOpacity(0.5), width: 2),
             boxShadow: [BoxShadow(
@@ -975,24 +1020,25 @@ class AvatarWidget extends StatelessWidget {
     return Container(
       width: radius * 2, height: radius * 2,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        gradient: LinearGradient(begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [
             MarkFitColors.teal.withOpacity(0.4),
             MarkFitColors.cyan.withOpacity(0.15)]),
-        shape: BoxShape.circle,
-        border: Border.all(
+        shape:     BoxShape.circle,
+        border:    Border.all(
             color: MarkFitColors.teal.withOpacity(0.55), width: 2),
         boxShadow: [BoxShadow(
             color: MarkFitColors.teal.withOpacity(0.3), blurRadius: 14)]),
       child: Center(child: Text(auth.initials, style: TextStyle(
-          color: Colors.white, fontSize: radius * 0.55,
+          color:      Colors.white,
+          fontSize:   radius * 0.55,
           fontWeight: FontWeight.w800))));
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// EditProfileScreen
+// EditProfileScreen — invariata rispetto alla versione precedente
 // ─────────────────────────────────────────────────────────────
 
 class EditProfileScreen extends StatefulWidget {
@@ -1103,10 +1149,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         child: SafeArea(
           child: Column(children: [
 
-            // Glass AppBar
+            // Glass AppBar per schermata pushed
             ClipRect(
               child: BackdropFilter(
-                // FIX: glassBlurStrong (era blurStrong)
                 filter: ImageFilter.blur(
                     sigmaX: c.glassBlurStrong,
                     sigmaY: c.glassBlurStrong),
@@ -1115,7 +1160,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     color: c.glassCard,
                     border: Border(bottom: BorderSide(
                         color: MarkFitColors.cyan.withOpacity(0.12),
-                        width: 0.6))),
+                        width: 0.6)),
+                    boxShadow: c.showElevation
+                        ? [BoxShadow(color: c.elevationColor,
+                            blurRadius: 6, offset: const Offset(0, 2))]
+                        : null),
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                   child: Row(children: [
                     GestureDetector(
@@ -1133,8 +1182,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                       Text('Modifica profilo', style: TextStyle(
-                          color: c.textPrimary, fontSize: 17,
-                          fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                          color:        c.textPrimary,
+                          fontSize:     17,
+                          fontWeight:   FontWeight.w800,
+                          letterSpacing: -0.3)),
                       Text('Aggiorna i tuoi dati', style: TextStyle(
                           color: c.textTertiary, fontSize: 11)),
                     ])),
@@ -1165,7 +1216,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                     color: Colors.white, size: 15),
                                 SizedBox(width: 5),
                                 Text('Salva', style: TextStyle(
-                                    color: Colors.white, fontSize: 12,
+                                    color:      Colors.white,
+                                    fontSize:   12,
                                     fontWeight: FontWeight.w700)),
                               ]))),
                   ])))),
@@ -1178,15 +1230,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   physics: const BouncingScrollPhysics(),
                   padding: EdgeInsets.fromLTRB(16, 16, 16, 32 + kbHeight),
                   child: Column(children: [
-
                     _EditAvatar(auth: auth, c: c, onPick: _pickImage),
                     const SizedBox(height: 20),
-
                     _FormSection(
                       title: 'Dati personali',
                       icon:  Icons.person_rounded,
-                      color: MarkFitColors.teal,
-                      c:     c,
+                      color: MarkFitColors.teal, c: c,
                       children: [
                       Row(children: [
                         Expanded(child: _GlassInput(
@@ -1213,19 +1262,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           accentColor: MarkFitColors.indigo),
                       const SizedBox(height: 10),
                       _GlassInput(
-                          ctrl:        _phoneCtrl, c: c,
-                          hint:        'Telefono',
-                          icon:        Icons.phone_outlined,
+                          ctrl:         _phoneCtrl, c: c,
+                          hint:         'Telefono',
+                          icon:         Icons.phone_outlined,
                           keyboardType: TextInputType.phone,
-                          accentColor: MarkFitColors.green),
+                          accentColor:  MarkFitColors.green),
                     ]),
                     const SizedBox(height: 14),
-
                     _FormSection(
                       title: 'Su di me',
                       icon:  Icons.notes_rounded,
-                      color: MarkFitColors.cyan,
-                      c:     c,
+                      color: MarkFitColors.cyan, c: c,
                       children: [
                       _GlassInput(
                           ctrl:       _bioCtrl, c: c,
@@ -1234,7 +1281,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           maxLines:   3),
                     ]),
                     const SizedBox(height: 24),
-
                     GestureDetector(
                       onTap: _loading ? null : _save,
                       child: AnimatedContainer(
@@ -1247,7 +1293,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           color: _loading ? c.glassCard : null,
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: _loading ? null : [BoxShadow(
-                              color: MarkFitColors.teal.withOpacity(0.4),
+                              color:  MarkFitColors.teal.withOpacity(0.4),
                               blurRadius: 16, offset: const Offset(0, 4))]),
                         child: _loading
                             ? Row(mainAxisAlignment: MainAxisAlignment.center,
@@ -1267,7 +1313,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                     color: Colors.white, size: 18),
                                 SizedBox(width: 8),
                                 Text('Salva modifiche', style: TextStyle(
-                                    color: Colors.white, fontSize: 15,
+                                    color:      Colors.white,
+                                    fontSize:   15,
                                     fontWeight: FontWeight.w700)),
                               ]))),
                   ]),
@@ -1297,9 +1344,7 @@ class _EditAvatar extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
-        // FIX: glassBlur (era blur)
-        filter: ImageFilter.blur(
-            sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+        filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -1319,9 +1364,9 @@ class _EditAvatar extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                          colors: [MarkFitColors.teal, MarkFitColors.tealDk]),
-                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(colors: [
+                        MarkFitColors.teal, MarkFitColors.tealDk]),
+                      shape:  BoxShape.circle,
                       border: Border.all(color: c.scaffoldBg, width: 2)),
                     child: const Icon(Icons.camera_alt_rounded,
                         size: 14, color: Colors.white))),
@@ -1331,16 +1376,13 @@ class _EditAvatar extends StatelessWidget {
               _AvatarBtn(
                 icon:  Icons.photo_library_outlined,
                 label: 'Cambia foto',
-                color: MarkFitColors.teal,
-                c:     c,
-                onTap: onPick),
+                color: MarkFitColors.teal, c: c, onTap: onPick),
               if (auth.avatarBase64 != null) ...[
                 const SizedBox(width: 10),
                 _AvatarBtn(
                   icon:  Icons.delete_outline_rounded,
                   label: 'Rimuovi',
-                  color: MarkFitColors.red,
-                  c:     c,
+                  color: MarkFitColors.red, c: c,
                   onTap: () async {
                     await context.read<AuthProvider>().clearAvatar();
                   }),
@@ -1388,9 +1430,7 @@ class _FormSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Container(width: 24, height: 24,
           decoration: BoxDecoration(
@@ -1406,9 +1446,7 @@ class _FormSection extends StatelessWidget {
       ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
-          // FIX: glassBlur (era blur)
-          filter: ImageFilter.blur(
-              sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+          filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -1434,24 +1472,21 @@ class _GlassInput extends StatelessWidget {
   final bool obscure;
 
   const _GlassInput({
-    required this.ctrl,
-    required this.c,
-    required this.hint,
+    required this.ctrl, required this.c, required this.hint,
     this.icon,
     this.accentColor = MarkFitColors.teal,
     this.keyboardType = TextInputType.text,
     this.maxLines = 1,
-    this.obscure = false,
+    this.obscure  = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
-        // FIX: glassBlur (era blur)
-        filter: ImageFilter.blur(
-            sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+        filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
         child: Container(
           decoration: BoxDecoration(
             color: c.inputBg,
@@ -1462,15 +1497,14 @@ class _GlassInput extends StatelessWidget {
             maxLines:           obscure ? 1 : maxLines,
             obscureText:        obscure,
             keyboardType:       keyboardType,
-            keyboardAppearance: context.isDarkMode
-                ? Brightness.dark : Brightness.light,
+            keyboardAppearance: isDark ? Brightness.dark : Brightness.light,
             textCapitalization: TextCapitalization.sentences,
-            style: TextStyle(color: c.textPrimary, fontSize: 14),
+            style: TextStyle(color: c.inputText, fontSize: 14),
             decoration: InputDecoration(
               hintText:  hint,
               hintStyle: TextStyle(color: c.inputHint, fontSize: 14),
               prefixIcon: icon != null
-                  ? Icon(icon, color: c.textTertiary, size: 17) : null,
+                  ? Icon(icon, color: c.iconSecondary, size: 17) : null,
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
                   horizontal: 14, vertical: 12)),
@@ -1487,9 +1521,8 @@ class _DateField extends StatelessWidget {
   final String        hint;
   final IconData      icon;
 
-  const _DateField({
-    required this.date, required this.c,
-    required this.hint, required this.icon});
+  const _DateField({required this.date, required this.c,
+      required this.hint, required this.icon});
 
   String _fmt(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/'
@@ -1500,27 +1533,23 @@ class _DateField extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
-        // FIX: glassBlur (era blur)
-        filter: ImageFilter.blur(
-            sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+        filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 14, vertical: 13),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           decoration: BoxDecoration(
             color: c.inputBg,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: c.inputBorder, width: 0.8)),
           child: Row(children: [
-            Icon(icon, color: c.textTertiary, size: 17),
+            Icon(icon, color: c.iconSecondary, size: 17),
             const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                date != null ? _fmt(date!) : hint,
-                style: TextStyle(
-                    color: date != null ? c.textPrimary : c.inputHint,
-                    fontSize: 14))),
+            Expanded(child: Text(
+              date != null ? _fmt(date!) : hint,
+              style: TextStyle(
+                  color:    date != null ? c.textPrimary : c.inputHint,
+                  fontSize: 14))),
             Icon(Icons.calendar_today_outlined,
-                color: c.textTertiary, size: 15),
+                color: c.iconSecondary, size: 15),
           ]),
         ),
       ),

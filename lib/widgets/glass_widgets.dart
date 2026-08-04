@@ -626,3 +626,97 @@ class GlassTile extends StatelessWidget {
         ])));
   }
 }
+
+
+// ════════════════════════════════════════════════════════════
+// GlassHeaderPill — pill azioni inline per header di schermata
+//
+// Usato da HistoryScreen e SettingsScreen come trailing
+// dell'header, replicando esattamente il pattern di
+// _GestioneEserciziPill in AllenamentiScreen.
+// ════════════════════════════════════════════════════════════
+
+class GlassHeaderPill extends StatelessWidget {
+  final List<Widget> children;
+
+  const GlassHeaderPill({super.key, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final c      = context.mfc;
+    final isDark = context.isDarkMode;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: c.glassCard,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: c.glassBorder, width: isDark ? 0.9 : 1.1),
+            boxShadow: c.showElevation
+                ? [BoxShadow(
+                    color:       c.elevationColor,
+                    blurRadius:  8,
+                    offset:      const Offset(0, 2),
+                    spreadRadius: -2)]
+                : null),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children:     children))));
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// GlassHeaderPillBtn — singolo pulsante dentro GlassHeaderPill
+// ════════════════════════════════════════════════════════════
+
+class GlassHeaderPillBtn extends StatefulWidget {
+  final IconData     icon;
+  final Color        color;
+  final VoidCallback onTap;
+  final String       tooltip;
+
+  const GlassHeaderPillBtn({
+    super.key,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    required this.tooltip,
+  });
+
+  @override
+  State<GlassHeaderPillBtn> createState() => _GlassHeaderPillBtnState();
+}
+
+class _GlassHeaderPillBtnState extends State<GlassHeaderPillBtn> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: widget.tooltip,
+      child: GestureDetector(
+        onTapDown:   (_) => setState(() => _pressed = true),
+        onTapUp:     (_) {
+          setState(() => _pressed = false);
+          HapticFeedback.selectionClick();
+          widget.onTap();
+        },
+        onTapCancel: () => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale:    _pressed ? 0.85 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          child: Container(
+            width:  44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: _pressed
+                  ? widget.color.withOpacity(0.15)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(12)),
+            child: Icon(
+                widget.icon, size: 20, color: widget.color)))));
+  }
+}
