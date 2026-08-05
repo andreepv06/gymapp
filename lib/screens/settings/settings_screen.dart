@@ -1055,6 +1055,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _bioCtrl;
   DateTime? _selectedDate;
   bool      _loading = false;
+  bool _imageLoading = false;
 
   @override
   void initState() {
@@ -1078,16 +1079,55 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // _pickImage — fix robusto
+  //
+  // Causa del fallimento silenzioso precedente:
+  // 1. Nessun loading state → utente ritappava pensando che non
+  //    funzionasse, causando race condition con più pick paralleli
+  // 2. catch(e) generico che swallowava eccezioni senza feedback
+  // 3. setState({}) finale non abbastanza se AuthProvider.notifyListeners()
+  //    non aveva ancora completato il suo ciclo async
+  // ─────────────────────────────────────────────────────────────
   Future<void> _pickImage() async {
+    if (_imageLoading) return; // Previene pick multipli paralleli
+    setState(() => _imageLoading = true);
+
     try {
       final b64 = await ImagePickerHelper.pickImageAsBase64();
-      if (b64 == null) return;
-      if (mounted) {
-        await context.read<AuthProvider>().updateProfile(avatarBase64: b64);
-        setState(() {});
+
+      if (b64 == null) {
+        // L'utente ha annullato — nessun feedback necessario
+        return;
       }
+
+      if (!mounted) return;
+
+      // updateProfile chiama notifyListeners() → tutti i consumer
+      // (inclusa Home._ProfileAvatar) si rirenderizzano
+      await context.read<AuthProvider>().updateProfile(avatarBase64: b64);
+
+      if (!mounted) return;
+
+      // setState forza il rebuild di _EditProfileScreenState
+      // (necessario per AvatarWidget che riceve auth dal padre)
+      setState(() {});
+
+      _showSnack('✓ Immagine aggiornata');
+
+    } on Exception catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().replaceAll('Exception: ', '');
+      _showSnack('Errore: $msg');
+      debugPrint('[_pickImage] Exception: $e');
+
     } catch (e) {
-      if (mounted) _showSnack('Impossibile caricare immagine: $e');
+      if (!mounted) return;
+      _showSnack('Impossibile caricare immagine. Riprova.');
+      debugPrint('[_pickImage] Unknown error: $e');
+
+    } finally {
+      if (mounted) setState(() => _imageLoading = false);
     }
   }
 
@@ -1230,7 +1270,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   physics: const BouncingScrollPhysics(),
                   padding: EdgeInsets.fromLTRB(16, 16, 16, 32 + kbHeight),
                   child: Column(children: [
-                    _EditAvatar(auth: auth, c: c, onPick: _pickImage),
+                    _EditAvatar(auth: auth, c: c, onPick: _pickImage, loading: _imageLoading),
                     const SizedBox(height: 20),
                     _FormSection(
                       title: 'Dati personali',
@@ -1336,8 +1376,9 @@ class _EditAvatar extends StatelessWidget {
   final AuthProvider  auth;
   final MarkFitColors c;
   final VoidCallback  onPick;
+  final bool          loading;       // ← AGGIUNTO
   const _EditAvatar({required this.auth, required this.c,
-      required this.onPick});
+      required this.onPick, this.loading = false}); // ← AGGIUNTO
 
   @override
   Widget build(BuildContext context) {
@@ -1357,32 +1398,48 @@ class _EditAvatar extends StatelessWidget {
                 : null),
           child: Column(children: [
             GestureDetector(
-              onTap: onPick,
+              onTap: loading ? null : onPick,
               child: Stack(children: [
                 AvatarWidget(auth: auth, radius: 46, c: c),
-                Positioned(right: 0, bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [
-                        MarkFitColors.teal, MarkFitColors.tealDk]),
-                      shape:  BoxShape.circle,
-                      border: Border.all(color: c.scaffoldBg, width: 2)),
-                    child: const Icon(Icons.camera_alt_rounded,
-                        size: 14, color: Colors.white))),
+                // Loading overlay sopra l'avatar
+                if (loading)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withOpacity(0.4)),
+                      child: const Center(
+                        child: CircularProgressIndicator(
+                            color: MarkFitColors.teal, strokeWidth: 2)))),
+                if (!loading)
+                  Positioned(right: 0, bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [
+                          MarkFitColors.teal, MarkFitColors.tealDk]),
+                        shape:  BoxShape.circle,
+                        border: Border.all(color: c.scaffoldBg, width: 2)),
+                      child: const Icon(Icons.camera_alt_rounded,
+                          size: 14, color: Colors.white))),
               ])),
             const SizedBox(height: 14),
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               _AvatarBtn(
-                icon:  Icons.photo_library_outlined,
-                label: 'Cambia foto',
-                color: MarkFitColors.teal, c: c, onTap: onPick),
-              if (auth.avatarBase64 != null) ...[
+                icon:     loading
+                    ? Icons.hourglass_empty_rounded
+                    : Icons.photo_library_outlined,
+                label:    loading ? 'Elaborazione...' : 'Cambia foto',
+                color:    MarkFitColors.teal,
+                c:        c,
+                onTap:    loading ? () {} : onPick),
+              if (auth.avatarBase64 != null && !loading) ...[
                 const SizedBox(width: 10),
                 _AvatarBtn(
                   icon:  Icons.delete_outline_rounded,
                   label: 'Rimuovi',
-                  color: MarkFitColors.red, c: c,
+                  color: MarkFitColors.red,
+                  c:     c,
                   onTap: () async {
                     await context.read<AuthProvider>().clearAvatar();
                   }),

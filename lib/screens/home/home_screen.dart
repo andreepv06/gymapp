@@ -21,6 +21,8 @@ import '../../main.dart';
 import '../goals/goals_screen.dart';
 import '../session/active_session_screen.dart';
 import '../workouts/workout_detail_screen.dart';
+import 'dart:convert';
+import '../../providers/auth_provider.dart';
 
 // ── Accent tokens (fissi in entrambi i temi) ─────────────────
 const _cyan       = Color(0xFF00E5FF);
@@ -207,7 +209,6 @@ class _HomeScreenState extends State<HomeScreen>
     final wp      = context.watch<WorkoutProvider>();
     final ep      = context.watch<ExerciseProvider>();
     final gp      = context.watch<GoalProvider>();
-    final profile = context.watch<ProfileProvider>();
     final workouts     = wp.workouts;
     final exCount      = ep.exercises.length;
     final completed    = sp.completedSetsCount;
@@ -228,8 +229,7 @@ class _HomeScreenState extends State<HomeScreen>
             children: [
               _HomeHeader(
                 greeting:         _greeting(),
-                date:             _formattedDate(),
-                profileImagePath: profile.imagePath),
+                date:             _formattedDate()),
               const SizedBox(height: 14),
               if (sp.hasPausedSessions && !sp.hasActiveSession) ...[
                 _PausedSessionsBanner(
@@ -302,22 +302,26 @@ class _HomeScreenState extends State<HomeScreen>
 }
 
 // ─────────────────────────────────────────────────────────────
-// _HomeHeader — ADATTIVO
+// _HomeHeader — ADATTIVO + avatar da AuthProvider
 // ─────────────────────────────────────────────────────────────
 
 class _HomeHeader extends StatelessWidget {
-  final String  greeting, date;
-  final String? profileImagePath;
-  const _HomeHeader({
-    required this.greeting, required this.date, this.profileImagePath});
+  final String greeting, date;
+
+  // profileImagePath rimosso: l'avatar legge da AuthProvider direttamente
+  const _HomeHeader({required this.greeting, required this.date});
 
   static const _phrases = [
-    'Ogni rep conta.', 'Il progresso è costante.', 'Oggi supera ieri.',
-    'Forza e costanza.', 'Non fermarti mai.', 'Il corpo segue la mente.',
+    'Ogni rep conta.',       'Il progresso è costante.',
+    'Oggi supera ieri.',     'Forza e costanza.',
+    'Non fermarti mai.',     'Il corpo segue la mente.',
     'Consistenza batte intensità.',
   ];
+
   String get _phrase {
-    final d = DateTime.now().difference(DateTime(DateTime.now().year)).inDays;
+    final d = DateTime.now()
+        .difference(DateTime(DateTime.now().year))
+        .inDays;
     return _phrases[d % _phrases.length];
   }
 
@@ -379,7 +383,8 @@ class _HomeHeader extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 16),
-            _ProfileAvatar(imagePath: profileImagePath),
+            // Avatar legge da AuthProvider — si aggiorna automaticamente
+            const _ProfileAvatar(),
           ]),
         ),
       ),
@@ -388,32 +393,52 @@ class _HomeHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _ProfileAvatar — invariato (usa accent colors)
+// _ProfileAvatar — SORGENTE UNICA: AuthProvider.avatarBase64
+//
+// FIX SINCRONIZZAZIONE:
+// Legge da AuthProvider invece di ProfileProvider.imagePath.
+// Qualsiasi aggiornamento in EditProfileScreen (updateProfile)
+// chiama notifyListeners() su AuthProvider → tutti i consumer
+// (incluso questo widget) si rirenderizzano automaticamente.
 // ─────────────────────────────────────────────────────────────
 
 class _ProfileAvatar extends StatelessWidget {
-  final String? imagePath;
-  const _ProfileAvatar({this.imagePath});
+  const _ProfileAvatar();
 
   @override
   Widget build(BuildContext context) {
-    final hasImage = imagePath != null && imagePath!.isNotEmpty;
+    final auth     = context.watch<AuthProvider>();
+    final b64      = auth.avatarBase64;
+    final hasAvatar = b64 != null && b64.isNotEmpty;
+
+    Widget inner;
+    if (hasAvatar) {
+      try {
+        final bytes = base64Decode(b64!);
+        inner = Image.memory(bytes, fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) =>
+                const Icon(Icons.person_rounded,
+                    color: Colors.white, size: 28));
+      } catch (_) {
+        inner = const Icon(Icons.person_rounded,
+            color: Colors.white, size: 28);
+      }
+    } else {
+      inner = const Icon(Icons.person_rounded,
+          color: Colors.white, size: 28);
+    }
+
     return Container(
       width: 56, height: 56,
       decoration: BoxDecoration(
-        gradient: hasImage ? null : LinearGradient(
+        gradient: hasAvatar ? null : LinearGradient(
           begin: Alignment.topLeft, end: Alignment.bottomRight,
           colors: [_teal.withOpacity(0.3), _cyan.withOpacity(0.1)]),
         shape: BoxShape.circle,
         border: Border.all(color: _teal.withOpacity(0.6), width: 1.5),
         boxShadow: [BoxShadow(
             color: _teal.withOpacity(0.3), blurRadius: 16, spreadRadius: 1)]),
-      child: ClipOval(
-        child: hasImage
-            ? Image.file(File(imagePath!), fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    const Icon(Icons.person_rounded, color: Colors.white, size: 28))
-            : const Icon(Icons.person_rounded, color: Colors.white, size: 28)));
+      child: ClipOval(child: inner));
   }
 }
 
