@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/theme/markfit_colors.dart';
 import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
 import '../../providers/workout_provider.dart';
@@ -11,30 +12,34 @@ import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
 import '../../widgets/workout_icon.dart';
 
+// ─── Accent tokens fissi (invarianti tra temi) ────────────────
+const _kCyan   = MarkFitColors.cyan;
+const _kTeal   = MarkFitColors.teal;
+const _kTealDk = MarkFitColors.tealDk;
+const _kRed    = MarkFitColors.red;
+const _kIndigo = MarkFitColors.indigo;
+const _kOrange = MarkFitColors.orange;
+
+// ─── Palette icone scheda (sheet - rimane scuro) ──────────────
 const _kWorkoutColors = [
-  Color(0xFF00D4AA),
-  Color(0xFF6366F1),
-  Color(0xFF22C55E),
-  Color(0xFFF59E0B),
-  Color(0xFFEC4899),
-  Color(0xFFEF4444),
-  Color(0xFF3B82F6),
-  Color(0xFF8B5CF6),
+  Color(0xFF00D4AA), Color(0xFF6366F1), Color(0xFF22C55E),
+  Color(0xFFF59E0B), Color(0xFFEC4899), Color(0xFFEF4444),
+  Color(0xFF3B82F6), Color(0xFF8B5CF6),
 ];
 
 const _kWorkoutIcons = [
   ('dumbbell', Icons.fitness_center_rounded),
-  ('bike', Icons.directions_bike_rounded),
-  ('run', Icons.directions_run_rounded),
-  ('swim', Icons.pool_rounded),
-  ('yoga', Icons.self_improvement_rounded),
-  ('sports', Icons.sports_rounded),
-  ('heart', Icons.favorite_rounded),
-  ('star', Icons.star_rounded),
-  ('flash', Icons.bolt_rounded),
-  ('target', Icons.track_changes_rounded),
+  ('bike',     Icons.directions_bike_rounded),
+  ('run',      Icons.directions_run_rounded),
+  ('swim',     Icons.pool_rounded),
+  ('yoga',     Icons.self_improvement_rounded),
+  ('sports',   Icons.sports_rounded),
+  ('heart',    Icons.favorite_rounded),
+  ('star',     Icons.star_rounded),
+  ('flash',    Icons.bolt_rounded),
+  ('target',   Icons.track_changes_rounded),
   ('mountain', Icons.terrain_rounded),
-  ('fire', Icons.local_fire_department_rounded),
+  ('fire',     Icons.local_fire_department_rounded),
 ];
 
 const _kMuscleGroups = [
@@ -42,25 +47,25 @@ const _kMuscleGroups = [
   'Bicipiti', 'Tricipiti', 'Gambe', 'Addominali',
 ];
 
-const _kCyan   = Color(0xFF00E5FF);
-const _kTeal   = Color(0xFF00D4AA);
-const _kRed    = Color(0xFFFF1744);
-const _kIndigo = Color(0xFF6366F1);
-const _kOrange = Color(0xFFFF8C00);
-
+// ─── Modello lista riordinabile ───────────────────────────────
 enum _ItemType { exercise, circuit }
 
 class _ListItem {
   final _ItemType type;
-  final dynamic refKey;
+  final dynamic   refKey;
+
   _ListItem({required this.type, required this.refKey});
+
   String get stableId =>
       type == _ItemType.exercise ? 'ex_$refKey' : 'circ_$refKey';
 }
 
+// ─────────────────────────────────────────────────────────────
+// WorkoutDetailScreen
+// ─────────────────────────────────────────────────────────────
 class WorkoutDetailScreen extends StatefulWidget {
   final dynamic workoutId;
-  final String workoutName;
+  final String  workoutName;
 
   const WorkoutDetailScreen({
     super.key,
@@ -73,13 +78,12 @@ class WorkoutDetailScreen extends StatefulWidget {
       _WorkoutDetailScreenState();
 }
 
-class _WorkoutDetailScreenState
-    extends State<WorkoutDetailScreen> {
-  late List<_ListItem> _items;
-  late List<HiveCircuit> _circuits;
-  HiveWorkout? _workout;
-  bool _hasChanges = false;
-  late List<_ListItem> _snapshot;
+class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
+  late List<_ListItem>                         _items;
+  late List<HiveCircuit>                       _circuits;
+  HiveWorkout?                                 _workout;
+  bool                                         _hasChanges = false;
+  late List<_ListItem>                         _snapshot;
   late Map<dynamic, List<HiveWorkoutExercise>> _circuitChildren;
 
   @override
@@ -101,25 +105,29 @@ class _WorkoutDetailScreenState
   }
 
   void _rebuildAll() {
-    final wp = context.read<WorkoutProvider>();
+    final wp    = context.read<WorkoutProvider>();
     final allEx = wp.currentExercises;
-    _circuits =
-        HiveDatabase.instance.getCircuits(widget.workoutId)
-          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+    _circuits = HiveDatabase.instance.getCircuits(widget.workoutId)
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
     final freeEx = allEx.where((e) => !e.isInCircuit).toList()
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
     final topItems = <({int order, bool isCircuit, dynamic key})>[
       ...freeEx.map((e) =>
           (order: e.sortOrder, isCircuit: false, key: e.key as dynamic)),
       ..._circuits.map((c) =>
           (order: c.sortOrder, isCircuit: true, key: c.key as dynamic)),
     ]..sort((a, b) => a.order.compareTo(b.order));
+
     _items = topItems
         .map((i) => _ListItem(
-              type: i.isCircuit ? _ItemType.circuit : _ItemType.exercise,
+              type:   i.isCircuit ? _ItemType.circuit : _ItemType.exercise,
               refKey: i.key,
             ))
         .toList();
+
     _circuitChildren = {
       for (final c in _circuits)
         c.key: allEx
@@ -158,16 +166,16 @@ class _WorkoutDetailScreenState
         await HiveDatabase.instance.updateWorkoutExercise(
           we.key,
           HiveWorkoutExercise(
-            workoutKey: we.workoutKey,
-            exerciseKey: we.exerciseKey,
+            workoutKey:   we.workoutKey,
+            exerciseKey:  we.exerciseKey,
             exerciseName: we.exerciseName,
-            muscleGroup: we.muscleGroup,
-            sets: we.sets,
-            targetReps: we.targetReps,
+            muscleGroup:  we.muscleGroup,
+            sets:         we.sets,
+            targetReps:   we.targetReps,
             targetWeight: we.targetWeight,
-            restSeconds: we.restSeconds,
-            notes: we.notes,
-            sortOrder: order++,
+            restSeconds:  we.restSeconds,
+            notes:        we.notes,
+            sortOrder:    order++,
           ),
         );
       } else {
@@ -178,12 +186,12 @@ class _WorkoutDetailScreenState
       }
     }
     if (mounted) {
-      final wp = context.read<WorkoutProvider>();
-      wp.loadWorkoutExercises(widget.workoutId);
+      context
+          .read<WorkoutProvider>()
+          .loadWorkoutExercises(widget.workoutId);
     }
   }
 
-  // FIX 5: _saveAndPop — unico Navigator.pop
   Future<void> _saveAndPop() async {
     await _persistOrder(_items);
     if (mounted) {
@@ -192,47 +200,45 @@ class _WorkoutDetailScreenState
     }
   }
 
-  // FIX 2: dialog "Modifiche non salvate" in Glass UI
   Future<bool> _onWillPop() async {
     if (!_hasChanges) return true;
 
     final result = await showGlassDialog<String>(
-      context: context,
+      context:     context,
       accentColor: _kOrange,
       icon: Container(
-        width: 44,
+        width:  44,
         height: 44,
         decoration: BoxDecoration(
-          color: _kOrange.withOpacity(0.12),
-          shape: BoxShape.circle,
-          border:
-              Border.all(color: _kOrange.withOpacity(0.4), width: 1),
+          color:     _kOrange.withOpacity(0.12),
+          shape:     BoxShape.circle,
+          border:    Border.all(
+              color: _kOrange.withOpacity(0.4), width: 1),
           boxShadow: [
             BoxShadow(
-                color: _kOrange.withOpacity(0.2), blurRadius: 12)
+                color: _kOrange.withOpacity(0.2), blurRadius: 12),
           ],
         ),
-        child: const Icon(Icons.edit_rounded,
-            color: _kOrange, size: 20),
+        child: const Icon(
+            Icons.edit_rounded, color: _kOrange, size: 20),
       ),
-      title: 'Modifiche non salvate',
-      message:
-          'Vuoi salvare le modifiche alla scheda prima di uscire?',
+      title:   'Modifiche non salvate',
+      message: 'Vuoi salvare le modifiche alla scheda prima di uscire?',
       actions: [
         GlassDialogAction(
-          label: 'Scarta',
+          label:         'Scarta',
           isDestructive: true,
-          onTap: () => Navigator.pop(context, 'discard'),
+          onTap:         () => Navigator.pop(context, 'discard'),
         ),
         GlassDialogAction(
           label: 'Annulla',
           onTap: () => Navigator.pop(context, 'cancel'),
         ),
         GlassDialogAction(
-          label: 'Salva',
+          label:     'Salva',
           isDefault: true,
-          color: _kTeal,
-          onTap: () => Navigator.pop(context, 'save'),
+          color:     _kTeal,
+          onTap:     () => Navigator.pop(context, 'save'),
         ),
       ],
     );
@@ -245,21 +251,21 @@ class _WorkoutDetailScreenState
     if (result == 'discard') {
       await _persistOrder(_snapshot);
       if (mounted) {
-        final wp = context.read<WorkoutProvider>();
-        wp.loadWorkoutExercises(widget.workoutId);
+        context
+            .read<WorkoutProvider>()
+            .loadWorkoutExercises(widget.workoutId);
       }
       return true;
     }
     return false;
   }
 
-  // _openSheet — Padding statico (stessa struttura che funziona)
   Future<T?> _openSheet<T>(Widget child) {
     return showModalBottomSheet<T>(
-      context: context,
+      context:            context,
       isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
+      useSafeArea:        true,
+      backgroundColor:    Colors.transparent,
       builder: (ctx) => GestureDetector(
         onTap: () => FocusScope.of(ctx).unfocus(),
         child: Padding(
@@ -268,7 +274,7 @@ class _WorkoutDetailScreenState
           child: SafeArea(
             child: SingleChildScrollView(
               physics: const ClampingScrollPhysics(),
-              child: child,
+              child:   child,
             ),
           ),
         ),
@@ -278,17 +284,19 @@ class _WorkoutDetailScreenState
 
   Future<void> _showAddExerciseSheet() async {
     final allExercises = HiveDatabase.instance.getExercises();
-    final currentKeys = context
+    final currentKeys  = context
         .read<WorkoutProvider>()
         .currentExercises
         .map((e) => e.exerciseKey)
         .toSet();
+
     await _openSheet(_AddExercisesToWorkoutSheet(
       allExercises: allExercises,
-      alreadyIn: currentKeys,
+      alreadyIn:    currentKeys,
       onConfirm: (keys) async {
-        final existing =
-            context.read<WorkoutProvider>().currentExercises;
+        final existing = context
+            .read<WorkoutProvider>()
+            .currentExercises;
         int nextOrder = existing.isEmpty
             ? 0
             : existing
@@ -300,21 +308,25 @@ class _WorkoutDetailScreenState
             final ex = allExercises.firstWhere((e) => e.key == key);
             await HiveDatabase.instance
                 .addWorkoutExercise(HiveWorkoutExercise(
-              workoutKey: widget.workoutId,
-              exerciseKey: ex.key,
+              workoutKey:   widget.workoutId,
+              exerciseKey:  ex.key,
               exerciseName: ex.name,
-              muscleGroup: ex.muscleGroup,
-              sets: 3,
-              targetReps: 10,
+              muscleGroup:  ex.muscleGroup,
+              sets:         3,
+              targetReps:   10,
               targetWeight: 0,
-              sortOrder: nextOrder++,
+              sortOrder:    nextOrder++,
             ));
           } catch (_) {}
         }
         if (mounted) {
-          final wp = context.read<WorkoutProvider>();
-          wp.loadWorkoutExercises(widget.workoutId);
-          setState(() { _rebuildAll(); _hasChanges = true; });
+          context
+              .read<WorkoutProvider>()
+              .loadWorkoutExercises(widget.workoutId);
+          setState(() {
+            _rebuildAll();
+            _hasChanges = true;
+          });
           Navigator.pop(context);
         }
       },
@@ -326,8 +338,9 @@ class _WorkoutDetailScreenState
     await _openSheet(_AddCircuitToWorkoutSheet(
       allExercises: allExercises,
       onConfirm: (keys, rounds, name) async {
-        final existing =
-            context.read<WorkoutProvider>().currentExercises;
+        final existing = context
+            .read<WorkoutProvider>()
+            .currentExercises;
         int nextOrder = existing.isEmpty
             ? 0
             : existing
@@ -337,9 +350,9 @@ class _WorkoutDetailScreenState
         final circuitKey = await HiveDatabase.instance
             .addCircuit(HiveCircuit(
           workoutKey: widget.workoutId,
-          name: name,
-          rounds: rounds,
-          sortOrder: nextOrder,
+          name:       name,
+          rounds:     rounds,
+          sortOrder:  nextOrder,
         ));
         int exOrder = 0;
         for (final key in keys) {
@@ -347,22 +360,26 @@ class _WorkoutDetailScreenState
             final ex = allExercises.firstWhere((e) => e.key == key);
             await HiveDatabase.instance
                 .addWorkoutExercise(HiveWorkoutExercise(
-              workoutKey: widget.workoutId,
-              exerciseKey: ex.key,
+              workoutKey:   widget.workoutId,
+              exerciseKey:  ex.key,
               exerciseName: ex.name,
-              muscleGroup: ex.muscleGroup,
-              sets: 3,
-              targetReps: 10,
+              muscleGroup:  ex.muscleGroup,
+              sets:         3,
+              targetReps:   10,
               targetWeight: 0,
-              notes: '__circuit_$circuitKey',
-              sortOrder: exOrder++,
+              notes:        '__circuit_$circuitKey',
+              sortOrder:    exOrder++,
             ));
           } catch (_) {}
         }
         if (mounted) {
-          final wp = context.read<WorkoutProvider>();
-          wp.loadWorkoutExercises(widget.workoutId);
-          setState(() { _rebuildAll(); _hasChanges = true; });
+          context
+              .read<WorkoutProvider>()
+              .loadWorkoutExercises(widget.workoutId);
+          setState(() {
+            _rebuildAll();
+            _hasChanges = true;
+          });
           Navigator.pop(context);
         }
       },
@@ -370,21 +387,21 @@ class _WorkoutDetailScreenState
   }
 
   Future<void> _showEditCircuitSheet(
-      HiveCircuit circuit,
-      List<HiveWorkoutExercise> children) async {
+    HiveCircuit circuit,
+    List<HiveWorkoutExercise> children,
+  ) async {
     final allExercises = HiveDatabase.instance.getExercises();
     await _openSheet(_EditCircuitSheet(
-      circuit: circuit,
+      circuit:         circuit,
       currentChildren: children,
-      allExercises: allExercises,
+      allExercises:    allExercises,
       onConfirm: (rounds, toAdd, toRemove) async {
         if (rounds != circuit.rounds) {
           circuit.rounds = rounds;
           await circuit.save();
         }
         for (final we in toRemove) {
-          await HiveDatabase.instance
-              .deleteWorkoutExercise(we.key);
+          await HiveDatabase.instance.deleteWorkoutExercise(we.key);
         }
         int nextOrder = children.isEmpty
             ? 0
@@ -397,22 +414,26 @@ class _WorkoutDetailScreenState
             final ex = allExercises.firstWhere((e) => e.key == key);
             await HiveDatabase.instance
                 .addWorkoutExercise(HiveWorkoutExercise(
-              workoutKey: widget.workoutId,
-              exerciseKey: ex.key,
+              workoutKey:   widget.workoutId,
+              exerciseKey:  ex.key,
               exerciseName: ex.name,
-              muscleGroup: ex.muscleGroup,
-              sets: 3,
-              targetReps: 10,
+              muscleGroup:  ex.muscleGroup,
+              sets:         3,
+              targetReps:   10,
               targetWeight: 0,
-              notes: '__circuit_${circuit.key}',
-              sortOrder: nextOrder++,
+              notes:        '__circuit_${circuit.key}',
+              sortOrder:    nextOrder++,
             ));
           } catch (_) {}
         }
         if (mounted) {
-          final wp = context.read<WorkoutProvider>();
-          wp.loadWorkoutExercises(widget.workoutId);
-          setState(() { _rebuildAll(); _hasChanges = true; });
+          context
+              .read<WorkoutProvider>()
+              .loadWorkoutExercises(widget.workoutId);
+          setState(() {
+            _rebuildAll();
+            _hasChanges = true;
+          });
           Navigator.pop(context);
         }
       },
@@ -428,7 +449,10 @@ class _WorkoutDetailScreenState
         final name = ctrl.text.trim();
         if (name.isEmpty) return;
         HiveDatabase.instance.updateWorkout(_workout!.key, name);
-        setState(() { _workout!.name = name; _hasChanges = true; });
+        setState(() {
+          _workout!.name = name;
+          _hasChanges    = true;
+        });
         context.read<WorkoutProvider>().loadWorkouts();
         Navigator.pop(context);
       },
@@ -438,11 +462,11 @@ class _WorkoutDetailScreenState
   Future<void> _showIconColorSheet() async {
     if (_workout == null) return;
     await _openSheet(_IconColorSheet(
-      currentIconId: _workout!.iconId ?? 'dumbbell',
+      currentIconId:    _workout!.iconId ?? 'dumbbell',
       currentColorIndex: (_workout!.iconColorIndex ?? 0)
           .clamp(0, _kWorkoutColors.length - 1),
       onSelect: (iconId, colorIndex) {
-        _workout!.iconId = iconId;
+        _workout!.iconId         = iconId;
         _workout!.iconColorIndex = colorIndex;
         _workout!.save();
         setState(() => _hasChanges = true);
@@ -457,9 +481,13 @@ class _WorkoutDetailScreenState
     if (we == null) return;
     await HiveDatabase.instance.deleteWorkoutExercise(we.key);
     if (mounted) {
-      final wp = context.read<WorkoutProvider>();
-      wp.loadWorkoutExercises(widget.workoutId);
-      setState(() { _rebuildAll(); _hasChanges = true; });
+      context
+          .read<WorkoutProvider>()
+          .loadWorkoutExercises(widget.workoutId);
+      setState(() {
+        _rebuildAll();
+        _hasChanges = true;
+      });
     }
   }
 
@@ -470,9 +498,13 @@ class _WorkoutDetailScreenState
     }
     await HiveDatabase.instance.deleteCircuit(circuitKey);
     if (mounted) {
-      final wp = context.read<WorkoutProvider>();
-      wp.loadWorkoutExercises(widget.workoutId);
-      setState(() { _rebuildAll(); _hasChanges = true; });
+      context
+          .read<WorkoutProvider>()
+          .loadWorkoutExercises(widget.workoutId);
+      setState(() {
+        _rebuildAll();
+        _hasChanges = true;
+      });
     }
   }
 
@@ -483,22 +515,26 @@ class _WorkoutDetailScreenState
         await HiveDatabase.instance.updateWorkoutExercise(
           we.key,
           HiveWorkoutExercise(
-            workoutKey: we.workoutKey,
-            exerciseKey: we.exerciseKey,
+            workoutKey:   we.workoutKey,
+            exerciseKey:  we.exerciseKey,
             exerciseName: we.exerciseName,
-            muscleGroup: we.muscleGroup,
-            sets: sets,
-            targetReps: reps,
+            muscleGroup:  we.muscleGroup,
+            sets:         sets,
+            targetReps:   reps,
             targetWeight: weight,
-            restSeconds: rest,
-            notes: we.notes,
-            sortOrder: we.sortOrder,
+            restSeconds:  rest,
+            notes:        we.notes,
+            sortOrder:    we.sortOrder,
           ),
         );
         if (mounted) {
-          final wp = context.read<WorkoutProvider>();
-          wp.loadWorkoutExercises(widget.workoutId);
-          setState(() { _rebuildAll(); _hasChanges = true; });
+          context
+              .read<WorkoutProvider>()
+              .loadWorkoutExercises(widget.workoutId);
+          setState(() {
+            _rebuildAll();
+            _hasChanges = true;
+          });
           Navigator.pop(context);
         }
       },
@@ -507,7 +543,9 @@ class _WorkoutDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    final c       = context.mfc;
     final isEmpty = _items.isEmpty;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
@@ -516,34 +554,34 @@ class _WorkoutDetailScreenState
         if (canPop && mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF03040A),
+        backgroundColor: Colors.transparent,
         body: CosmicBackground(
           subtle: true,
           child: SafeArea(
             child: Column(
               children: [
                 _WorkoutHeader(
-                  workout: _workout,
+                  workout:    _workout,
                   hasChanges: _hasChanges,
                   onBack: () async {
                     final canPop = await _onWillPop();
-                    if (canPop && mounted)
-                      Navigator.of(context).pop();
+                    if (canPop && mounted) Navigator.of(context).pop();
                   },
-                  onRename: _showRenameSheet,
+                  onRename:    _showRenameSheet,
                   onIconColor: _showIconColorSheet,
-                  onSave: _hasChanges ? _saveAndPop : null,
+                  onSave:      _hasChanges ? _saveAndPop : null,
                 ),
                 const SizedBox(height: 8),
                 if (!isEmpty)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    padding:
+                        const EdgeInsets.fromLTRB(16, 0, 16, 8),
                     child: Row(
                       children: [
                         Expanded(
                           child: _ActionBtn(
                             label: '+ Esercizio',
-                            icon: Icons.fitness_center_rounded,
+                            icon:  Icons.fitness_center_rounded,
                             color: _kTeal,
                             onTap: _showAddExerciseSheet,
                           ),
@@ -552,7 +590,7 @@ class _WorkoutDetailScreenState
                         Expanded(
                           child: _ActionBtn(
                             label: '+ Circuito',
-                            icon: Icons.loop_rounded,
+                            icon:  Icons.loop_rounded,
                             color: _kIndigo,
                             onTap: _showAddCircuitSheet,
                           ),
@@ -564,7 +602,7 @@ class _WorkoutDetailScreenState
                   child: isEmpty
                       ? _EmptyWorkoutState(
                           onAddExercise: _showAddExerciseSheet,
-                          onAddCircuit: _showAddCircuitSheet,
+                          onAddCircuit:  _showAddCircuitSheet,
                         )
                       : ReorderableListView(
                           padding: const EdgeInsets.fromLTRB(
@@ -576,22 +614,27 @@ class _WorkoutDetailScreenState
                             animation: anim,
                             builder: (_, __) => Material(
                               elevation: 0,
-                              color: Colors.transparent,
-                              child: child,
+                              color:     Colors.transparent,
+                              child:     child,
                             ),
                           ),
                           onReorder: (oldIndex, newIndex) {
                             if (newIndex > oldIndex) newIndex--;
                             setState(() {
-                              final item = _items.removeAt(oldIndex);
+                              final item =
+                                  _items.removeAt(oldIndex);
                               _items.insert(newIndex, item);
                               _hasChanges = true;
                             });
                             HapticFeedback.selectionClick();
                           },
-                          children: _items.asMap().entries.map((entry) {
-                            final idx = entry.key;
+                          children: _items
+                              .asMap()
+                              .entries
+                              .map((entry) {
+                            final idx  = entry.key;
                             final item = entry.value;
+
                             if (item.type == _ItemType.exercise) {
                               final we = _findEx(item.refKey);
                               if (we == null) {
@@ -599,10 +642,11 @@ class _WorkoutDetailScreenState
                                     key: ValueKey(item.stableId));
                               }
                               return ReorderableDelayedDragStartListener(
-                                key: ValueKey(item.stableId),
+                                key:   ValueKey(item.stableId),
                                 index: idx,
                                 child: _ExerciseCard(
                                   exercise: we,
+                                  c:        c,
                                   onEdit: () =>
                                       _editExerciseParams(we),
                                   onDelete: () =>
@@ -610,19 +654,20 @@ class _WorkoutDetailScreenState
                                 ),
                               );
                             } else {
-                              final c = _findCircuit(item.refKey);
+                              final circ     = _findCircuit(item.refKey);
                               final children =
                                   _circuitChildren[item.refKey] ?? [];
                               return ReorderableDelayedDragStartListener(
-                                key: ValueKey(item.stableId),
+                                key:   ValueKey(item.stableId),
                                 index: idx,
                                 child: _CircuitCard(
-                                  circuit: c,
+                                  circuit:   circ,
                                   exercises: children,
-                                  onEditCircuit: c == null
+                                  c:         c,
+                                  onEditCircuit: circ == null
                                       ? () {}
                                       : () => _showEditCircuitSheet(
-                                          c, children),
+                                          circ, children),
                                   onEditExercise: (we) =>
                                       _editExerciseParams(we),
                                   onRemoveExercise: (weKey) =>
@@ -638,31 +683,24 @@ class _WorkoutDetailScreenState
                                           .updateWorkoutExercise(
                                         reordered[i].key,
                                         HiveWorkoutExercise(
-                                          workoutKey:
-                                              reordered[i].workoutKey,
-                                          exerciseKey:
-                                              reordered[i].exerciseKey,
-                                          exerciseName:
-                                              reordered[i].exerciseName,
-                                          muscleGroup:
-                                              reordered[i].muscleGroup,
-                                          sets: reordered[i].sets,
-                                          targetReps:
-                                              reordered[i].targetReps,
-                                          targetWeight:
-                                              reordered[i].targetWeight,
-                                          restSeconds:
-                                              reordered[i].restSeconds,
-                                          notes: reordered[i].notes,
-                                          sortOrder: i,
+                                          workoutKey:   reordered[i].workoutKey,
+                                          exerciseKey:  reordered[i].exerciseKey,
+                                          exerciseName: reordered[i].exerciseName,
+                                          muscleGroup:  reordered[i].muscleGroup,
+                                          sets:         reordered[i].sets,
+                                          targetReps:   reordered[i].targetReps,
+                                          targetWeight: reordered[i].targetWeight,
+                                          restSeconds:  reordered[i].restSeconds,
+                                          notes:        reordered[i].notes,
+                                          sortOrder:    i,
                                         ),
                                       );
                                     }
                                     if (mounted) {
-                                      final wp = context
-                                          .read<WorkoutProvider>();
-                                      wp.loadWorkoutExercises(
-                                          widget.workoutId);
+                                      context
+                                          .read<WorkoutProvider>()
+                                          .loadWorkoutExercises(
+                                              widget.workoutId);
                                       setState(() {
                                         _rebuildAll();
                                         _hasChanges = true;
@@ -685,15 +723,12 @@ class _WorkoutDetailScreenState
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutHeader
+// _WorkoutHeader — ADATTIVO (main screen, non sheet)
 // ─────────────────────────────────────────────────────────────
-
 class _WorkoutHeader extends StatelessWidget {
-  final HiveWorkout? workout;
-  final bool hasChanges;
-  final VoidCallback onBack;
-  final VoidCallback onRename;
-  final VoidCallback onIconColor;
+  final HiveWorkout?  workout;
+  final bool          hasChanges;
+  final VoidCallback  onBack, onRename, onIconColor;
   final VoidCallback? onSave;
 
   const _WorkoutHeader({
@@ -702,28 +737,23 @@ class _WorkoutHeader extends StatelessWidget {
     required this.onBack,
     required this.onRename,
     required this.onIconColor,
-    required this.onSave,
+    this.onSave,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.mfc;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          filter: ImageFilter.blur(
+              sigmaX: c.glassBlurStrong, sigmaY: c.glassBlurStrong),
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withOpacity(0.08),
-                  Colors.white.withOpacity(0.03),
-                ],
-              ),
+              color:        c.glassCard,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: hasChanges
@@ -731,75 +761,86 @@ class _WorkoutHeader extends StatelessWidget {
                     : _kCyan.withOpacity(0.25),
                 width: 0.8,
               ),
+              boxShadow: c.showElevation
+                  ? [
+                      BoxShadow(
+                        color:      c.elevationColor,
+                        blurRadius: 12,
+                        offset:     const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
             ),
             child: Row(
               children: [
+                // Back
                 GestureDetector(
                   onTap: onBack,
                   child: Container(
-                    width: 36,
+                    width:  36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.06),
+                      color:        c.glassCardInset,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.12)),
+                      border: Border.all(color: c.glassBorder),
                     ),
-                    child: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white,
-                        size: 15),
+                    child: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: c.iconPrimary,
+                      size:  15,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
+                // Icon/color edit
                 GestureDetector(
                   onTap: onIconColor,
                   child: Stack(
                     children: [
                       WorkoutAvatar(
-                        iconId: workout?.iconId ?? 'dumbbell',
-                        iconColorIndex:
-                            workout?.iconColorIndex ?? 0,
-                        size: 46,
-                        iconSize: 23,
-                        borderRadius: 12,
+                        iconId:         workout?.iconId ?? 'dumbbell',
+                        iconColorIndex: workout?.iconColorIndex ?? 0,
+                        size:           46,
+                        iconSize:       23,
+                        borderRadius:   12,
                       ),
                       Positioned(
-                        right: -2,
+                        right:  -2,
                         bottom: -2,
                         child: Container(
-                          width: 17,
+                          width:  17,
                           height: 17,
                           decoration: BoxDecoration(
-                            color: _kCyan,
-                            shape: BoxShape.circle,
+                            color:  _kCyan,
+                            shape:  BoxShape.circle,
                             border: Border.all(
-                                color: const Color(0xFF03040A),
-                                width: 1.5),
+                                color: c.scaffoldBg, width: 1.5),
                           ),
-                          child: const Icon(Icons.edit_rounded,
-                              size: 9, color: Colors.black),
+                          child: const Icon(
+                              Icons.edit_rounded,
+                              size:  9,
+                              color: Colors.black),
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 12),
+                // Name + status
                 Expanded(
                   child: GestureDetector(
                     onTap: onRename,
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
                             Expanded(
                               child: Text(
                                 workout?.name ?? 'Scheda',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
+                                style: TextStyle(
+                                  color:      c.textPrimary,
+                                  fontSize:   16,
                                   fontWeight: FontWeight.w800,
                                 ),
                                 maxLines: 1,
@@ -807,9 +848,11 @@ class _WorkoutHeader extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 4),
-                            Icon(Icons.edit_rounded,
-                                size: 12,
-                                color: _kCyan.withOpacity(0.5)),
+                            Icon(
+                              Icons.edit_rounded,
+                              size:  12,
+                              color: _kCyan.withOpacity(0.5),
+                            ),
                           ],
                         ),
                         Text(
@@ -819,7 +862,7 @@ class _WorkoutHeader extends StatelessWidget {
                           style: TextStyle(
                             color: hasChanges
                                 ? _kOrange.withOpacity(0.8)
-                                : Colors.white.withOpacity(0.4),
+                                : c.textTertiary,
                             fontSize: 11,
                           ),
                         ),
@@ -828,6 +871,7 @@ class _WorkoutHeader extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
+                // Save button
                 GestureDetector(
                   onTap: onSave,
                   child: AnimatedContainer(
@@ -835,27 +879,24 @@ class _WorkoutHeader extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 9),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: hasChanges
-                            ? [_kTeal, const Color(0xFF00A880)]
-                            : [
-                                Colors.white.withOpacity(0.08),
-                                Colors.white.withOpacity(0.04),
-                              ],
-                      ),
+                      gradient: hasChanges
+                          ? const LinearGradient(
+                              colors: [_kTeal, _kTealDk])
+                          : null,
+                      color: hasChanges ? null : c.glassCardInset,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: hasChanges
                             ? _kTeal.withOpacity(0.5)
-                            : Colors.white.withOpacity(0.12),
+                            : c.glassBorder,
                       ),
                       boxShadow: hasChanges
                           ? [
                               BoxShadow(
-                                color: _kTeal.withOpacity(0.3),
+                                color:      _kTeal.withOpacity(0.3),
                                 blurRadius: 12,
-                                offset: const Offset(0, 3),
-                              )
+                                offset:     const Offset(0, 3),
+                              ),
                             ]
                           : null,
                     ),
@@ -864,9 +905,9 @@ class _WorkoutHeader extends StatelessWidget {
                       style: TextStyle(
                         color: hasChanges
                             ? Colors.white
-                            : Colors.white.withOpacity(0.35),
+                            : c.textTertiary,
                         fontWeight: FontWeight.w700,
-                        fontSize: 13,
+                        fontSize:   13,
                       ),
                     ),
                   ),
@@ -881,12 +922,10 @@ class _WorkoutHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _EmptyWorkoutState
+// _EmptyWorkoutState — ADATTIVO
 // ─────────────────────────────────────────────────────────────
-
 class _EmptyWorkoutState extends StatelessWidget {
-  final VoidCallback onAddExercise;
-  final VoidCallback onAddCircuit;
+  final VoidCallback onAddExercise, onAddCircuit;
 
   const _EmptyWorkoutState({
     required this.onAddExercise,
@@ -895,6 +934,7 @@ class _EmptyWorkoutState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.mfc;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
@@ -902,36 +942,43 @@ class _EmptyWorkoutState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 86,
+              width:  86,
               height: 86,
               decoration: BoxDecoration(
-                color: _kTeal.withOpacity(0.08),
-                shape: BoxShape.circle,
-                border: Border.all(
+                color:     _kTeal.withOpacity(0.08),
+                shape:     BoxShape.circle,
+                border:    Border.all(
                     color: _kCyan.withOpacity(0.3), width: 1),
                 boxShadow: [
                   BoxShadow(
                       color: _kCyan.withOpacity(0.12),
-                      blurRadius: 24)
+                      blurRadius: 24),
                 ],
               ),
-              child: const Icon(Icons.fitness_center_rounded,
-                  size: 40, color: _kTeal),
+              child: const Icon(
+                  Icons.fitness_center_rounded,
+                  size:  40,
+                  color: _kTeal),
             ),
             const SizedBox(height: 22),
-            const Text('Scheda vuota',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800)),
+            Text(
+              'Scheda vuota',
+              style: TextStyle(
+                color:      c.textPrimary,
+                fontSize:   20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
             const SizedBox(height: 8),
             Text(
-              'Aggiungi esercizi o crea un circuito\nper iniziare a configurare la scheda.',
+              'Aggiungi esercizi o crea un circuito\n'
+              'per iniziare a configurare la scheda.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: Colors.white.withOpacity(0.45),
-                  fontSize: 13,
-                  height: 1.5),
+                color:    c.textTertiary,
+                fontSize: 13,
+                height:   1.5,
+              ),
             ),
             const SizedBox(height: 30),
             Row(
@@ -939,7 +986,7 @@ class _EmptyWorkoutState extends StatelessWidget {
                 Expanded(
                   child: _ActionBtn(
                     label: 'Aggiungi esercizi',
-                    icon: Icons.add_rounded,
+                    icon:  Icons.add_rounded,
                     color: _kTeal,
                     onTap: onAddExercise,
                   ),
@@ -948,7 +995,7 @@ class _EmptyWorkoutState extends StatelessWidget {
                 Expanded(
                   child: _ActionBtn(
                     label: 'Crea circuito',
-                    icon: Icons.loop_rounded,
+                    icon:  Icons.loop_rounded,
                     color: _kIndigo,
                     onTap: onAddCircuit,
                   ),
@@ -963,13 +1010,12 @@ class _EmptyWorkoutState extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _ActionBtn
+// _ActionBtn — accent fisso (visibile in entrambi i temi)
 // ─────────────────────────────────────────────────────────────
-
 class _ActionBtn extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
+  final String       label;
+  final IconData     icon;
+  final Color        color;
   final VoidCallback onTap;
 
   const _ActionBtn({
@@ -990,13 +1036,13 @@ class _ActionBtn extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 13),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color:        color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(14),
-              border:
-                  Border.all(color: color.withOpacity(0.4), width: 1),
+              border: Border.all(
+                  color: color.withOpacity(0.4), width: 1),
               boxShadow: [
                 BoxShadow(
-                    color: color.withOpacity(0.15), blurRadius: 12)
+                    color: color.withOpacity(0.15), blurRadius: 12),
               ],
             ),
             child: Row(
@@ -1004,11 +1050,14 @@ class _ActionBtn extends StatelessWidget {
               children: [
                 Icon(icon, size: 16, color: color),
                 const SizedBox(width: 6),
-                Text(label,
-                    style: TextStyle(
-                        color: color,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700)),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color:      color,
+                    fontSize:   13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1019,16 +1068,16 @@ class _ActionBtn extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _ExerciseCard
+// _ExerciseCard — ADATTIVO
 // ─────────────────────────────────────────────────────────────
-
 class _ExerciseCard extends StatelessWidget {
   final HiveWorkoutExercise exercise;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final MarkFitColors       c;
+  final VoidCallback        onEdit, onDelete;
 
   const _ExerciseCard({
     required this.exercise,
+    required this.c,
     required this.onEdit,
     required this.onDelete,
   });
@@ -1040,34 +1089,32 @@ class _ExerciseCard extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
           child: Container(
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withOpacity(0.08),
-                  Colors.white.withOpacity(0.03),
-                ],
-              ),
+              color:        c.glassCard,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: _kCyan.withOpacity(0.15), width: 0.8),
+              border:       Border.all(color: c.glassBorder, width: 0.8),
+              boxShadow: c.showElevation
+                  ? [
+                      BoxShadow(
+                          color: c.elevationColor, blurRadius: 6,
+                          offset: const Offset(0, 1)),
+                    ]
+                  : null,
             ),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
                   Icon(Icons.drag_handle_rounded,
-                      size: 18,
-                      color: Colors.white.withOpacity(0.3)),
+                      size: 18, color: c.iconSecondary),
                   const SizedBox(width: 10),
                   Container(
-                    width: 36,
+                    width:  36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: _kTeal.withOpacity(0.12),
+                      color:        _kTeal.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(9),
                       border: Border.all(
                           color: _kTeal.withOpacity(0.2)),
@@ -1075,30 +1122,35 @@ class _ExerciseCard extends StatelessWidget {
                     child: const Icon(
                         Icons.fitness_center_rounded,
                         color: _kTeal,
-                        size: 18),
+                        size:  18),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(exercise.exerciseName,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
+                        Text(
+                          exercise.exerciseName,
+                          style: TextStyle(
+                            color:      c.textPrimary,
+                            fontSize:   14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         const SizedBox(height: 3),
                         Wrap(
                           spacing: 6,
                           children: [
-                            _Tag('${exercise.sets} x ${exercise.targetReps}'),
+                            _Tag(
+                              '${exercise.sets} x ${exercise.targetReps}',
+                              c,
+                            ),
                             if ((exercise.targetWeight ?? 0) > 0)
-                              _Tag('${exercise.targetWeight} kg'),
+                              _Tag('${exercise.targetWeight} kg', c),
                             if ((exercise.restSeconds ?? 0) > 0)
-                              _Tag('${exercise.restSeconds}s rec.'),
+                              _Tag('${exercise.restSeconds}s rec.', c),
                           ],
                         ),
                       ],
@@ -1106,13 +1158,13 @@ class _ExerciseCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   _IconBtn(
-                    icon: Icons.tune_rounded,
-                    color: Colors.white.withOpacity(0.45),
+                    icon:  Icons.tune_rounded,
+                    color: c.iconPrimary,
                     onTap: onEdit,
                   ),
                   const SizedBox(width: 6),
                   _IconBtn(
-                    icon: Icons.delete_outline_rounded,
+                    icon:  Icons.delete_outline_rounded,
                     color: _kRed.withOpacity(0.7),
                     onTap: onDelete,
                   ),
@@ -1127,49 +1179,54 @@ class _ExerciseCard extends StatelessWidget {
 }
 
 class _Tag extends StatelessWidget {
-  final String label;
-  const _Tag(this.label);
+  final String        label;
+  final MarkFitColors c;
+
+  const _Tag(this.label, this.c);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(right: 4),
-      padding:
-          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      margin:  const EdgeInsets.only(right: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: _kCyan.withOpacity(0.08),
+        color:        _kCyan.withOpacity(0.08),
         borderRadius: BorderRadius.circular(5),
         border: Border.all(
             color: _kCyan.withOpacity(0.2), width: 0.7),
       ),
-      child: Text(label,
-          style: TextStyle(
-              color: _kCyan.withOpacity(0.7),
-              fontSize: 10,
-              fontWeight: FontWeight.w600)),
+      child: Text(
+        label,
+        style: TextStyle(
+          color:      _kCyan.withOpacity(0.8),
+          fontSize:   10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }
 
 class _IconBtn extends StatelessWidget {
-  final IconData icon;
-  final Color color;
+  final IconData     icon;
+  final Color        color;
   final VoidCallback onTap;
 
-  const _IconBtn(
-      {required this.icon,
-      required this.color,
-      required this.onTap});
+  const _IconBtn({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 32,
+        width:  32,
         height: 32,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          color:        color.withOpacity(0.08),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, size: 15, color: color),
@@ -1179,21 +1236,21 @@ class _IconBtn extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// FIX 4: _CircuitCard — proxyDecorator scuro nel D&D interno
+// _CircuitCard — ADATTIVO
 // ─────────────────────────────────────────────────────────────
-
 class _CircuitCard extends StatelessWidget {
-  final HiveCircuit? circuit;
-  final List<HiveWorkoutExercise> exercises;
-  final VoidCallback onEditCircuit;
-  final void Function(HiveWorkoutExercise) onEditExercise;
-  final void Function(dynamic) onRemoveExercise;
-  final VoidCallback onDelete;
-  final void Function(List<HiveWorkoutExercise>) onReorderExercises;
+  final HiveCircuit?               circuit;
+  final List<HiveWorkoutExercise>  exercises;
+  final MarkFitColors              c;
+  final VoidCallback               onEditCircuit, onDelete;
+  final void Function(HiveWorkoutExercise)           onEditExercise;
+  final void Function(dynamic)                       onRemoveExercise;
+  final void Function(List<HiveWorkoutExercise>)     onReorderExercises;
 
   const _CircuitCard({
     required this.circuit,
     required this.exercises,
+    required this.c,
     required this.onEditCircuit,
     required this.onEditExercise,
     required this.onRemoveExercise,
@@ -1204,50 +1261,49 @@ class _CircuitCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rounds = circuit?.rounds ?? 1;
-    final name = circuit?.name ?? 'Circuito';
+    final name   = circuit?.name   ?? 'Circuito';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
           child: Container(
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  _kIndigo.withOpacity(0.12),
-                  _kIndigo.withOpacity(0.05),
-                ],
-              ),
+              color:        c.glassCard,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                  color: _kIndigo.withOpacity(0.4), width: 1),
-              boxShadow: [
-                BoxShadow(
-                    color: _kIndigo.withOpacity(0.1),
-                    blurRadius: 20)
-              ],
+              border: Border(
+                left:   BorderSide(
+                    color: _kIndigo.withOpacity(0.6), width: 3),
+                top:    BorderSide(
+                    color: _kIndigo.withOpacity(0.15), width: 0.7),
+                right:  BorderSide(
+                    color: _kIndigo.withOpacity(0.15), width: 0.7),
+                bottom: BorderSide(
+                    color: _kIndigo.withOpacity(0.15), width: 0.7),
+              ),
+              boxShadow: c.showElevation
+                  ? [BoxShadow(color: c.elevationColor, blurRadius: 8)]
+                  : [BoxShadow(
+                      color:      _kIndigo.withOpacity(0.05),
+                      blurRadius: 14)],
             ),
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      14, 12, 14, 10),
+                  padding:
+                      const EdgeInsets.fromLTRB(14, 12, 14, 10),
                   child: Row(
                     children: [
                       Icon(Icons.drag_handle_rounded,
-                          size: 18,
-                          color: Colors.white.withOpacity(0.3)),
+                          size: 18, color: c.iconSecondary),
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: _kIndigo.withOpacity(0.15),
-                          borderRadius:
-                              BorderRadius.circular(8),
+                          color:        _kIndigo.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(Icons.loop_rounded,
                             color: _kIndigo, size: 16),
@@ -1258,21 +1314,23 @@ class _CircuitCard extends StatelessWidget {
                           crossAxisAlignment:
                               CrossAxisAlignment.start,
                           children: [
-                            Text(name,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight:
-                                        FontWeight.w700),
-                                maxLines: 1,
-                                overflow:
-                                    TextOverflow.ellipsis),
                             Text(
-                              '$rounds cicl${rounds == 1 ? 'o' : 'i'} · ${exercises.length} esercizi',
+                              name,
                               style: TextStyle(
-                                  color:
-                                      _kIndigo.withOpacity(0.8),
-                                  fontSize: 11),
+                                color:      c.textPrimary,
+                                fontSize:   14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '$rounds cicl${rounds == 1 ? 'o' : 'i'} · '
+                              '${exercises.length} esercizi',
+                              style: TextStyle(
+                                color:    _kIndigo.withOpacity(0.8),
+                                fontSize: 11,
+                              ),
                             ),
                           ],
                         ),
@@ -1284,18 +1342,18 @@ class _CircuitCard extends StatelessWidget {
                               horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
                             color: _kIndigo.withOpacity(0.12),
-                            borderRadius:
-                                BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                                color:
-                                    _kIndigo.withOpacity(0.35)),
+                                color: _kIndigo.withOpacity(0.35)),
                           ),
-                          child: const Text('Modifica',
-                              style: TextStyle(
-                                  color: _kIndigo,
-                                  fontSize: 11,
-                                  fontWeight:
-                                      FontWeight.w600)),
+                          child: const Text(
+                            'Modifica',
+                            style: TextStyle(
+                              color:      _kIndigo,
+                              fontSize:   11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -1306,17 +1364,18 @@ class _CircuitCard extends StatelessWidget {
                               horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
                             color: _kRed.withOpacity(0.08),
-                            borderRadius:
-                                BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                                 color: _kRed.withOpacity(0.3)),
                           ),
-                          child: const Text('Elimina',
-                              style: TextStyle(
-                                  color: _kRed,
-                                  fontSize: 11,
-                                  fontWeight:
-                                      FontWeight.w600)),
+                          child: const Text(
+                            'Elimina',
+                            style: TextStyle(
+                              color:      _kRed,
+                              fontSize:   11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -1327,40 +1386,41 @@ class _CircuitCard extends StatelessWidget {
                   margin: const EdgeInsets.symmetric(
                       horizontal: 14),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [
-                      Colors.transparent,
-                      _kIndigo.withOpacity(0.3),
-                      Colors.transparent,
-                    ]),
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        _kIndigo.withOpacity(0.3),
+                        Colors.transparent,
+                      ],
+                    ),
                   ),
                 ),
                 if (exercises.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(14),
-                    child: Text('Nessun esercizio',
-                        style: TextStyle(
-                            color:
-                                Colors.white.withOpacity(0.35),
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic)),
+                    child: Text(
+                      'Nessun esercizio',
+                      style: TextStyle(
+                        color:     c.textTertiary,
+                        fontSize:  12,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
                   )
                 else
                   Padding(
                     padding: const EdgeInsets.all(8),
                     child: ReorderableListView(
                       shrinkWrap: true,
-                      physics:
-                          const NeverScrollableScrollPhysics(),
+                      physics:    const NeverScrollableScrollPhysics(),
                       buildDefaultDragHandles: false,
-                      // FIX 4: proxyDecorator personalizzato —
-                      // elimina overlay bianco di sistema,
-                      // aggiunge bordo cyan sottile per feedback
-                      proxyDecorator: (child, index, animation) =>
-                          AnimatedBuilder(
+                      proxyDecorator:
+                          (child, index, animation) =>
+                              AnimatedBuilder(
                         animation: animation,
                         builder: (_, __) => Material(
                           elevation: 0,
-                          color: Colors.transparent,
+                          color:     Colors.transparent,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               borderRadius:
@@ -1371,8 +1431,7 @@ class _CircuitCard extends StatelessWidget {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color:
-                                      _kCyan.withOpacity(0.12),
+                                  color: _kCyan.withOpacity(0.12),
                                   blurRadius: 10,
                                 ),
                               ],
@@ -1383,21 +1442,24 @@ class _CircuitCard extends StatelessWidget {
                       ),
                       onReorder: (oldIdx, newIdx) {
                         if (newIdx > oldIdx) newIdx--;
-                        final r =
-                            List<HiveWorkoutExercise>.from(
-                                exercises);
+                        final r = List<HiveWorkoutExercise>.from(
+                            exercises);
                         final item = r.removeAt(oldIdx);
                         r.insert(newIdx, item);
                         onReorderExercises(r);
                       },
-                      children: exercises.asMap().entries.map((e) {
+                      children: exercises
+                          .asMap()
+                          .entries
+                          .map((e) {
                         final we = e.value;
                         return ReorderableDelayedDragStartListener(
-                          key: ValueKey(we.key),
+                          key:   ValueKey(we.key),
                           index: e.key,
                           child: _ExerciseCard(
                             exercise: we,
-                            onEdit: () => onEditExercise(we),
+                            c:        c,
+                            onEdit:   () => onEditExercise(we),
                             onDelete: () =>
                                 onRemoveExercise(we.key),
                           ),
@@ -1414,13 +1476,15 @@ class _CircuitCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Sheet: _AddExercisesToWorkoutSheet
-// ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// SHEET WIDGETS — sempre scuri (modal overlay)
+// I sheet rimangono scuri come il calendario, i date picker
+// e tutti gli altri overlay modali dell'app.
+// ═══════════════════════════════════════════════════════════════
 
 class _AddExercisesToWorkoutSheet extends StatefulWidget {
   final List<HiveExercise> allExercises;
-  final Set<dynamic> alreadyIn;
+  final Set<dynamic>       alreadyIn;
   final void Function(Set<dynamic>) onConfirm;
 
   const _AddExercisesToWorkoutSheet({
@@ -1436,8 +1500,8 @@ class _AddExercisesToWorkoutSheet extends StatefulWidget {
 
 class _AddExercisesToWorkoutSheetState
     extends State<_AddExercisesToWorkoutSheet> {
-  String _search = '';
-  String _muscle = 'Tutti';
+  String             _search   = '';
+  String             _muscle   = 'Tutti';
   final Set<dynamic> _selected = {};
 
   @override
@@ -1454,14 +1518,16 @@ class _AddExercisesToWorkoutSheetState
     final filtered = widget.allExercises.where((e) {
       return (_muscle == 'Tutti' || e.muscleGroup == _muscle) &&
           (_search.isEmpty ||
-              e.name.toLowerCase().contains(_search.toLowerCase()) ||
+              e.name
+                  .toLowerCase()
+                  .contains(_search.toLowerCase()) ||
               e.muscleGroup
                   .toLowerCase()
                   .contains(_search.toLowerCase()));
     }).toList();
 
     return _SheetWrapper(
-      title: 'Aggiungi esercizi',
+      title:    'Aggiungi esercizi',
       subtitle: _selected.isEmpty
           ? null
           : '${_selected.length} selezionati',
@@ -1469,15 +1535,15 @@ class _AddExercisesToWorkoutSheetState
         mainAxisSize: MainAxisSize.min,
         children: [
           _GlassField(
-            hintText: 'Cerca esercizio...',
+            hintText:  'Cerca esercizio...',
             onChanged: (v) => setState(() => _search = v),
             prefix: Icon(Icons.search_rounded,
-                size: 16,
+                size:  16,
                 color: Colors.white.withOpacity(0.4)),
           ),
           const SizedBox(height: 10),
           _MuscleFilterChips(
-            groups: groups,
+            groups:   groups,
             selected: _muscle,
             onSelect: (g) => setState(() => _muscle = g),
           ),
@@ -1485,23 +1551,21 @@ class _AddExercisesToWorkoutSheetState
           SizedBox(
             height: 280,
             child: ListView.builder(
-              physics: const BouncingScrollPhysics(),
+              physics:   const BouncingScrollPhysics(),
               itemCount: filtered.length,
               itemBuilder: (_, i) {
-                final ex = filtered[i];
-                final isIn = widget.alreadyIn.contains(ex.key);
+                final ex    = filtered[i];
+                final isIn  = widget.alreadyIn.contains(ex.key);
                 final isSel = _selected.contains(ex.key);
                 return _ExerciseListTile(
-                  exercise: ex,
+                  exercise:    ex,
                   isAlreadyIn: isIn,
-                  isSelected: isSel,
+                  isSelected:  isSel,
                   onTap: isIn
                       ? null
                       : () => setState(() {
-                            if (isSel)
-                              _selected.remove(ex.key);
-                            else
-                              _selected.add(ex.key);
+                            if (isSel) _selected.remove(ex.key);
+                            else _selected.add(ex.key);
                           }),
                 );
               },
@@ -1521,14 +1585,9 @@ class _AddExercisesToWorkoutSheetState
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Sheet: _AddCircuitToWorkoutSheet
-// ─────────────────────────────────────────────────────────────
-
 class _AddCircuitToWorkoutSheet extends StatefulWidget {
   final List<HiveExercise> allExercises;
-  final void Function(Set<dynamic> keys, int rounds, String name)
-      onConfirm;
+  final void Function(Set<dynamic> keys, int rounds, String name) onConfirm;
 
   const _AddCircuitToWorkoutSheet({
     required this.allExercises,
@@ -1542,10 +1601,10 @@ class _AddCircuitToWorkoutSheet extends StatefulWidget {
 
 class _AddCircuitToWorkoutSheetState
     extends State<_AddCircuitToWorkoutSheet> {
-  String _search = '';
-  String _muscle = 'Tutti';
+  String             _search   = '';
+  String             _muscle   = 'Tutti';
   final Set<dynamic> _selected = {};
-  int _rounds = 3;
+  int                _rounds   = 3;
   final _nameCtrl = TextEditingController(text: 'Circuito');
 
   @override
@@ -1572,32 +1631,32 @@ class _AddCircuitToWorkoutSheetState
     }).toList();
 
     return _SheetWrapper(
-      title: 'Nuovo circuito',
+      title:       'Nuovo circuito',
       accentColor: _kIndigo,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           _GlassField(
             controller: _nameCtrl,
-            hintText: 'Nome circuito...',
-            onChanged: (_) {},
+            hintText:   'Nome circuito...',
+            onChanged:  (_) {},
           ),
           const SizedBox(height: 12),
           _RoundsControl(
-            rounds: _rounds,
+            rounds:    _rounds,
             onChanged: (v) => setState(() => _rounds = v),
           ),
           const SizedBox(height: 12),
           _GlassField(
-            hintText: 'Cerca esercizio...',
+            hintText:  'Cerca esercizio...',
             onChanged: (v) => setState(() => _search = v),
             prefix: Icon(Icons.search_rounded,
-                size: 16,
+                size:  16,
                 color: Colors.white.withOpacity(0.4)),
           ),
           const SizedBox(height: 10),
           _MuscleFilterChips(
-            groups: groups,
+            groups:   groups,
             selected: _muscle,
             onSelect: (g) => setState(() => _muscle = g),
           ),
@@ -1605,20 +1664,18 @@ class _AddCircuitToWorkoutSheetState
           SizedBox(
             height: 240,
             child: ListView.builder(
-              physics: const BouncingScrollPhysics(),
+              physics:   const BouncingScrollPhysics(),
               itemCount: filtered.length,
               itemBuilder: (_, i) {
-                final ex = filtered[i];
+                final ex    = filtered[i];
                 final isSel = _selected.contains(ex.key);
                 return _ExerciseListTile(
-                  exercise: ex,
+                  exercise:    ex,
                   isAlreadyIn: false,
-                  isSelected: isSel,
+                  isSelected:  isSel,
                   onTap: () => setState(() {
-                    if (isSel)
-                      _selected.remove(ex.key);
-                    else
-                      _selected.add(ex.key);
+                    if (isSel) _selected.remove(ex.key);
+                    else _selected.add(ex.key);
                   }),
                 );
               },
@@ -1627,8 +1684,7 @@ class _AddCircuitToWorkoutSheetState
           if (_selected.isNotEmpty) ...[
             const SizedBox(height: 10),
             _GlassButton(
-              label:
-                  'Crea · ${_selected.length} esercizi · $_rounds cicli',
+              label: 'Crea · ${_selected.length} esercizi · $_rounds cicli',
               color: _kIndigo,
               onTap: () => widget.onConfirm(
                 _selected,
@@ -1645,14 +1701,10 @@ class _AddCircuitToWorkoutSheetState
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Sheet: _EditCircuitSheet
-// ─────────────────────────────────────────────────────────────
-
 class _EditCircuitSheet extends StatefulWidget {
-  final HiveCircuit circuit;
+  final HiveCircuit               circuit;
   final List<HiveWorkoutExercise> currentChildren;
-  final List<HiveExercise> allExercises;
+  final List<HiveExercise>        allExercises;
   final void Function(int rounds, Set<dynamic> toAdd,
       List<HiveWorkoutExercise> toRemove) onConfirm;
 
@@ -1664,22 +1716,21 @@ class _EditCircuitSheet extends StatefulWidget {
   });
 
   @override
-  State<_EditCircuitSheet> createState() =>
-      _EditCircuitSheetState();
+  State<_EditCircuitSheet> createState() => _EditCircuitSheetState();
 }
 
 class _EditCircuitSheetState extends State<_EditCircuitSheet> {
-  late int _rounds;
-  String _search = '';
-  String _muscle = 'Tutti';
+  late int          _rounds;
+  String            _search = '';
+  String            _muscle = 'Tutti';
   late Set<dynamic> _existingKeys;
-  final Set<dynamic> _toAdd = {};
+  final Set<dynamic> _toAdd    = {};
   final Set<dynamic> _toRemove = {};
 
   @override
   void initState() {
     super.initState();
-    _rounds = widget.circuit.rounds;
+    _rounds       = widget.circuit.rounds;
     _existingKeys = widget.currentChildren
         .map((e) => e.exerciseKey)
         .toSet();
@@ -1701,32 +1752,33 @@ class _EditCircuitSheetState extends State<_EditCircuitSheet> {
           (_search.isEmpty ||
               e.name.toLowerCase().contains(_search.toLowerCase()));
     }).toList();
+
     final hasChanges = _rounds != widget.circuit.rounds ||
         _toAdd.isNotEmpty ||
         _toRemove.isNotEmpty;
 
     return _SheetWrapper(
-      title: 'Modifica circuito',
-      subtitle: widget.circuit.name,
+      title:       'Modifica circuito',
+      subtitle:    widget.circuit.name,
       accentColor: _kIndigo,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           _RoundsControl(
-            rounds: _rounds,
+            rounds:    _rounds,
             onChanged: (v) => setState(() => _rounds = v),
           ),
           const SizedBox(height: 12),
           _GlassField(
-            hintText: 'Cerca esercizio...',
+            hintText:  'Cerca esercizio...',
             onChanged: (v) => setState(() => _search = v),
             prefix: Icon(Icons.search_rounded,
-                size: 16,
+                size:  16,
                 color: Colors.white.withOpacity(0.4)),
           ),
           const SizedBox(height: 10),
           _MuscleFilterChips(
-            groups: groups,
+            groups:   groups,
             selected: _muscle,
             onSelect: (g) => setState(() => _muscle = g),
           ),
@@ -1734,15 +1786,13 @@ class _EditCircuitSheetState extends State<_EditCircuitSheet> {
           SizedBox(
             height: 260,
             child: ListView.builder(
-              physics: const BouncingScrollPhysics(),
+              physics:   const BouncingScrollPhysics(),
               itemCount: filtered.length,
               itemBuilder: (_, i) {
-                final ex = filtered[i];
-                final isExisting =
-                    _existingKeys.contains(ex.key) &&
-                        !_toRemove.contains(ex.key);
-                final isMarkedRemove =
-                    _toRemove.contains(ex.key);
+                final ex         = filtered[i];
+                final isExisting = _existingKeys.contains(ex.key) &&
+                    !_toRemove.contains(ex.key);
+                final isMarkedRem = _toRemove.contains(ex.key);
                 final isMarkedAdd = _toAdd.contains(ex.key);
 
                 return ListTile(
@@ -1752,24 +1802,23 @@ class _EditCircuitSheetState extends State<_EditCircuitSheet> {
                           onTap: () =>
                               setState(() => _toRemove.add(ex.key)),
                           child: Container(
-                            width: 22,
+                            width:  22,
                             height: 22,
                             decoration: BoxDecoration(
-                                color: _kTeal,
-                                borderRadius:
-                                    BorderRadius.circular(6)),
-                            child: const Icon(
-                                Icons.check_rounded,
-                                size: 14,
-                                color: Colors.white),
+                              color:        _kTeal,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(Icons.check_rounded,
+                                size: 14, color: Colors.white),
                           ),
                         )
-                      : isMarkedRemove
+                      : isMarkedRem
                           ? GestureDetector(
                               onTap: () => setState(
-                                  () => _toRemove.remove(ex.key)),
+                                () => _toRemove.remove(ex.key),
+                              ),
                               child: Container(
-                                width: 22,
+                                width:  22,
                                 height: 22,
                                 decoration: BoxDecoration(
                                   color: _kRed.withOpacity(0.2),
@@ -1780,22 +1829,23 @@ class _EditCircuitSheetState extends State<_EditCircuitSheet> {
                                 ),
                                 child: const Icon(
                                     Icons.remove_rounded,
-                                    size: 14,
+                                    size:  14,
                                     color: _kRed),
                               ),
                             )
                           : GestureDetector(
                               onTap: () => setState(() {
-                                if (isMarkedAdd)
+                                if (isMarkedAdd) {
                                   _toAdd.remove(ex.key);
-                                else if (!_existingKeys
-                                    .contains(ex.key))
+                                } else if (!_existingKeys
+                                    .contains(ex.key)) {
                                   _toAdd.add(ex.key);
+                                }
                               }),
                               child: AnimatedContainer(
-                                duration: const Duration(
-                                    milliseconds: 150),
-                                width: 22,
+                                duration:
+                                    const Duration(milliseconds: 150),
+                                width:  22,
                                 height: 22,
                                 decoration: BoxDecoration(
                                   color: isMarkedAdd
@@ -1812,27 +1862,31 @@ class _EditCircuitSheetState extends State<_EditCircuitSheet> {
                                   ),
                                 ),
                                 child: isMarkedAdd
-                                    ? const Icon(
-                                        Icons.check_rounded,
-                                        size: 14,
-                                        color: Colors.white)
+                                    ? const Icon(Icons.check_rounded,
+                                        size: 14, color: Colors.white)
                                     : null,
                               ),
                             ),
-                  title: Text(ex.name,
-                      style: TextStyle(
-                          color: isMarkedRemove
-                              ? Colors.white.withOpacity(0.35)
-                              : Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          decoration: isMarkedRemove
-                              ? TextDecoration.lineThrough
-                              : null)),
-                  subtitle: Text(ex.muscleGroup,
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.4),
-                          fontSize: 11)),
+                  title: Text(
+                    ex.name,
+                    style: TextStyle(
+                      color: isMarkedRem
+                          ? Colors.white.withOpacity(0.35)
+                          : Colors.white,
+                      fontSize:   14,
+                      fontWeight: FontWeight.w600,
+                      decoration: isMarkedRem
+                          ? TextDecoration.lineThrough
+                          : null,
+                    ),
+                  ),
+                  subtitle: Text(
+                    ex.muscleGroup,
+                    style: TextStyle(
+                      color:    Colors.white.withOpacity(0.4),
+                      fontSize: 11,
+                    ),
+                  ),
                 );
               },
             ),
@@ -1844,8 +1898,7 @@ class _EditCircuitSheetState extends State<_EditCircuitSheet> {
               color: _kIndigo,
               onTap: () {
                 final toRemoveList = widget.currentChildren
-                    .where(
-                        (c) => _toRemove.contains(c.exerciseKey))
+                    .where((c) => _toRemove.contains(c.exerciseKey))
                     .toList();
                 widget.onConfirm(_rounds, _toAdd, toRemoveList);
               },
@@ -1857,16 +1910,14 @@ class _EditCircuitSheetState extends State<_EditCircuitSheet> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Sheet: _RenameSheet
-// ─────────────────────────────────────────────────────────────
-
 class _RenameSheet extends StatelessWidget {
   final TextEditingController controller;
-  final VoidCallback onConfirm;
+  final VoidCallback          onConfirm;
 
-  const _RenameSheet(
-      {required this.controller, required this.onConfirm});
+  const _RenameSheet({
+    required this.controller,
+    required this.onConfirm,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1877,28 +1928,25 @@ class _RenameSheet extends StatelessWidget {
         children: [
           _GlassField(
             controller: controller,
-            hintText: 'Nome scheda...',
-            autofocus: true,
-            onChanged: (_) {},
+            hintText:   'Nome scheda...',
+            autofocus:  true,
+            onChanged:  (_) {},
           ),
           const SizedBox(height: 20),
           _GlassButton(
-              label: 'Rinomina',
-              color: _kTeal,
-              onTap: onConfirm),
+            label: 'Rinomina',
+            color: _kTeal,
+            onTap: onConfirm,
+          ),
         ],
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Sheet: _IconColorSheet
-// ─────────────────────────────────────────────────────────────
-
 class _IconColorSheet extends StatefulWidget {
-  final String currentIconId;
-  final int currentColorIndex;
+  final String  currentIconId;
+  final int     currentColorIndex;
   final void Function(String iconId, int colorIndex) onSelect;
 
   const _IconColorSheet({
@@ -1913,12 +1961,12 @@ class _IconColorSheet extends StatefulWidget {
 
 class _IconColorSheetState extends State<_IconColorSheet> {
   late String _iconId;
-  late int _colorIndex;
+  late int    _colorIndex;
 
   @override
   void initState() {
     super.initState();
-    _iconId = widget.currentIconId;
+    _iconId     = widget.currentIconId;
     _colorIndex = widget.currentColorIndex
         .clamp(0, _kWorkoutColors.length - 1);
   }
@@ -1927,7 +1975,7 @@ class _IconColorSheetState extends State<_IconColorSheet> {
   Widget build(BuildContext context) {
     final accent = _kWorkoutColors[_colorIndex];
     return _SheetWrapper(
-      title: 'Icona e colore',
+      title:       'Icona e colore',
       accentColor: accent,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1936,54 +1984,58 @@ class _IconColorSheetState extends State<_IconColorSheet> {
             child: Column(
               children: [
                 WorkoutAvatar(
-                  iconId: _iconId,
+                  iconId:         _iconId,
                   iconColorIndex: _colorIndex,
-                  size: 70,
-                  iconSize: 34,
-                  borderRadius: 18,
+                  size:           70,
+                  iconSize:       34,
+                  borderRadius:   18,
                 ),
                 const SizedBox(height: 6),
-                Text('Anteprima',
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.35),
-                        fontSize: 11)),
+                Text(
+                  'Anteprima',
+                  style: TextStyle(
+                    color:    Colors.white.withOpacity(0.35),
+                    fontSize: 11,
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(height: 18),
-          Text('Colore',
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4)),
+          Text(
+            'Colore',
+            style: TextStyle(
+              color:        Colors.white.withOpacity(0.5),
+              fontSize:     12,
+              fontWeight:   FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
+          ),
           const SizedBox(height: 10),
           Wrap(
-            spacing: 10,
+            spacing:    10,
             runSpacing: 10,
             children: _kWorkoutColors.asMap().entries.map((e) {
               final sel = e.key == _colorIndex;
               return GestureDetector(
-                onTap: () =>
-                    setState(() => _colorIndex = e.key),
+                onTap: () => setState(() => _colorIndex = e.key),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  width: 34,
+                  width:  34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: e.value,
-                    shape: BoxShape.circle,
+                    color:  e.value,
+                    shape:  BoxShape.circle,
                     border: sel
                         ? Border.all(
                             color: Colors.white, width: 2.5)
-                        : Border.all(
-                            color: Colors.transparent),
+                        : Border.all(color: Colors.transparent),
                     boxShadow: sel
                         ? [
                             BoxShadow(
-                                color:
-                                    e.value.withOpacity(0.6),
-                                blurRadius: 10)
+                              color:      e.value.withOpacity(0.6),
+                              blurRadius: 10,
+                            ),
                           ]
                         : null,
                   ),
@@ -1996,24 +2048,26 @@ class _IconColorSheetState extends State<_IconColorSheet> {
             }).toList(),
           ),
           const SizedBox(height: 18),
-          Text('Icona',
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4)),
+          Text(
+            'Icona',
+            style: TextStyle(
+              color:        Colors.white.withOpacity(0.5),
+              fontSize:     12,
+              fontWeight:   FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
+          ),
           const SizedBox(height: 10),
           Wrap(
-            spacing: 8,
+            spacing:    8,
             runSpacing: 8,
             children: _kWorkoutIcons.map((icon) {
               final sel = icon.$1 == _iconId;
               return GestureDetector(
-                onTap: () =>
-                    setState(() => _iconId = icon.$1),
+                onTap: () => setState(() => _iconId = icon.$1),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  width: 48,
+                  width:  48,
                   height: 48,
                   decoration: BoxDecoration(
                     color: sel
@@ -2029,16 +2083,19 @@ class _IconColorSheetState extends State<_IconColorSheet> {
                     boxShadow: sel
                         ? [
                             BoxShadow(
-                                color: accent.withOpacity(0.2),
-                                blurRadius: 8)
+                              color:      accent.withOpacity(0.2),
+                              blurRadius: 8,
+                            ),
                           ]
                         : null,
                   ),
-                  child: Icon(icon.$2,
-                      color: sel
-                          ? accent
-                          : Colors.white.withOpacity(0.45),
-                      size: 22),
+                  child: Icon(
+                    icon.$2,
+                    color: sel
+                        ? accent
+                        : Colors.white.withOpacity(0.45),
+                    size: 22,
+                  ),
                 ),
               );
             }).toList(),
@@ -2055,104 +2112,104 @@ class _IconColorSheetState extends State<_IconColorSheet> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Sheet: _EditParamsSheet
-// ─────────────────────────────────────────────────────────────
-
 class _EditParamsSheet extends StatefulWidget {
   final HiveWorkoutExercise exercise;
-  final void Function(int sets, int reps, double weight, int? rest)
-      onConfirm;
+  final void Function(int sets, int reps, double weight, int? rest) onConfirm;
 
-  const _EditParamsSheet(
-      {required this.exercise, required this.onConfirm});
+  const _EditParamsSheet({
+    required this.exercise,
+    required this.onConfirm,
+  });
 
   @override
   State<_EditParamsSheet> createState() => _EditParamsSheetState();
 }
 
 class _EditParamsSheetState extends State<_EditParamsSheet> {
-  late int _sets;
-  late int _reps;
+  late int    _sets, _reps, _rest;
   late double _weight;
-  late int _rest;
 
   @override
   void initState() {
     super.initState();
-    _sets = widget.exercise.sets;
-    _reps = widget.exercise.targetReps;
+    _sets   = widget.exercise.sets;
+    _reps   = widget.exercise.targetReps;
     _weight = widget.exercise.targetWeight ?? 0;
-    _rest = widget.exercise.restSeconds ?? 60;
+    _rest   = widget.exercise.restSeconds  ?? 60;
   }
 
   @override
   Widget build(BuildContext context) {
     return _SheetWrapper(
-      title: widget.exercise.exerciseName,
+      title:    widget.exercise.exerciseName,
       subtitle: 'Parametri esercizio',
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           _IntRow(
-            label: 'Serie',
-            value: _sets,
-            min: 1,
-            max: 20,
+            label:     'Serie',
+            value:     _sets,
+            min:       1,
+            max:       20,
             onChanged: (v) => setState(() => _sets = v),
           ),
           _IntRow(
-            label: 'Ripetizioni',
-            value: _reps,
-            min: 1,
-            max: 100,
+            label:     'Ripetizioni',
+            value:     _reps,
+            min:       1,
+            max:       100,
             onChanged: (v) => setState(() => _reps = v),
           ),
           _IntRow(
-            label: 'Recupero (sec)',
-            value: _rest,
-            min: 0,
-            max: 600,
-            step: 15,
+            label:     'Recupero (sec)',
+            value:     _rest,
+            min:       0,
+            max:       600,
+            step:      15,
             onChanged: (v) => setState(() => _rest = v),
           ),
           Padding(
             padding: const EdgeInsets.only(bottom: 14),
             child: Row(
               children: [
-                Text('Peso (kg)',
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'Peso (kg)',
+                  style: TextStyle(
+                    color:      Colors.white.withOpacity(0.6),
+                    fontSize:   14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const Spacer(),
                 SizedBox(
                   width: 90,
                   child: TextFormField(
-                    initialValue:
-                        _weight > 0 ? _weight.toString() : '',
-                    keyboardType:
-                        const TextInputType.numberWithOptions(
-                            decimal: true),
+                    initialValue: _weight > 0
+                        ? _weight.toString()
+                        : '',
+                    keyboardType: const TextInputType
+                        .numberWithOptions(decimal: true),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                         color: Colors.white, fontSize: 14),
+                    cursorColor: _kTeal,
                     decoration: InputDecoration(
-                      hintText: '0',
+                      hintText:  '0',
                       hintStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.3)),
+                        color: Colors.white.withOpacity(0.3),
+                      ),
                       border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                              color: _kCyan.withOpacity(0.3))),
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                            color: _kCyan.withOpacity(0.3)),
+                      ),
                       contentPadding:
                           const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 10),
                     ),
                     onChanged: (v) => setState(
-                        () => _weight =
-                            double.tryParse(v) ?? 0),
+                      () => _weight = double.tryParse(v) ?? 0,
+                    ),
                   ),
                 ),
               ],
@@ -2162,7 +2219,11 @@ class _EditParamsSheetState extends State<_EditParamsSheet> {
             label: 'Salva parametri',
             color: _kTeal,
             onTap: () => widget.onConfirm(
-                _sets, _reps, _weight, _rest > 0 ? _rest : null),
+              _sets,
+              _reps,
+              _weight,
+              _rest > 0 ? _rest : null,
+            ),
           ),
         ],
       ),
@@ -2171,11 +2232,8 @@ class _EditParamsSheetState extends State<_EditParamsSheet> {
 }
 
 class _IntRow extends StatelessWidget {
-  final String label;
-  final int value;
-  final int min;
-  final int max;
-  final int step;
+  final String            label;
+  final int               value, min, max, step;
   final void Function(int) onChanged;
 
   const _IntRow({
@@ -2193,29 +2251,35 @@ class _IntRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         children: [
-          Text(label,
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.6),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: TextStyle(
+              color:      Colors.white.withOpacity(0.6),
+              fontSize:   14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const Spacer(),
           _RoundBtn(
-            icon: Icons.remove_rounded,
+            icon:  Icons.remove_rounded,
             onTap: (value - step >= min)
                 ? () => onChanged(value - step)
                 : null,
           ),
           SizedBox(
             width: 48,
-            child: Text('$value',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800)),
+            child: Text(
+              '$value',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color:      Colors.white,
+                fontSize:   16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
           _RoundBtn(
-            icon: Icons.add_rounded,
+            icon:  Icons.add_rounded,
             onTap: (value + step <= max)
                 ? () => onChanged(value + step)
                 : null,
@@ -2227,37 +2291,45 @@ class _IntRow extends StatelessWidget {
 }
 
 class _RoundsControl extends StatelessWidget {
-  final int rounds;
+  final int              rounds;
   final void Function(int) onChanged;
 
-  const _RoundsControl(
-      {required this.rounds, required this.onChanged});
+  const _RoundsControl({
+    required this.rounds,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text('Cicli:',
-            style: TextStyle(
-                color: Colors.white.withOpacity(0.6),
-                fontSize: 14,
-                fontWeight: FontWeight.w600)),
+        Text(
+          'Cicli:',
+          style: TextStyle(
+            color:      Colors.white.withOpacity(0.6),
+            fontSize:   14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         const Spacer(),
         _RoundBtn(
-          icon: Icons.remove_rounded,
+          icon:  Icons.remove_rounded,
           onTap: rounds > 1 ? () => onChanged(rounds - 1) : null,
         ),
         SizedBox(
           width: 52,
-          child: Text('$rounds',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800)),
+          child: Text(
+            '$rounds',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color:      Colors.white,
+              fontSize:   18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         ),
         _RoundBtn(
-          icon: Icons.add_rounded,
+          icon:  Icons.add_rounded,
           onTap: () => onChanged(rounds + 1),
         ),
       ],
@@ -2266,8 +2338,9 @@ class _RoundsControl extends StatelessWidget {
 }
 
 class _RoundBtn extends StatelessWidget {
-  final IconData icon;
+  final IconData      icon;
   final VoidCallback? onTap;
+
   const _RoundBtn({required this.icon, this.onTap});
 
   @override
@@ -2276,13 +2349,13 @@ class _RoundBtn extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 36,
+        width:  36,
         height: 36,
         decoration: BoxDecoration(
-          color: enabled
+          color:  enabled
               ? _kCyan.withOpacity(0.1)
               : Colors.transparent,
-          shape: BoxShape.circle,
+          shape:  BoxShape.circle,
           border: Border.all(
             color: enabled
                 ? _kCyan.withOpacity(0.4)
@@ -2290,19 +2363,21 @@ class _RoundBtn extends StatelessWidget {
             width: 1,
           ),
         ),
-        child: Icon(icon,
-            size: 18,
-            color: enabled
-                ? _kCyan
-                : Colors.white.withOpacity(0.2)),
+        child: Icon(
+          icon,
+          size:  18,
+          color: enabled
+              ? _kCyan
+              : Colors.white.withOpacity(0.2),
+        ),
       ),
     );
   }
 }
 
 class _MuscleFilterChips extends StatelessWidget {
-  final List<String> groups;
-  final String selected;
+  final List<String>          groups;
+  final String                selected;
   final void Function(String) onSelect;
 
   const _MuscleFilterChips({
@@ -2317,10 +2392,10 @@ class _MuscleFilterChips extends StatelessWidget {
       height: 34,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: groups.length,
+        itemCount:       groups.length,
         separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
-          final g = groups[i];
+          final g   = groups[i];
           final sel = selected == g;
           return GestureDetector(
             onTap: () => onSelect(g),
@@ -2342,20 +2417,24 @@ class _MuscleFilterChips extends StatelessWidget {
                 boxShadow: sel
                     ? [
                         BoxShadow(
-                            color: _kTeal.withOpacity(0.15),
-                            blurRadius: 8)
+                          color:      _kTeal.withOpacity(0.15),
+                          blurRadius: 8,
+                        ),
                       ]
                     : null,
               ),
-              child: Text(g,
-                  style: TextStyle(
-                      color: sel
-                          ? _kTeal
-                          : Colors.white.withOpacity(0.55),
-                      fontSize: 12,
-                      fontWeight: sel
-                          ? FontWeight.w700
-                          : FontWeight.w500)),
+              child: Text(
+                g,
+                style: TextStyle(
+                  color: sel
+                      ? _kTeal
+                      : Colors.white.withOpacity(0.55),
+                  fontSize:   12,
+                  fontWeight: sel
+                      ? FontWeight.w700
+                      : FontWeight.w500,
+                ),
+              ),
             ),
           );
         },
@@ -2364,11 +2443,12 @@ class _MuscleFilterChips extends StatelessWidget {
   }
 }
 
+// _SheetWrapper — sempre scuro (modal overlay)
 class _SheetWrapper extends StatelessWidget {
-  final String title;
+  final String  title;
   final String? subtitle;
-  final Widget child;
-  final Color accentColor;
+  final Widget  child;
+  final Color   accentColor;
 
   const _SheetWrapper({
     required this.title,
@@ -2382,30 +2462,32 @@ class _SheetWrapper extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+          begin:  Alignment.topCenter,
+          end:    Alignment.bottomCenter,
           colors: [Color(0xFF060B14), Color(0xFF03040A)],
         ),
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(24)),
-        border:
-            Border.all(color: accentColor.withOpacity(0.3), width: 0.8),
+        borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(24)),
+        border: Border.all(
+            color: accentColor.withOpacity(0.3), width: 0.8),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize:       MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 14),
           Center(
             child: Container(
-              width: 40,
+              width:  40,
               height: 4,
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [
-                  accentColor.withOpacity(0.3),
-                  accentColor.withOpacity(0.6),
-                  accentColor.withOpacity(0.3),
-                ]),
+                gradient: LinearGradient(
+                  colors: [
+                    accentColor.withOpacity(0.3),
+                    accentColor.withOpacity(0.6),
+                    accentColor.withOpacity(0.3),
+                  ],
+                ),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -2416,23 +2498,29 @@ class _SheetWrapper extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color:      Colors.white,
+                    fontSize:   18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 if (subtitle != null)
-                  Text(subtitle!,
-                      style: TextStyle(
-                          color: accentColor.withOpacity(0.7),
-                          fontSize: 12)),
+                  Text(
+                    subtitle!,
+                    style: TextStyle(
+                      color:    accentColor.withOpacity(0.7),
+                      fontSize: 12,
+                    ),
+                  ),
               ],
             ),
           ),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: child,
+            child:   child,
           ),
         ],
       ),
@@ -2442,10 +2530,10 @@ class _SheetWrapper extends StatelessWidget {
 
 class _GlassField extends StatelessWidget {
   final TextEditingController? controller;
-  final String hintText;
-  final Widget? prefix;
-  final void Function(String) onChanged;
-  final bool autofocus;
+  final String                 hintText;
+  final Widget?                prefix;
+  final void Function(String)  onChanged;
+  final bool                   autofocus;
 
   const _GlassField({
     this.controller,
@@ -2463,30 +2551,34 @@ class _GlassField extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color:        Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
                 color: _kCyan.withOpacity(0.2), width: 0.8),
           ),
           child: TextFormField(
-            controller: controller,
-            autofocus: autofocus,
+            controller:         controller,
+            autofocus:          autofocus,
             textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            cursorColor:        _kTeal,
+            style: const TextStyle(
+                color: Colors.white, fontSize: 14),
             decoration: InputDecoration(
-              hintText: hintText,
+              hintText:  hintText,
               hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.3),
-                  fontSize: 14),
+                color:    Colors.white.withOpacity(0.3),
+                fontSize: 14,
+              ),
               prefixIcon: prefix != null
                   ? Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12),
-                      child: prefix)
+                      child: prefix,
+                    )
                   : null,
               prefixIconConstraints:
                   const BoxConstraints(minWidth: 44),
-              border: InputBorder.none,
+              border:         InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
                   horizontal: 14, vertical: 13),
             ),
@@ -2499,8 +2591,8 @@ class _GlassField extends StatelessWidget {
 }
 
 class _GlassButton extends StatelessWidget {
-  final String label;
-  final Color color;
+  final String       label;
+  final Color        color;
   final VoidCallback onTap;
 
   const _GlassButton({
@@ -2514,7 +2606,7 @@ class _GlassButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: double.infinity,
+        width:   double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -2526,33 +2618,36 @@ class _GlassButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-                color: color.withOpacity(0.35),
-                blurRadius: 14,
-                offset: const Offset(0, 4)),
+              color:      color.withOpacity(0.35),
+              blurRadius: 14,
+              offset:     const Offset(0, 4),
+            ),
           ],
         ),
-        child: Text(label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 15)),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color:      Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize:   15,
+          ),
+        ),
       ),
     );
   }
 }
 
 class _ExerciseListTile extends StatelessWidget {
-  final HiveExercise exercise;
-  final bool isAlreadyIn;
-  final bool isSelected;
+  final HiveExercise  exercise;
+  final bool          isAlreadyIn, isSelected;
   final VoidCallback? onTap;
 
   const _ExerciseListTile({
     required this.exercise,
     required this.isAlreadyIn,
     required this.isSelected,
-    required this.onTap,
+    this.onTap,
   });
 
   @override
@@ -2564,7 +2659,7 @@ class _ExerciseListTile extends StatelessWidget {
               color: _kTeal.withOpacity(0.6), size: 20)
           : AnimatedContainer(
               duration: const Duration(milliseconds: 150),
-              width: 22,
+              width:  22,
               height: 22,
               decoration: BoxDecoration(
                 color: isSelected ? _kTeal : Colors.transparent,
@@ -2581,19 +2676,25 @@ class _ExerciseListTile extends StatelessWidget {
                       size: 14, color: Colors.white)
                   : null,
             ),
-      title: Text(exercise.name,
-          style: TextStyle(
-              color: isAlreadyIn
-                  ? Colors.white.withOpacity(0.35)
-                  : Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600)),
-      subtitle: Text(exercise.muscleGroup,
-          style: TextStyle(
-              color: Colors.white.withOpacity(0.4),
-              fontSize: 11)),
+      title: Text(
+        exercise.name,
+        style: TextStyle(
+          color: isAlreadyIn
+              ? Colors.white.withOpacity(0.35)
+              : Colors.white,
+          fontSize:   14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        exercise.muscleGroup,
+        style: TextStyle(
+          color:    Colors.white.withOpacity(0.4),
+          fontSize: 11,
+        ),
+      ),
       enabled: !isAlreadyIn,
-      onTap: onTap,
+      onTap:   onTap,
     );
   }
 }

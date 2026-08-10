@@ -53,7 +53,9 @@ List<_TopItem> _buildTopItems(List<SessionExercise> ses) {
       final cid = ex.circuitId!;
       if (seen.add(cid)) {
         items.add(_TopItem.circuit(
-            cid, ses.where((e) => e.circuitId == cid).toList()));
+          cid,
+          ses.where((e) => e.circuitId == cid).toList(),
+        ));
       }
     }
   }
@@ -68,23 +70,29 @@ class ActiveSessionScreen extends StatefulWidget {
   const ActiveSessionScreen({super.key, required this.workout});
 
   @override
-  State<ActiveSessionScreen> createState() =>
-      _ActiveSessionScreenState();
+  State<ActiveSessionScreen> createState() => _ActiveSessionScreenState();
 }
 
 class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   Timer?  _uiTimer;
   String? _sessionError;
 
+  // FIX LOADING INFINITO:
+  // Questo flag viene impostato a true nel finally di _initSession(),
+  // garantendo che il loading termini SEMPRE indipendentemente
+  // dallo stato interno del SessionProvider.
+  bool _sessionInitialized = false;
+
   @override
   void initState() {
     super.initState();
     _uiTimer = Timer.periodic(
       const Duration(seconds: 1),
-      (_) { if (mounted) setState(() {}); },
+      (_) {
+        if (mounted) setState(() {});
+      },
     );
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _initSession());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initSession());
   }
 
   @override
@@ -93,22 +101,47 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     super.dispose();
   }
 
-  // FIX loading infinito: try/catch garantisce che _sessionError
-  // venga sempre impostato in caso di errore.
+  // ─────────────────────────────────────────────────────────
+  // _initSession — FIX DEFINITIVO LOADING INFINITO
+  //
+  // PROBLEMA: se sp.startSession() completa senza eccezione
+  // ma sp.hasActiveSession rimane false (bug nel provider,
+  // notifyListeners non chiamato, eccezione interna silenziata),
+  // il Consumer rimane bloccato nel loading per sempre.
+  //
+  // SOLUZIONE: _sessionInitialized = true nel finally garantisce
+  // che il loading termini in OGNI percorso di esecuzione.
+  // Il build method poi controlla separatamente sp.hasActiveSession
+  // e mostra errore se la sessione non è stata creata.
+  // ─────────────────────────────────────────────────────────
   Future<void> _initSession() async {
     if (!mounted) return;
-    setState(() => _sessionError = null);
+    setState(() {
+      _sessionError       = null;
+      _sessionInitialized = false;
+    });
 
     final sp = context.read<SessionProvider>();
+
+    // Se la sessione per questo workout è già attiva, non fare nulla
     if (sp.hasActiveSession &&
-        sp.currentWorkout?.key == widget.workout.key) return;
-    if (sp.hasActiveSession) return;
+        sp.currentWorkout?.key == widget.workout.key) {
+      if (mounted) setState(() => _sessionInitialized = true);
+      return;
+    }
+
+    // Se c'è un'altra sessione attiva, esci
+    if (sp.hasActiveSession) {
+      if (mounted) setState(() => _sessionInitialized = true);
+      return;
+    }
 
     try {
       final exercises =
           HiveDatabase.instance.getWorkoutExercises(widget.workout.key);
-      final circuits =
+      final circuits  =
           HiveDatabase.instance.getCircuits(widget.workout.key);
+
       await sp.startSession(
         exercises,
         widget.workout.key,
@@ -122,6 +155,9 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
         setState(() => _sessionError =
             'Non è stato possibile avviare la sessione. Riprova.');
       }
+    } finally {
+      // SEMPRE eseguito — il loading finisce qui, qualunque sia il percorso
+      if (mounted) setState(() => _sessionInitialized = true);
     }
   }
 
@@ -158,10 +194,12 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
 
   Future<void> _onBack() async {
     final sp = context.read<SessionProvider>();
-    if (_sessionError != null) {
+
+    if (_sessionError != null || !sp.hasActiveSession) {
       Navigator.of(context).pop();
       return;
     }
+
     if (!sp.hasAnyData) {
       final ok = await showGlassDialog<bool>(
         context:     context,
@@ -187,6 +225,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       }
       return;
     }
+
     final result = await showGlassDialog<String>(
       context:     context,
       accentColor: _orange,
@@ -197,15 +236,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           color:     _orange.withOpacity(0.12),
           shape:     BoxShape.circle,
           border:    Border.all(color: _orange.withOpacity(0.4)),
-          boxShadow: [
-            BoxShadow(color: _orange.withOpacity(0.2), blurRadius: 12),
-          ],
+          boxShadow: [BoxShadow(color: _orange.withOpacity(0.2), blurRadius: 12)],
         ),
-        child: const Icon(
-          Icons.pause_circle_outline_rounded,
-          color: _orange,
-          size:  22,
-        ),
+        child: const Icon(Icons.pause_circle_outline_rounded,
+            color: _orange, size: 22),
       ),
       title:   'Sessione in corso',
       message: 'Vuoi mettere in pausa o abbandonare '
@@ -249,15 +283,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           color:     _teal.withOpacity(0.12),
           shape:     BoxShape.circle,
           border:    Border.all(color: _teal.withOpacity(0.4)),
-          boxShadow: [
-            BoxShadow(color: _teal.withOpacity(0.2), blurRadius: 12),
-          ],
+          boxShadow: [BoxShadow(color: _teal.withOpacity(0.2), blurRadius: 12)],
         ),
-        child: const Icon(
-          Icons.check_circle_outline_rounded,
-          color: _teal,
-          size:  22,
-        ),
+        child: const Icon(Icons.check_circle_outline_rounded,
+            color: _teal, size: 22),
       ),
       title:   'Termina sessione',
       message: 'Tutte le serie completate verranno salvate '
@@ -370,6 +399,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     );
     final currentKeys   = currentExercises.map((e) => e.exerciseKey).toSet();
     final currentRounds = sp.getTotalRounds(circuitId);
+
     await _openSheet(ExercisePickerSheet(
       allExercises:        all,
       initialSelectedKeys: Set<dynamic>.from(currentKeys),
@@ -410,6 +440,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -422,38 +453,29 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           child: SafeArea(
             child: Consumer<SessionProvider>(
               builder: (context, sp, _) {
-                // Error state
+                // ── Stato errore (loading sempre terminato) ──
                 if (_sessionError != null) {
                   return _buildError(c, _sessionError!);
                 }
-                // Loading state
+
+                // ── Ancora in inizializzazione ────────────────
+                if (!_sessionInitialized) {
+                  return _buildLoading(c);
+                }
+
+                // ── Inizializzato ma sessione non attiva ──────
+                // (startSession completato senza eccezione ma
+                //  hasActiveSession ancora false — errore del provider)
                 if (!sp.hasActiveSession) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width:  32,
-                          height: 32,
-                          child: CircularProgressIndicator(
-                            color:       _teal,
-                            strokeWidth: 2,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Avvio sessione...',
-                          style: TextStyle(
-                            color:    c.textTertiary,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
+                  return _buildError(
+                    c,
+                    'Sessione non avviata correttamente. Riprova.',
                   );
                 }
-                // Session state
+
+                // ── Sessione attiva ───────────────────────────
                 final topItems = _buildTopItems(sp.sessionExercises);
+
                 return Column(
                   children: [
                     _SessionHeader(
@@ -482,152 +504,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                                 ),
                               ),
                             )
-                          : ReorderableListView.builder(
-                              padding: const EdgeInsets.fromLTRB(
-                                  16, 8, 16, 120),
-                              physics: const BouncingScrollPhysics(),
-                              buildDefaultDragHandles: false,
-                              proxyDecorator: (child, i, anim) =>
-                                  AnimatedBuilder(
-                                animation: anim,
-                                builder: (_, __) => Material(
-                                  elevation: 0,
-                                  color:     Colors.transparent,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(18),
-                                      border: Border.all(
-                                        color: _cyan.withOpacity(0.4),
-                                        width: 1.2,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color:     _cyan.withOpacity(0.1),
-                                          blurRadius: 12,
-                                        ),
-                                      ],
-                                    ),
-                                    child: child,
-                                  ),
-                                ),
-                              ),
-                              onReorder: (oldIndex, newIndex) {
-                                if (newIndex > oldIndex) newIndex--;
-                                final reordered =
-                                    List<_TopItem>.from(topItems);
-                                final moved = reordered.removeAt(oldIndex);
-                                reordered.insert(newIndex, moved);
-                                final newFlat = <SessionExercise>[];
-                                for (final item in reordered) {
-                                  if (item.isFree) {
-                                    newFlat.add(item.exercise!);
-                                  } else {
-                                    newFlat.addAll(
-                                      sp.sessionExercises.where(
-                                        (e) => e.circuitId == item.circuitId,
-                                      ),
-                                    );
-                                  }
-                                }
-                                sp.reorderSessionExercisesFlat(newFlat);
-                                HapticFeedback.selectionClick();
-                              },
-                              itemCount: topItems.length,
-                              itemBuilder: (ctx, i) {
-                                final item = topItems[i];
-                                if (item.isFree) {
-                                  final ex = item.exercise!;
-                                  return ReorderableDelayedDragStartListener(
-                                    key:   ValueKey(item.key),
-                                    index: i,
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(
-                                          bottom: 12),
-                                      child: _SessionExerciseCard(
-                                        exercise: ex,
-                                        sets: sp.exerciseSets[
-                                                ex.exerciseKey] ??
-                                            [],
-                                        isRestingHere: sp.isResting &&
-                                            sp.restingExerciseId ==
-                                                ex.exerciseKey,
-                                        onToggle: (idx) => sp.toggleSet(
-                                            ex.exerciseKey, idx),
-                                        onUpdate: (idx, w, r) =>
-                                            sp.updateSet(
-                                                ex.exerciseKey, idx, w, r),
-                                        onAddSet: () => sp.addSetToExercise(
-                                            ex.exerciseKey),
-                                        onRemoveSet: () =>
-                                            sp.removeSetFromExercise(
-                                                ex.exerciseKey),
-                                        onRemove: () =>
-                                            sp.removeExerciseFromSession(
-                                                ex.exerciseKey),
-                                        onUpdateNote: (note) =>
-                                            sp.updateExerciseNote(
-                                                ex.exerciseKey, note),
-                                        currentNote: ex.sessionNote ?? '',
-                                      ),
-                                    ),
-                                  );
-                                } else {
-                                  final cid    = item.circuitId!;
-                                  final circEx = item.circuitExercises!;
-                                  return ReorderableDelayedDragStartListener(
-                                    key:   ValueKey(item.key),
-                                    index: i,
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(
-                                          bottom: 12),
-                                      child: _SessionCircuitCard(
-                                        circuitId:    cid,
-                                        circuitName:
-                                            sp.getCircuitName(cid),
-                                        exercises:    circEx,
-                                        currentRound:
-                                            sp.getCurrentRound(cid),
-                                        totalRounds:
-                                            sp.getTotalRounds(cid),
-                                        getSets: (exKey) =>
-                                            sp.getCircuitSets(cid, exKey),
-                                        onGoToRound: (r) =>
-                                            sp.goToRound(cid, r),
-                                        onNextRound: () =>
-                                            sp.nextRound(cid),
-                                        onPrevRound: () =>
-                                            sp.prevRound(cid),
-                                        onToggle: (exKey, idx) =>
-                                            sp.toggleSet(exKey, idx,
-                                                circuitId: cid),
-                                        onUpdate: (exKey, idx, w, r) =>
-                                            sp.updateSet(exKey, idx, w, r,
-                                                circuitId: cid),
-                                        onAddSet: (exKey) =>
-                                            sp.addSetToExercise(exKey,
-                                                circuitId: cid),
-                                        onRemoveSet: (exKey) =>
-                                            sp.removeSetFromExercise(exKey,
-                                                circuitId: cid),
-                                        onRemoveExercise: (exKey) =>
-                                            sp.removeExerciseFromCircuitInSession(
-                                              circuitId:   cid,
-                                              exerciseKey: exKey,
-                                            ),
-                                        onRemoveCircuit: () =>
-                                            sp.removeCircuitFromSession(cid),
-                                        onModify: () =>
-                                            _showModifyCircuitSheet(cid),
-                                        onReorderExercises: (reordered) =>
-                                            sp.reorderCircuitExercises(
-                                                cid, reordered),
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                            ),
+                          : _buildReorderableList(sp, topItems, c),
                     ),
                     _SessionActionsBar(
                       onAdd:    _showAddMenu,
@@ -644,6 +521,166 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     );
   }
 
+  // ── Estratto per ridurre nesting ──────────────────────────
+  Widget _buildReorderableList(
+    SessionProvider sp,
+    List<_TopItem> topItems,
+    MarkFitColors c,
+  ) {
+    return ReorderableListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+      physics: const BouncingScrollPhysics(),
+      buildDefaultDragHandles: false,
+      proxyDecorator: (child, i, anim) => AnimatedBuilder(
+        animation: anim,
+        builder: (_, __) => Material(
+          elevation: 0,
+          color:     Colors.transparent,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: _cyan.withOpacity(0.4),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(color: _cyan.withOpacity(0.1), blurRadius: 12),
+              ],
+            ),
+            child: child,
+          ),
+        ),
+      ),
+      onReorder: (oldIndex, newIndex) {
+        if (newIndex > oldIndex) newIndex--;
+        final reordered = List<_TopItem>.from(topItems);
+        final moved     = reordered.removeAt(oldIndex);
+        reordered.insert(newIndex, moved);
+        final newFlat = <SessionExercise>[];
+        for (final item in reordered) {
+          if (item.isFree) {
+            newFlat.add(item.exercise!);
+          } else {
+            newFlat.addAll(
+              sp.sessionExercises
+                  .where((e) => e.circuitId == item.circuitId),
+            );
+          }
+        }
+        sp.reorderSessionExercisesFlat(newFlat);
+        HapticFeedback.selectionClick();
+      },
+      itemCount: topItems.length,
+      itemBuilder: (ctx, i) {
+        final item = topItems[i];
+        if (item.isFree) {
+          return _buildFreeExerciseItem(sp, item, i);
+        } else {
+          return _buildCircuitItem(sp, item, i);
+        }
+      },
+    );
+  }
+
+  Widget _buildFreeExerciseItem(
+    SessionProvider sp,
+    _TopItem item,
+    int i,
+  ) {
+    final ex = item.exercise!;
+    return ReorderableDelayedDragStartListener(
+      key:   ValueKey(item.key),
+      index: i,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _SessionExerciseCard(
+          exercise:      ex,
+          sets:          sp.exerciseSets[ex.exerciseKey] ?? [],
+          isRestingHere: sp.isResting &&
+              sp.restingExerciseId == ex.exerciseKey,
+          onToggle:     (idx) => sp.toggleSet(ex.exerciseKey, idx),
+          onUpdate:     (idx, w, r) =>
+              sp.updateSet(ex.exerciseKey, idx, w, r),
+          onAddSet:     () => sp.addSetToExercise(ex.exerciseKey),
+          onRemoveSet:  () => sp.removeSetFromExercise(ex.exerciseKey),
+          onRemove:     () => sp.removeExerciseFromSession(ex.exerciseKey),
+          onUpdateNote: (note) =>
+              sp.updateExerciseNote(ex.exerciseKey, note),
+          currentNote:  ex.sessionNote ?? '',
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCircuitItem(
+    SessionProvider sp,
+    _TopItem item,
+    int i,
+  ) {
+    final cid    = item.circuitId!;
+    final circEx = item.circuitExercises!;
+    return ReorderableDelayedDragStartListener(
+      key:   ValueKey(item.key),
+      index: i,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _SessionCircuitCard(
+          circuitId:    cid,
+          circuitName:  sp.getCircuitName(cid),
+          exercises:    circEx,
+          currentRound: sp.getCurrentRound(cid),
+          totalRounds:  sp.getTotalRounds(cid),
+          getSets:      (exKey) => sp.getCircuitSets(cid, exKey),
+          onGoToRound:  (r) => sp.goToRound(cid, r),
+          onNextRound:  () => sp.nextRound(cid),
+          onPrevRound:  () => sp.prevRound(cid),
+          onToggle:     (exKey, idx) =>
+              sp.toggleSet(exKey, idx, circuitId: cid),
+          onUpdate:     (exKey, idx, w, r) =>
+              sp.updateSet(exKey, idx, w, r, circuitId: cid),
+          onAddSet:     (exKey) =>
+              sp.addSetToExercise(exKey, circuitId: cid),
+          onRemoveSet:  (exKey) =>
+              sp.removeSetFromExercise(exKey, circuitId: cid),
+          onRemoveExercise: (exKey) =>
+              sp.removeExerciseFromCircuitInSession(
+                circuitId:   cid,
+                exerciseKey: exKey,
+              ),
+          onRemoveCircuit: () => sp.removeCircuitFromSession(cid),
+          onModify:        () => _showModifyCircuitSheet(cid),
+          onReorderExercises: (reordered) =>
+              sp.reorderCircuitExercises(cid, reordered),
+        ),
+      ),
+    );
+  }
+
+  // ── UI States ─────────────────────────────────────────────
+
+  Widget _buildLoading(MarkFitColors c) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width:  32,
+            height: 32,
+            child: CircularProgressIndicator(
+              color:       _teal,
+              strokeWidth: 2,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Avvio sessione...',
+            style: TextStyle(color: c.textTertiary, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildError(MarkFitColors c, String msg) {
     return Center(
       child: Padding(
@@ -651,15 +688,15 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(20),
           child: BackdropFilter(
-            filter:
-                ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+            filter: ImageFilter.blur(
+                sigmaX: c.glassBlur, sigmaY: c.glassBlur),
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color:        c.glassCard,
                 borderRadius: BorderRadius.circular(20),
-                border:
-                    Border.all(color: _red.withOpacity(0.3), width: 0.8),
+                border: Border.all(
+                    color: _red.withOpacity(0.3), width: 0.8),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -713,7 +750,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                               borderRadius: BorderRadius.circular(13),
                               boxShadow: [
                                 BoxShadow(
-                                  color:     _teal.withOpacity(0.4),
+                                  color:      _teal.withOpacity(0.4),
                                   blurRadius: 10,
                                 ),
                               ],
@@ -776,6 +813,7 @@ class _SessionHeader extends StatelessWidget {
   final String Function(int) formatTime;
   final VoidCallback         onBack;
   final MarkFitColors        c;
+
   const _SessionHeader({
     required this.workoutName,
     required this.elapsed,
@@ -801,13 +839,14 @@ class _SessionHeader extends StatelessWidget {
             decoration: BoxDecoration(
               color:        c.glassCard,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _cyan.withOpacity(0.2), width: 0.8),
+              border: Border.all(
+                  color: _cyan.withOpacity(0.2), width: 0.8),
               boxShadow: c.showElevation
                   ? [
                       BoxShadow(
-                        color:     c.elevationColor,
+                        color:      c.elevationColor,
                         blurRadius: 12,
-                        offset:    const Offset(0, 2),
+                        offset:     const Offset(0, 2),
                       ),
                     ]
                   : null,
@@ -845,8 +884,8 @@ class _SessionHeader extends StatelessWidget {
                               fontSize:   16,
                               fontWeight: FontWeight.w800,
                             ),
-                            maxLines:  1,
-                            overflow:  TextOverflow.ellipsis,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           Row(
                             children: [
@@ -878,7 +917,8 @@ class _SessionHeader extends StatelessWidget {
                       decoration: BoxDecoration(
                         color:        _teal.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
-                        border:       Border.all(color: _teal.withOpacity(0.3)),
+                        border:       Border.all(
+                            color: _teal.withOpacity(0.3)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -905,9 +945,7 @@ class _SessionHeader extends StatelessWidget {
                     Text(
                       '$completed/$total serie',
                       style: TextStyle(
-                        color:    c.textTertiary,
-                        fontSize: 11,
-                      ),
+                          color: c.textTertiary, fontSize: 11),
                     ),
                     const Spacer(),
                     Text(
@@ -947,6 +985,7 @@ class _RestTimerBanner extends StatelessWidget {
   final int          elapsed;
   final VoidCallback onStop;
   final MarkFitColors c;
+
   const _RestTimerBanner({
     required this.elapsed,
     required this.onStop,
@@ -1048,11 +1087,11 @@ class _RestTimerBanner extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────
 // _SessionActionsBar — ADATTIVO
-// FIX: parentesi bilanciate esplicitamente, un widget per riga
 // ─────────────────────────────────────────────────────────────
 class _SessionActionsBar extends StatelessWidget {
   final VoidCallback  onAdd, onFinish;
   final MarkFitColors c;
+
   const _SessionActionsBar({
     required this.onAdd,
     required this.onFinish,
@@ -1065,7 +1104,6 @@ class _SessionActionsBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: Row(
         children: [
-          // ── Pulsante Aggiungi ──────────────────────────
           Expanded(
             child: GestureDetector(
               onTap: onAdd,
@@ -1074,7 +1112,8 @@ class _SessionActionsBar extends StatelessWidget {
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
                       color:        c.glassCardInset,
                       borderRadius: BorderRadius.circular(14),
@@ -1103,7 +1142,6 @@ class _SessionActionsBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          // ── Pulsante Termina ───────────────────────────
           Expanded(
             child: GestureDetector(
               onTap: onFinish,
@@ -1162,6 +1200,7 @@ class _SessionExerciseCard extends StatefulWidget {
   final VoidCallback                   onAddSet, onRemoveSet, onRemove;
   final Future<void> Function(String)  onUpdateNote;
   final String                         currentNote;
+
   const _SessionExerciseCard({
     super.key,
     required this.exercise,
@@ -1207,14 +1246,14 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
             boxShadow: widget.isRestingHere
                 ? [
                     BoxShadow(
-                      color:     _indigo.withOpacity(0.12),
+                      color:      _indigo.withOpacity(0.12),
                       blurRadius: 16,
                     ),
                   ]
                 : c.showElevation
                     ? [
                         BoxShadow(
-                          color:     c.elevationColor,
+                          color:      c.elevationColor,
                           blurRadius: 6,
                         ),
                       ]
@@ -1223,9 +1262,11 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
           child: Column(
             children: [
               GestureDetector(
-                onTap: () => setState(() => _expanded = !_expanded),
+                onTap: () =>
+                    setState(() => _expanded = !_expanded),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  padding:
+                      const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   child: Row(
                     children: [
                       Icon(Icons.drag_handle_rounded,
@@ -1241,15 +1282,15 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
                               color: _teal.withOpacity(0.2)),
                         ),
                         child: const Icon(
-                          Icons.fitness_center_rounded,
-                          color: _teal,
-                          size:  18,
-                        ),
+                            Icons.fitness_center_rounded,
+                            color: _teal,
+                            size:  18),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
                           children: [
                             Text(
                               widget.exercise.exerciseName,
@@ -1264,7 +1305,8 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
                             Text(
                               '$completedCount/$totalCount serie',
                               style: TextStyle(
-                                color: completedCount == totalCount &&
+                                color: completedCount ==
+                                            totalCount &&
                                         totalCount > 0
                                     ? _teal
                                     : c.textTertiary,
@@ -1279,19 +1321,20 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
                           final ok = await showGlassDialog<bool>(
                             context:     context,
                             accentColor: _red,
-                            title:       'Elimina esercizio',
-                            message:     'Vuoi eliminare questo esercizio '
-                                'dalla sessione?',
+                            title:   'Elimina esercizio',
+                            message: 'Vuoi eliminare questo '
+                                'esercizio dalla sessione?',
                             actions: [
                               GlassDialogAction(
                                 label: 'Annulla',
-                                onTap: () => Navigator.pop(context, false),
+                                onTap: () => Navigator.pop(
+                                    context, false),
                               ),
                               GlassDialogAction(
                                 label:         'Elimina',
                                 isDestructive: true,
-                                onTap:
-                                    () => Navigator.pop(context, true),
+                                onTap: () => Navigator.pop(
+                                    context, true),
                               ),
                             ],
                           );
@@ -1334,20 +1377,27 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
                   color:     c.divider,
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+                  padding:
+                      const EdgeInsets.fromLTRB(14, 8, 14, 4),
                   child: Column(
-                    children: widget.sets.asMap().entries.map((e) =>
-                        _SetRow(
-                          index:    e.key,
-                          set:      e.value,
-                          onToggle: () => widget.onToggle(e.key),
-                          onUpdate: (w, r) =>
-                              widget.onUpdate(e.key, w, r),
-                        )).toList(),
+                    children: widget.sets
+                        .asMap()
+                        .entries
+                        .map(
+                          (e) => _SetRow(
+                            index:    e.key,
+                            set:      e.value,
+                            onToggle: () => widget.onToggle(e.key),
+                            onUpdate: (w, r) =>
+                                widget.onUpdate(e.key, w, r),
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                  padding:
+                      const EdgeInsets.fromLTRB(14, 0, 14, 10),
                   child: Row(
                     children: [
                       _SmallBtn(
@@ -1380,7 +1430,6 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
 
 // ─────────────────────────────────────────────────────────────
 // _SessionCircuitCard — ADATTIVO
-// FIX: ternari con (cond) su riga singola per evitare ambiguità
 // ─────────────────────────────────────────────────────────────
 class _SessionCircuitCard extends StatefulWidget {
   final String                           circuitId, circuitName;
@@ -1395,6 +1444,7 @@ class _SessionCircuitCard extends StatefulWidget {
   final void Function(dynamic)           onRemoveExercise;
   final VoidCallback                     onModify, onRemoveCircuit;
   final void Function(List<SessionExercise>) onReorderExercises;
+
   const _SessionCircuitCard({
     super.key,
     required this.circuitId,
@@ -1427,7 +1477,8 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
   int get _completedCount {
     int n = 0;
     for (final ex in widget.exercises) {
-      n += widget.getSets(ex.exerciseKey)
+      n += widget
+          .getSets(ex.exerciseKey)
           .where((s) => s.completed)
           .length;
     }
@@ -1467,21 +1518,21 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                   color: _indigo.withOpacity(0.2), width: 0.7),
             ),
             boxShadow: c.showElevation
-                ? [BoxShadow(color: c.elevationColor, blurRadius: 8)]
-                : [
-                    BoxShadow(
-                      color:     _indigo.withOpacity(0.06),
-                      blurRadius: 16,
-                    ),
-                  ],
+                ? [BoxShadow(
+                    color: c.elevationColor, blurRadius: 8)]
+                : [BoxShadow(
+                    color:      _indigo.withOpacity(0.06),
+                    blurRadius: 16)],
           ),
           child: Column(
             children: [
-              // ── Header circuito ──────────────────────────
+              // Header
               GestureDetector(
-                onTap: () => setState(() => _expanded = !_expanded),
+                onTap: () =>
+                    setState(() => _expanded = !_expanded),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  padding:
+                      const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   child: Row(
                     children: [
                       Icon(Icons.drag_handle_rounded,
@@ -1493,16 +1544,14 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                           color: _indigo.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(
-                          Icons.loop_rounded,
-                          color: _indigo,
-                          size:  16,
-                        ),
+                        child: const Icon(Icons.loop_rounded,
+                            color: _indigo, size: 16),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
                           children: [
                             Text(
                               widget.circuitName,
@@ -1530,8 +1579,9 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 5),
                           decoration: BoxDecoration(
-                            color:        _indigo.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(8),
+                            color: _indigo.withOpacity(0.12),
+                            borderRadius:
+                                BorderRadius.circular(8),
                             border: Border.all(
                                 color: _indigo.withOpacity(0.3)),
                           ),
@@ -1557,14 +1607,14 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                             actions: [
                               GlassDialogAction(
                                 label: 'Annulla',
-                                onTap: () =>
-                                    Navigator.pop(context, false),
+                                onTap: () => Navigator.pop(
+                                    context, false),
                               ),
                               GlassDialogAction(
                                 label:         'Elimina',
                                 isDestructive: true,
-                                onTap:         () =>
-                                    Navigator.pop(context, true),
+                                onTap: () => Navigator.pop(
+                                    context, true),
                               ),
                             ],
                           );
@@ -1576,8 +1626,9 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 5),
                           decoration: BoxDecoration(
-                            color:        _red.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
+                            color: _red.withOpacity(0.1),
+                            borderRadius:
+                                BorderRadius.circular(8),
                             border: Border.all(
                                 color: _red.withOpacity(0.3)),
                           ),
@@ -1603,11 +1654,11 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                   ),
                 ),
               ),
-              // ── Expanded content ─────────────────────────
               if (_expanded) ...[
                 Container(
                   height: 0.7,
-                  margin: const EdgeInsets.symmetric(horizontal: 14),
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 14),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -1621,13 +1672,13 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                 const SizedBox(height: 10),
                 // Round navigation
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: BackdropFilter(
-                      filter:
-                          ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                      filter: ImageFilter.blur(
+                          sigmaX: 8, sigmaY: 8),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
@@ -1639,10 +1690,10 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                         ),
                         child: Row(
                           children: [
-                            // PREV
                             GestureDetector(
-                              onTap:
-                                  hasPrev ? widget.onPrevRound : null,
+                              onTap: hasPrev
+                                  ? widget.onPrevRound
+                                  : null,
                               child: Container(
                                 width:  30,
                                 height: 30,
@@ -1661,7 +1712,6 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                                 ),
                               ),
                             ),
-                            // Round info
                             Expanded(
                               child: Column(
                                 children: [
@@ -1680,8 +1730,7 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                                     Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
-                                      children:
-                                          List.generate(
+                                      children: List.generate(
                                         widget.totalRounds,
                                         (i) {
                                           final active =
@@ -1725,10 +1774,10 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                                 ],
                               ),
                             ),
-                            // NEXT
                             GestureDetector(
-                              onTap:
-                                  hasNext ? widget.onNextRound : null,
+                              onTap: hasNext
+                                  ? widget.onNextRound
+                                  : null,
                               child: Container(
                                 width:  30,
                                 height: 30,
@@ -1754,7 +1803,6 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                // Circuit content
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
                   transitionBuilder: (child, anim) =>
@@ -1763,7 +1811,8 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                     key: ValueKey(
                       '${widget.circuitId}_r${widget.currentRound}',
                     ),
-                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    padding:
+                        const EdgeInsets.fromLTRB(8, 0, 8, 8),
                     child: widget.exercises.isEmpty
                         ? Padding(
                             padding: const EdgeInsets.all(14),
@@ -1785,8 +1834,10 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                             onUpdate:    widget.onUpdate,
                             onAddSet:    widget.onAddSet,
                             onRemoveSet: widget.onRemoveSet,
-                            onRemoveExercise:   widget.onRemoveExercise,
-                            onReorderExercises: widget.onReorderExercises,
+                            onRemoveExercise:
+                                widget.onRemoveExercise,
+                            onReorderExercises:
+                                widget.onReorderExercises,
                           ),
                   ),
                 ),
@@ -1812,6 +1863,7 @@ class _CircuitRoundContent extends StatelessWidget {
   final void Function(dynamic)               onAddSet, onRemoveSet;
   final void Function(dynamic)               onRemoveExercise;
   final void Function(List<SessionExercise>) onReorderExercises;
+
   const _CircuitRoundContent({
     required this.circuitId,
     required this.exercises,
@@ -1890,6 +1942,7 @@ class _CircuitExerciseBlock extends StatelessWidget {
   final void Function(int)             onToggle;
   final void Function(int, double, int) onUpdate;
   final VoidCallback                   onAddSet, onRemoveSet, onRemove;
+
   const _CircuitExerciseBlock({
     required this.exercise,
     required this.sets,
@@ -1961,12 +2014,14 @@ class _CircuitExerciseBlock extends StatelessWidget {
                           GlassDialogAction(
                             label:         'Elimina',
                             isDestructive: true,
-                            onTap:         () =>
+                            onTap: () =>
                                 Navigator.pop(context, true),
                           ),
                         ],
                       );
-                      if (ok == true && context.mounted) onRemove();
+                      if (ok == true && context.mounted) {
+                        onRemove();
+                      }
                     },
                     child: Container(
                       width:  24,
@@ -2027,6 +2082,7 @@ class _SetRow extends StatefulWidget {
   final VoidCallback               onToggle;
   final void Function(double, int) onUpdate;
   final bool                       compact;
+
   const _SetRow({
     required this.index,
     required this.set,
@@ -2047,7 +2103,9 @@ class _SetRowState extends State<_SetRow> {
   void initState() {
     super.initState();
     _weightCtrl = TextEditingController(
-      text: widget.set.weight > 0 ? widget.set.weight.toString() : '',
+      text: widget.set.weight > 0
+          ? widget.set.weight.toString()
+          : '',
     );
     _repsCtrl = TextEditingController(
       text: widget.set.reps.toString(),
@@ -2096,7 +2154,7 @@ class _SetRowState extends State<_SetRow> {
               ),
             ),
           ),
-          // Weight field
+          // Weight
           Expanded(
             child: Container(
               height: widget.compact ? 30 : 34,
@@ -2115,7 +2173,7 @@ class _SetRowState extends State<_SetRow> {
                 children: [
                   Expanded(
                     child: TextField(
-                      controller:         _weightCtrl,
+                      controller: _weightCtrl,
                       keyboardType: const TextInputType
                           .numberWithOptions(decimal: true),
                       keyboardAppearance: isDark
@@ -2135,8 +2193,8 @@ class _SetRowState extends State<_SetRow> {
                         hintStyle: TextStyle(
                             color: c.inputHint, fontSize: 12),
                         border:    InputBorder.none,
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 6),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 6),
                       ),
                       onChanged: (v) {
                         final w = double.tryParse(v) ?? 0;
@@ -2146,17 +2204,15 @@ class _SetRowState extends State<_SetRow> {
                       },
                     ),
                   ),
-                  Text(
-                    'kg',
-                    style: TextStyle(
-                        color: c.textTertiary, fontSize: 10),
-                  ),
+                  Text('kg',
+                      style: TextStyle(
+                          color: c.textTertiary, fontSize: 10)),
                   const SizedBox(width: 4),
                 ],
               ),
             ),
           ),
-          // Reps field
+          // Reps
           SizedBox(
             width:  widget.compact ? 52 : 60,
             height: widget.compact ? 30 : 34,
@@ -2191,22 +2247,20 @@ class _SetRowState extends State<_SetRow> {
                   hintStyle: TextStyle(
                       color: c.inputHint, fontSize: 12),
                   border:    InputBorder.none,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 4),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 4),
                 ),
                 onChanged: (v) {
-                  final r =
-                      int.tryParse(v) ?? widget.set.reps;
-                  final w =
-                      double.tryParse(_weightCtrl.text) ??
-                          widget.set.weight;
+                  final r = int.tryParse(v) ?? widget.set.reps;
+                  final w = double.tryParse(_weightCtrl.text) ??
+                      widget.set.weight;
                   widget.onUpdate(w, r);
                 },
               ),
             ),
           ),
           const SizedBox(width: 6),
-          // Toggle button
+          // Toggle
           GestureDetector(
             onTap: () {
               HapticFeedback.selectionClick();
@@ -2226,7 +2280,7 @@ class _SetRowState extends State<_SetRow> {
                 boxShadow: completed
                     ? [
                         BoxShadow(
-                          color:     _teal.withOpacity(0.4),
+                          color:      _teal.withOpacity(0.4),
                           blurRadius: 8,
                         ),
                       ]
@@ -2252,6 +2306,7 @@ class _SmallBtn extends StatelessWidget {
   final IconData     icon;
   final Color        color;
   final VoidCallback onTap;
+
   const _SmallBtn({
     required this.icon,
     required this.color,
@@ -2278,16 +2333,21 @@ class _SmallBtn extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _NoteChip — sheet scuro (modal overlay)
+// _NoteChip — ADATTIVO
+// FIX: usa c.glassCardInset e c.glassBorder invece di
+//      Colors.white.withOpacity() che erano invisibili in light mode
 // ─────────────────────────────────────────────────────────────
 class _NoteChip extends StatelessWidget {
   final String                        note;
   final Future<void> Function(String) onSave;
+
   const _NoteChip({required this.note, required this.onSave});
 
   @override
   Widget build(BuildContext context) {
+    final c       = context.mfc;
     final hasNote = note.isNotEmpty;
+
     return GestureDetector(
       onTap: () async {
         final ctrl = TextEditingController(text: note);
@@ -2322,14 +2382,16 @@ class _NoteChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(
             horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
+          // FIX: c.glassCardInset invece di Colors.white.withOpacity(0.05)
           color: hasNote
               ? _cyan.withOpacity(0.1)
-              : Colors.white.withOpacity(0.05),
+              : c.glassCardInset,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
+            // FIX: c.glassBorder invece di Colors.white.withOpacity(0.1)
             color: hasNote
                 ? _cyan.withOpacity(0.35)
-                : Colors.white.withOpacity(0.1),
+                : c.glassBorder,
             width: 0.8,
           ),
         ),
@@ -2343,7 +2405,7 @@ class _NoteChip extends StatelessWidget {
               size:  12,
               color: hasNote
                   ? _cyan.withOpacity(0.7)
-                  : Colors.white.withOpacity(0.3),
+                  : c.iconSecondary,
             ),
             const SizedBox(width: 4),
             Text(
@@ -2351,7 +2413,7 @@ class _NoteChip extends StatelessWidget {
               style: TextStyle(
                 color: hasNote
                     ? _cyan.withOpacity(0.7)
-                    : Colors.white.withOpacity(0.3),
+                    : c.textTertiary,
                 fontSize:   11,
                 fontWeight: FontWeight.w500,
               ),
@@ -2364,10 +2426,11 @@ class _NoteChip extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _AddToSessionSheet — sheet scuro (modal overlay)
+// _AddToSessionSheet — scuro (modal overlay intenzionale)
 // ─────────────────────────────────────────────────────────────
 class _AddToSessionSheet extends StatelessWidget {
   final VoidCallback onAddExercise, onAddCircuit;
+
   const _AddToSessionSheet({
     required this.onAddExercise,
     required this.onAddCircuit,
@@ -2402,14 +2465,12 @@ class _AddToSessionSheet extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _SessionMenuOption
-// ─────────────────────────────────────────────────────────────
 class _SessionMenuOption extends StatelessWidget {
   final IconData     icon;
   final String       label, subtitle;
   final Color        color;
   final VoidCallback onTap;
+
   const _SessionMenuOption({
     required this.icon,
     required this.label,
