@@ -30,86 +30,111 @@ Future<T?> showKeyboardSafeSheet<T>(BuildContext context, Widget child) {
         child: SafeArea(
           child: SingleChildScrollView(
             physics: const ClampingScrollPhysics(),
-            child:   child)))));
-}
-
-// ─────────────────────────────────────────────────────────────
-// showGlassDialog
-// ─────────────────────────────────────────────────────────────
-Future<T?> showGlassDialog<T>({
-  required BuildContext          context,
-  Widget?                        icon,
-  required String                title,
-  required String                message,
-  required List<GlassDialogAction> actions,
-  Color                          accentColor = kCyan,
-  Axis                           actionsAxis = Axis.horizontal,
-}) {
-  return showDialog<T>(
-    context:      context,
-    barrierColor: Colors.black.withOpacity(0.65),
-    builder: (ctx) => Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(
-          horizontal: 24, vertical: 40),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end:   Alignment.bottomRight,
-                colors: [Color(0xFF0D1117), Color(0xFF060B14)]),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                  color: accentColor.withOpacity(0.25), width: 1),
-              boxShadow: [BoxShadow(
-                  color:       accentColor.withOpacity(0.06),
-                  blurRadius:  28,
-                  spreadRadius: 4)]),
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
-            child: Column(
-              mainAxisSize:     MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-              if (icon != null) ...[icon, const SizedBox(height: 16)],
-              Text(title, style: const TextStyle(
-                  color:        Colors.white,
-                  fontSize:     17,
-                  fontWeight:   FontWeight.w800,
-                  letterSpacing: -0.2)),
-              const SizedBox(height: 10),
-              Text(message, style: TextStyle(
-                  color:    Colors.white.withOpacity(0.6),
-                  fontSize: 14,
-                  height:   1.5)),
-              const SizedBox(height: 24),
-              Container(height: 0.7,
-                decoration: BoxDecoration(gradient: LinearGradient(colors: [
-                  Colors.transparent,
-                  accentColor.withOpacity(0.25),
-                  Colors.transparent]))),
-              const SizedBox(height: 16),
-              if (actionsAxis == Axis.horizontal)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: actions.map((a) => Padding(
-                      padding: const EdgeInsets.only(left: 10),
-                      child:   _GlassDialogBtn(action: a))).toList())
-              else
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: actions.map((a) => Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child:   _GlassDialogBtn(action: a,
-                          fullWidth: true))).toList()),
-            ]),
+            child:   child,
           ),
         ),
       ),
     ),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// showGlassDialog — FIX: ora theme-aware tramite ctx.mfc
+// In dark: sfondo glass scuro. In light: sfondo glass chiaro.
+// ─────────────────────────────────────────────────────────────
+Future<T?> showGlassDialog<T>({
+  required BuildContext            context,
+  Widget?                          icon,
+  required String                  title,
+  required String                  message,
+  required List<GlassDialogAction> actions,
+  Color                            accentColor = kCyan,
+  Axis                             actionsAxis = Axis.horizontal,
+}) {
+  return showDialog<T>(
+    context:      context,
+    barrierColor: Colors.black.withOpacity(0.65),
+    builder: (ctx) {
+      // FIX: legge il tema corrente dall'albero dei widget
+      final c = ctx.mfc;
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24, vertical: 40),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              decoration: BoxDecoration(
+                // FIX: era LinearGradient hardcoded scuro
+                color:        c.glassCard,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                    color: accentColor.withOpacity(0.25), width: 1),
+                boxShadow: c.showElevation
+                    ? [BoxShadow(
+                        color:       c.elevationColor,
+                        blurRadius:  28,
+                        spreadRadius: 4)]
+                    : [BoxShadow(
+                        color:       accentColor.withOpacity(0.06),
+                        blurRadius:  28,
+                        spreadRadius: 4)],
+              ),
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+              child: Column(
+                mainAxisSize:       MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (icon != null) ...[icon, const SizedBox(height: 16)],
+                  // FIX: era Colors.white hardcoded
+                  Text(title, style: TextStyle(
+                      color:        c.textPrimary,
+                      fontSize:     17,
+                      fontWeight:   FontWeight.w800,
+                      letterSpacing: -0.2)),
+                  const SizedBox(height: 10),
+                  // FIX: era Colors.white.withOpacity(0.6)
+                  Text(message, style: TextStyle(
+                      color:    c.textTertiary,
+                      fontSize: 14,
+                      height:   1.5)),
+                  const SizedBox(height: 24),
+                  Container(
+                    height: 0.7,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [
+                        Colors.transparent,
+                        accentColor.withOpacity(0.25),
+                        Colors.transparent,
+                      ]),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (actionsAxis == Axis.horizontal)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: actions.map((a) => Padding(
+                        padding: const EdgeInsets.only(left: 10),
+                        child:   _GlassDialogBtn(action: a),
+                      )).toList(),
+                    )
+                  else
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: actions.map((a) => Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child:   _GlassDialogBtn(action: a, fullWidth: true),
+                      )).toList(),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
   );
 }
 
@@ -122,18 +147,26 @@ class GlassDialogAction {
   final Color?       color;
   final bool         isDestructive;
   final bool         isDefault;
+
   const GlassDialogAction({
-    required this.label, required this.onTap,
-    this.color, this.isDestructive = false, this.isDefault = false,
+    required this.label,
+    required this.onTap,
+    this.color,
+    this.isDestructive = false,
+    this.isDefault     = false,
   });
+
   Color get resolvedColor {
-    if (color != null) return color!;
-    if (isDestructive) return kRed;
-    if (isDefault) return kTeal;
-    return Colors.white;
+    if (color != null)  return color!;
+    if (isDestructive)  return kRed;
+    if (isDefault)      return kTeal;
+    return kCyan; // fallback neutro — viene sovrascritto via isNeutral
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// _GlassDialogBtn — FIX: ora theme-aware
+// ─────────────────────────────────────────────────────────────
 class _GlassDialogBtn extends StatelessWidget {
   final GlassDialogAction action;
   final bool              fullWidth;
@@ -141,44 +174,64 @@ class _GlassDialogBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c        = action.resolvedColor;
+    final c        = context.mfc;
+    final btnColor = action.resolvedColor;
     final isNeutral = !action.isDestructive &&
-        !action.isDefault && action.color == null;
+        !action.isDefault &&
+        action.color == null;
+
     return GestureDetector(
       onTap: action.onTap,
       child: Container(
         width:   fullWidth ? double.infinity : null,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        padding: const EdgeInsets.symmetric(
+            horizontal: 18, vertical: 12),
         decoration: BoxDecoration(
+          // FIX: era Colors.white.withOpacity(0.07) per isNeutral
           color: isNeutral
-              ? Colors.white.withOpacity(0.07)
-              : c.withOpacity(0.12),
+              ? c.glassCardInset
+              : btnColor.withOpacity(0.12),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
+            // FIX: era Colors.white.withOpacity(0.15) per isNeutral
             color: isNeutral
-                ? Colors.white.withOpacity(0.15) : c.withOpacity(0.4),
-            width: 1),
+                ? c.glassBorder
+                : btnColor.withOpacity(0.4),
+            width: 1,
+          ),
           boxShadow: !isNeutral
-              ? [BoxShadow(color: c.withOpacity(0.15), blurRadius: 8)]
-              : null),
-        child: Text(action.label,
-          textAlign:
-              fullWidth ? TextAlign.center : TextAlign.start,
+              ? [BoxShadow(
+                  color:     btnColor.withOpacity(0.15),
+                  blurRadius: 8)]
+              : null,
+        ),
+        child: Text(
+          action.label,
+          textAlign: fullWidth ? TextAlign.center : TextAlign.start,
           style: TextStyle(
-              color: isNeutral
-                  ? Colors.white.withOpacity(0.7) : c,
-              fontSize:   14,
-              fontWeight: (action.isDefault || action.isDestructive)
-                  ? FontWeight.w700 : FontWeight.w500))));
+            // FIX: era Colors.white.withOpacity(0.7) per isNeutral
+            color: isNeutral ? c.textSecondary : btnColor,
+            fontSize:   14,
+            fontWeight: (action.isDefault || action.isDestructive)
+                ? FontWeight.w700
+                : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// GlassSheetWrapper
-// NOTA: i sheet sono sempre scuri (modal overlay) — questo è
-// comportamento intenzionale, non un bug del tema chiaro.
-// Il Theme(dark) previene qualsiasi leakage dal tema chiaro
-// dell'app nei TextField dei sheet.
+// GlassSheetWrapper — FIX PRINCIPALE
+//
+// PRIMA: wrappato con Theme(data: ThemeData.dark(), ...) che
+//   forzava TUTTO il contenuto in dark mode → testo bianco
+//   su sfondo bianco in light mode.
+//
+// ORA: usa context.mfc per leggere i token del tema corrente.
+//   Dark → sfondo scuro, testi chiari (comportamento invariato).
+//   Light → sfondo chiaro Glass, testi scuri.
 // ─────────────────────────────────────────────────────────────
 class GlassSheetWrapper extends StatelessWidget {
   final String  title;
@@ -186,6 +239,7 @@ class GlassSheetWrapper extends StatelessWidget {
   final Widget  child;
   final Color   accentColor;
   final Widget? leadingIcon;
+
   const GlassSheetWrapper({
     super.key,
     required this.title,
@@ -197,67 +251,91 @@ class GlassSheetWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FIX: Theme.dark() evita che il tema chiaro dell'app
-    // faccia apparire testo bianco su sfondo bianco nei TextField
-    return Theme(
-      data: ThemeData.dark().copyWith(
-        textSelectionTheme: const TextSelectionThemeData(
-            cursorColor: kTeal)),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin:  Alignment.topCenter,
-            end:    Alignment.bottomCenter,
-            colors: [Color(0xFF060B14), Color(0xFF03040A)]),
-          borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(24)),
-          border: Border.all(
-              color: accentColor.withOpacity(0.3), width: 0.8)),
-        child: Column(
-          mainAxisSize:       MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    final c = context.mfc;
+
+    return Container(
+      decoration: BoxDecoration(
+        // FIX: era LinearGradient(colors: [Color(0xFF060B14), Color(0xFF03040A)])
+        // ora usa c.glassCard → dark=semi-trasparente scuro, light=bianco Glass
+        color:        c.glassCard,
+        borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(24)),
+        border: Border.all(
+            color: accentColor.withOpacity(0.3), width: 0.8),
+        boxShadow: c.showElevation
+            ? [BoxShadow(
+                color:      c.elevationColor,
+                blurRadius: 20,
+                offset:     const Offset(0, -2))]
+            : null,
+      ),
+      child: Column(
+        mainAxisSize:       MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           const SizedBox(height: 14),
-          Center(child: Container(width: 40, height: 4,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [
-                accentColor.withOpacity(0.3),
-                accentColor.withOpacity(0.6),
-                accentColor.withOpacity(0.3)]),
-              borderRadius: BorderRadius.circular(2)))),
+          Center(
+            child: Container(
+              width:  40,
+              height: 4,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [
+                  accentColor.withOpacity(0.3),
+                  accentColor.withOpacity(0.6),
+                  accentColor.withOpacity(0.3),
+                ]),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
           const SizedBox(height: 18),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(children: [
-              if (leadingIcon != null) ...[
-                leadingIcon!, const SizedBox(width: 12)],
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                Text(title, style: const TextStyle(
-                    color:      Colors.white,
-                    fontSize:   18,
-                    fontWeight: FontWeight.w800)),
-                if (subtitle != null)
-                  Text(subtitle!, style: TextStyle(
-                      color: accentColor.withOpacity(0.7),
-                      fontSize: 12)),
-              ])),
-            ])),
+            child: Row(
+              children: [
+                if (leadingIcon != null) ...[
+                  leadingIcon!,
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // FIX: era Colors.white hardcoded
+                      Text(title, style: TextStyle(
+                          color:      c.textPrimary,
+                          fontSize:   18,
+                          fontWeight: FontWeight.w800)),
+                      if (subtitle != null)
+                        Text(subtitle!, style: TextStyle(
+                            color:    accentColor.withOpacity(0.7),
+                            fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child:   child),
-        ]),
+            child:   child,
+          ),
+        ],
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// GlassTextField — sempre scuro (usato solo nei sheet/modali)
-// FIX: cursorColor esplicito + filled + fillColor per evitare
-// qualsiasi override dal tema dell'app
+// GlassTextField — FIX: ora completamente theme-aware
+//
+// PRIMA: Colors.white per testo, Color(0x4DFFFFFF) per hint,
+//   Colors.white.withOpacity(0.05) per sfondo.
+//   → bianco su bianco in light mode.
+//
+// ORA: usa c.inputText, c.inputHint, c.inputBg, c.inputBorder
+//   → adattivo a entrambi i temi.
 // ─────────────────────────────────────────────────────────────
 class GlassTextField extends StatelessWidget {
   final TextEditingController? controller;
@@ -266,6 +344,7 @@ class GlassTextField extends StatelessWidget {
   final bool                   autofocus;
   final void Function(String)? onChanged;
   final int                    maxLines;
+
   const GlassTextField({
     super.key,
     this.controller,
@@ -278,50 +357,70 @@ class GlassTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c      = context.mfc;
+    final isDark = context.isDarkMode;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
         child: Container(
           decoration: BoxDecoration(
-            color:        Colors.white.withOpacity(0.05),
+            // FIX: era Colors.white.withOpacity(0.05)
+            color:        c.inputBg,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-                color: kCyan.withOpacity(0.2), width: 0.8)),
+                // FIX: era kCyan.withOpacity(0.2)
+                color: c.inputBorder,
+                width: isDark ? 0.8 : 1.1),
+          ),
           child: TextField(
             controller:         controller,
             autofocus:          autofocus,
             maxLines:           maxLines,
             textCapitalization: TextCapitalization.sentences,
-            cursorColor:        kTeal,       // FIX: cursore sempre teal
-            style: const TextStyle(          // FIX: colore esplicito
-                color: Colors.white, fontSize: 14),
+            // FIX: cursore sempre visibile (accent)
+            cursorColor:        kTeal,
+            // FIX: keyboard appearance adattiva
+            keyboardAppearance: isDark
+                ? Brightness.dark
+                : Brightness.light,
+            // FIX: era const TextStyle(color: Colors.white)
+            style: TextStyle(color: c.inputText, fontSize: 14),
             decoration: InputDecoration(
-              hintText:   hintText,
-              labelText:  labelText,
-              hintStyle:  const TextStyle(   // FIX: colore esplicito
-                  color: Color(0x4DFFFFFF), fontSize: 14),
-              labelStyle: const TextStyle(
-                  color: Color(0x80FFFFFF)),
-              filled:     true,              // FIX: previene override tema
-              fillColor:  Colors.transparent,
+              hintText:  hintText,
+              labelText: labelText,
+              // FIX: era Color(0x4DFFFFFF) = bianco semi-trasparente
+              hintStyle: TextStyle(
+                  color: c.inputHint, fontSize: 14),
+              // FIX: era Color(0x80FFFFFF)
+              labelStyle: TextStyle(color: c.textTertiary),
               border:     InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 13)),
-            onChanged: onChanged))));
+                  horizontal: 14, vertical: 13),
+            ),
+            onChanged: onChanged,
+          ),
+        ),
+      ),
+    );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// GlassPrimaryButton
+// GlassPrimaryButton — invariato (gradient su accent, va bene
+// in entrambi i temi)
 // ─────────────────────────────────────────────────────────────
 class GlassPrimaryButton extends StatelessWidget {
   final String       label;
   final Color        color;
   final VoidCallback? onTap;
+
   const GlassPrimaryButton({
     super.key,
-    required this.label, required this.color, required this.onTap,
+    required this.label,
+    required this.color,
+    required this.onTap,
   });
 
   @override
@@ -337,56 +436,77 @@ class GlassPrimaryButton extends StatelessWidget {
           gradient: enabled
               ? LinearGradient(colors: [
                   color,
-                  Color.lerp(color, Colors.black, 0.2) ?? color])
-              : LinearGradient(colors: [
-                  Colors.white.withOpacity(0.06),
-                  Colors.white.withOpacity(0.03)]),
+                  Color.lerp(color, Colors.black, 0.2) ?? color,
+                ])
+              : null,
+          color: enabled ? null : context.mfc.glassCardInset,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: enabled
                 ? color.withOpacity(0.5)
-                : Colors.white.withOpacity(0.1)),
+                : context.mfc.glassBorder,
+          ),
           boxShadow: enabled
               ? [BoxShadow(
-                  color:     color.withOpacity(0.35),
+                  color:      color.withOpacity(0.35),
                   blurRadius: 14,
-                  offset:    const Offset(0, 4))]
-              : null),
-        child: Text(label, textAlign: TextAlign.center,
+                  offset:     const Offset(0, 4))]
+              : null,
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
           style: TextStyle(
-              color:      enabled ? Colors.white : Colors.white.withOpacity(0.3),
-              fontWeight: FontWeight.w700,
-              fontSize:   15))));
+            color:      enabled
+                ? Colors.white
+                : context.mfc.textTertiary,
+            fontWeight: FontWeight.w700,
+            fontSize:   15,
+          ),
+        ),
+      ),
+    );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// ExerciseFormSheet — creazione + modifica esercizio
+// ExerciseFormSheet — FIX: label "Gruppo muscolare" theme-aware
+// I TextField usano GlassTextField già corretto sopra.
 // ─────────────────────────────────────────────────────────────
 class ExerciseFormSheet extends StatefulWidget {
-  final String?   initialName, initialMuscleGroup, initialNotes;
+  final String?   initialName;
+  final String?   initialMuscleGroup;
+  final String?   initialNotes;
   final Set<String> existingNames;
   final void Function(String name, String muscleGroup, String notes) onConfirm;
+
   const ExerciseFormSheet({
     super.key,
-    this.initialName, this.initialMuscleGroup, this.initialNotes,
-    required this.existingNames, required this.onConfirm,
+    this.initialName,
+    this.initialMuscleGroup,
+    this.initialNotes,
+    required this.existingNames,
+    required this.onConfirm,
   });
+
   bool get isEditing => initialName != null;
+
   @override
-  State<ExerciseFormSheet> createState() => _ExerciseFormSheetState();
+  State<ExerciseFormSheet> createState() =>
+      _ExerciseFormSheetState();
 }
 
 class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
-  late TextEditingController _nameCtrl, _notesCtrl;
-  late String _selectedMuscle;
-  String?     _nameError;
+  late TextEditingController _nameCtrl;
+  late TextEditingController _notesCtrl;
+  late String                _selectedMuscle;
+  String?                    _nameError;
 
   @override
   void initState() {
     super.initState();
-    _nameCtrl      = TextEditingController(text: widget.initialName ?? '');
-    _notesCtrl     = TextEditingController(text: widget.initialNotes ?? '');
+    _nameCtrl       = TextEditingController(text: widget.initialName ?? '');
+    _notesCtrl      = TextEditingController(text: widget.initialNotes ?? '');
     _selectedMuscle = widget.initialMuscleGroup ?? kMuscleGroups.first;
   }
 
@@ -413,62 +533,82 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final c         = context.mfc;
     final canConfirm =
         _nameCtrl.text.trim().isNotEmpty && _nameError == null;
+
     return GlassSheetWrapper(
-      title:      widget.isEditing ? 'Modifica esercizio' : 'Nuovo esercizio',
-      subtitle:   widget.isEditing ? widget.initialName : null,
+      title: widget.isEditing
+          ? 'Modifica esercizio'
+          : 'Nuovo esercizio',
+      subtitle:    widget.isEditing ? widget.initialName : null,
       accentColor: kTeal,
       leadingIcon: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color:        kTeal.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(10)),
+          borderRadius: BorderRadius.circular(10),
+        ),
         child: const Icon(Icons.fitness_center_rounded,
-            color: kTeal, size: 20)),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        GlassTextField(
-          controller: _nameCtrl,
-          hintText:   'Es. Panca piana, Squat...',
-          labelText:  'Nome esercizio',
-          onChanged:  (v) => setState(() {
-            _nameError = widget.existingNames
-                .contains(v.trim().toLowerCase())
-                ? 'Esercizio già esistente' : null;
-          })),
-        if (_nameError != null) ...[
-          const SizedBox(height: 6),
+            color: kTeal, size: 20),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GlassTextField(
+            controller: _nameCtrl,
+            hintText:   'Es. Panca piana, Squat...',
+            labelText:  'Nome esercizio',
+            onChanged:  (v) => setState(() {
+              _nameError = widget.existingNames
+                      .contains(v.trim().toLowerCase())
+                  ? 'Esercizio già esistente'
+                  : null;
+            }),
+          ),
+          if (_nameError != null) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(_nameError!, style: TextStyle(
+                  color: kRed.withOpacity(0.85), fontSize: 11)),
+            ),
+          ],
+          const SizedBox(height: 14),
           Align(
             alignment: Alignment.centerLeft,
-            child: Text(_nameError!, style: TextStyle(
-                color: kRed.withOpacity(0.85), fontSize: 11))),
+            // FIX: era Colors.white.withOpacity(0.5)
+            child: Text('Gruppo muscolare', style: TextStyle(
+                color:        c.textTertiary,
+                fontSize:     12,
+                fontWeight:   FontWeight.w600,
+                letterSpacing: 0.4)),
+          ),
+          const SizedBox(height: 8),
+          _SharedMuscleChips(
+            groups:      kMuscleGroups,
+            selected:    _selectedMuscle,
+            accentColor: kTeal,
+            onSelect: (g) => setState(() => _selectedMuscle = g),
+          ),
+          const SizedBox(height: 14),
+          GlassTextField(
+            controller: _notesCtrl,
+            hintText:   'Es. Grip neutro, 3 secondi in discesa...',
+            labelText:  'Note (opzionale)',
+            maxLines:   2,
+          ),
+          const SizedBox(height: 20),
+          GlassPrimaryButton(
+            label: widget.isEditing
+                ? 'Salva modifiche'
+                : 'Aggiungi esercizio',
+            color: kTeal,
+            onTap: canConfirm ? _submit : null,
+          ),
         ],
-        const SizedBox(height: 14),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text('Gruppo muscolare', style: TextStyle(
-              color:        Colors.white.withOpacity(0.5),
-              fontSize:     12,
-              fontWeight:   FontWeight.w600,
-              letterSpacing: 0.4))),
-        const SizedBox(height: 8),
-        _SharedMuscleChips(
-          groups:      kMuscleGroups,
-          selected:    _selectedMuscle,
-          accentColor: kTeal,
-          onSelect:    (g) => setState(() => _selectedMuscle = g)),
-        const SizedBox(height: 14),
-        GlassTextField(
-          controller: _notesCtrl,
-          hintText:   'Es. Grip neutro, 3 secondi in discesa...',
-          labelText:  'Note (opzionale)',
-          maxLines:   2),
-        const SizedBox(height: 20),
-        GlassPrimaryButton(
-          label: widget.isEditing ? 'Salva modifiche' : 'Aggiungi esercizio',
-          color: kTeal,
-          onTap: canConfirm ? _submit : null),
-      ]));
+      ),
+    );
   }
 }
 
@@ -478,14 +618,20 @@ class _ExerciseFormSheetState extends State<ExerciseFormSheet> {
 class WorkoutCreateSheet extends StatefulWidget {
   final void Function(String name) onConfirm;
   const WorkoutCreateSheet({super.key, required this.onConfirm});
+
   @override
-  State<WorkoutCreateSheet> createState() => _WorkoutCreateSheetState();
+  State<WorkoutCreateSheet> createState() =>
+      _WorkoutCreateSheetState();
 }
 
 class _WorkoutCreateSheetState extends State<WorkoutCreateSheet> {
   final _nameCtrl = TextEditingController();
+
   @override
-  void dispose() { _nameCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -497,22 +643,30 @@ class _WorkoutCreateSheetState extends State<WorkoutCreateSheet> {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color:        kTeal.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(10)),
-        child: const Icon(Icons.add_rounded, color: kTeal, size: 20)),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        GlassTextField(
-          controller: _nameCtrl,
-          hintText:   'Es. Push Day, Full Body...',
-          labelText:  'Nome scheda',
-          onChanged:  (_) => setState(() {})),
-        const SizedBox(height: 20),
-        GlassPrimaryButton(
-          label: 'Crea scheda',
-          color: kTeal,
-          onTap: hasName
-              ? () => widget.onConfirm(_nameCtrl.text.trim())
-              : null),
-      ]));
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Icon(Icons.add_rounded, color: kTeal, size: 20),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GlassTextField(
+            controller: _nameCtrl,
+            hintText:   'Es. Push Day, Full Body...',
+            labelText:  'Nome scheda',
+            onChanged:  (_) => setState(() {}),
+          ),
+          const SizedBox(height: 20),
+          GlassPrimaryButton(
+            label: 'Crea scheda',
+            color: kTeal,
+            onTap: hasName
+                ? () => widget.onConfirm(_nameCtrl.text.trim())
+                : null,
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -523,12 +677,17 @@ class ExercisePickerResult {
   final Set<dynamic> selectedKeys;
   final int          rounds;
   final String       name;
+
   const ExercisePickerResult({
-    required this.selectedKeys, required this.rounds, required this.name});
+    required this.selectedKeys,
+    required this.rounds,
+    required this.name,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
-// ExercisePickerSheet
+// ExercisePickerSheet — FIX: testo "Nessun esercizio trovato"
+// I TextField usano GlassTextField già corretto.
 // ─────────────────────────────────────────────────────────────
 class ExercisePickerSheet extends StatefulWidget {
   final List<HiveExercise>              allExercises;
@@ -544,6 +703,7 @@ class ExercisePickerSheet extends StatefulWidget {
   final String                          confirmLabel;
   final bool                            alwaysShowConfirm;
   final void Function(ExercisePickerResult) onConfirm;
+
   const ExercisePickerSheet({
     super.key,
     required this.allExercises,
@@ -557,11 +717,13 @@ class ExercisePickerSheet extends StatefulWidget {
     required this.title,
     this.subtitle,
     required this.accentColor,
-    this.confirmLabel     = 'Conferma',
+    this.confirmLabel      = 'Conferma',
     this.alwaysShowConfirm = false,
   });
+
   @override
-  State<ExercisePickerSheet> createState() => _ExercisePickerSheetState();
+  State<ExercisePickerSheet> createState() =>
+      _ExercisePickerSheetState();
 }
 
 class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
@@ -585,7 +747,10 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
   }
 
   @override
-  void dispose() { _nameCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
 
   List<HiveExercise> get _filtered {
     return widget.allExercises.where((e) {
@@ -609,7 +774,8 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
 
   String get _confirmLabel {
     final n = _selectedKeys
-        .where((k) => !widget.disabledKeys.contains(k)).length;
+        .where((k) => !widget.disabledKeys.contains(k))
+        .length;
     return n > 0
         ? '${widget.confirmLabel} · $n eserc.'
         : widget.confirmLabel;
@@ -617,7 +783,9 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final c        = context.mfc;
     final filtered = _filtered;
+
     return GlassSheetWrapper(
       title:       widget.title,
       subtitle:    widget.subtitle,
@@ -627,34 +795,43 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
           GlassTextField(
             controller: _nameCtrl,
             hintText:   'Nome circuito...',
-            onChanged:  (_) => setState(() {})),
+            onChanged:  (_) => setState(() {}),
+          ),
           const SizedBox(height: 12),
         ],
         if (widget.showRoundsControl) ...[
           _SharedRoundsRow(
             rounds:    _rounds,
-            onChanged: (v) => setState(() => _rounds = v)),
+            onChanged: (v) => setState(() => _rounds = v),
+          ),
           const SizedBox(height: 12),
         ],
-        // Search field — usa GlassTextField che è già dark-safe
         GlassTextField(
           hintText:  'Cerca esercizio...',
-          onChanged: (v) => setState(() => _search = v)),
+          onChanged: (v) => setState(() => _search = v),
+        ),
         const SizedBox(height: 10),
         _SharedMuscleChips(
           groups:      _allGroups,
           selected:    _muscle,
           accentColor: widget.accentColor,
-          onSelect:    (g) => setState(() => _muscle = g)),
+          onSelect:    (g) => setState(() => _muscle = g),
+        ),
         const SizedBox(height: 10),
         SizedBox(
           height: 260,
           child: filtered.isEmpty
-              ? Center(child: Text('Nessun esercizio trovato',
-                  style: TextStyle(
-                      color:     Colors.white.withOpacity(0.35),
+              ? Center(
+                  child: Text(
+                    'Nessun esercizio trovato',
+                    // FIX: era Colors.white.withOpacity(0.35)
+                    style: TextStyle(
+                      color:     c.textTertiary,
                       fontSize:  13,
-                      fontStyle: FontStyle.italic)))
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                )
               : ListView.builder(
                   physics:   const BouncingScrollPhysics(),
                   itemCount: filtered.length,
@@ -668,8 +845,11 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
                       isSelected:  isSelected,
                       isDisabled:  isDisabled,
                       accentColor: widget.accentColor,
-                      onTap:       isDisabled ? null : () => _toggle(ex.key));
-                  })),
+                      onTap:       isDisabled ? null : () => _toggle(ex.key),
+                    );
+                  },
+                ),
+        ),
         if (_showConfirm) ...[
           const SizedBox(height: 10),
           GlassPrimaryButton(
@@ -679,26 +859,37 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
               selectedKeys: Set<dynamic>.from(_selectedKeys),
               rounds:       _rounds,
               name:         _nameCtrl.text.trim().isNotEmpty
-                  ? _nameCtrl.text.trim() : widget.initialName))),
+                  ? _nameCtrl.text.trim()
+                  : widget.initialName,
+            )),
+          ),
         ],
-      ]));
+      ]),
+    );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _SharedMuscleChips
+// _SharedMuscleChips — FIX: ora theme-aware
+// PRIMA: Colors.white.withOpacity(0.06/0.1/0.55) hardcoded
+// ORA: c.glassCardInset, c.glassBorder, c.textTertiary
 // ─────────────────────────────────────────────────────────────
 class _SharedMuscleChips extends StatelessWidget {
   final List<String>          groups;
   final String                selected;
   final Color                 accentColor;
   final void Function(String) onSelect;
+
   const _SharedMuscleChips({
-    required this.groups, required this.selected,
-    required this.accentColor, required this.onSelect});
+    required this.groups,
+    required this.selected,
+    required this.accentColor,
+    required this.onSelect,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.mfc;
     return SizedBox(
       height: 34,
       child: ListView.separated(
@@ -715,118 +906,183 @@ class _SharedMuscleChips extends StatelessWidget {
               padding: const EdgeInsets.symmetric(
                   horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
+                // FIX: era Colors.white.withOpacity(0.06)
                 color: sel
                     ? accentColor.withOpacity(0.2)
-                    : Colors.white.withOpacity(0.06),
+                    : c.glassCardInset,
                 borderRadius: BorderRadius.circular(9),
                 border: Border.all(
+                  // FIX: era Colors.white.withOpacity(0.1)
                   color: sel
                       ? accentColor.withOpacity(0.6)
-                      : Colors.white.withOpacity(0.1),
-                  width: sel ? 1.2 : 0.8),
+                      : c.glassBorder,
+                  width: sel ? 1.2 : 0.8,
+                ),
                 boxShadow: sel
                     ? [BoxShadow(
                         color:     accentColor.withOpacity(0.15),
                         blurRadius: 8)]
-                    : null),
-              child: Text(g, style: TextStyle(
-                  color:      sel
-                      ? accentColor : Colors.white.withOpacity(0.55),
+                    : null,
+              ),
+              child: Text(
+                g,
+                style: TextStyle(
+                  // FIX: era Colors.white.withOpacity(0.55)
+                  color: sel ? accentColor : c.textTertiary,
                   fontSize:   12,
-                  fontWeight: sel ? FontWeight.w700 : FontWeight.w500))));
-        }));
+                  fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _SharedRoundsRow
+// _SharedRoundsRow — FIX: ora theme-aware
+// PRIMA: Colors.white hardcoded per label e valore
+// ORA: c.textSecondary, c.textPrimary, c.glassCardInset
 // ─────────────────────────────────────────────────────────────
 class _SharedRoundsRow extends StatelessWidget {
   final int                rounds;
   final void Function(int) onChanged;
+
   const _SharedRoundsRow({required this.rounds, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    return Row(children: [
-      Text('Cicli:', style: TextStyle(
-          color:      Colors.white.withOpacity(0.6),
-          fontSize:   14,
-          fontWeight: FontWeight.w600)),
-      const Spacer(),
-      GestureDetector(
-        onTap: rounds > 1 ? () => onChanged(rounds - 1) : null,
-        child: Container(width: 32, height: 32,
-          decoration: BoxDecoration(
-            color:  rounds > 1
-                ? kCyan.withOpacity(0.1) : Colors.transparent,
-            shape:  BoxShape.circle,
-            border: Border.all(
-              color: rounds > 1
-                  ? kCyan.withOpacity(0.4) : Colors.white.withOpacity(0.1),
-              width: 1)),
-          child: Icon(Icons.remove_rounded,
+    final c = context.mfc;
+    return Row(
+      children: [
+        // FIX: era Colors.white.withOpacity(0.6)
+        Text('Cicli:', style: TextStyle(
+            color:      c.textSecondary,
+            fontSize:   14,
+            fontWeight: FontWeight.w600)),
+        const Spacer(),
+        GestureDetector(
+          onTap: rounds > 1 ? () => onChanged(rounds - 1) : null,
+          child: Container(
+            width:  32,
+            height: 32,
+            decoration: BoxDecoration(
+              color:  rounds > 1
+                  ? kCyan.withOpacity(0.1)
+                  // FIX: era Colors.transparent con bordo bianco
+                  : c.glassCardInset,
+              shape:  BoxShape.circle,
+              border: Border.all(
+                color: rounds > 1
+                    ? kCyan.withOpacity(0.4)
+                    // FIX: era Colors.white.withOpacity(0.1)
+                    : c.glassBorder,
+                width: 1,
+              ),
+            ),
+            child: Icon(
+              Icons.remove_rounded,
               size:  16,
-              color: rounds > 1 ? kCyan : Colors.white.withOpacity(0.2)))),
-      SizedBox(width: 44,
-        child: Text('$rounds', textAlign: TextAlign.center,
-            style: const TextStyle(
-                color:      Colors.white,
+              // FIX: era Colors.white.withOpacity(0.2)
+              color: rounds > 1 ? kCyan : c.textTertiary,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 44,
+          child: Text(
+            '$rounds',
+            textAlign: TextAlign.center,
+            // FIX: era Colors.white
+            style: TextStyle(
+                color:      c.textPrimary,
                 fontSize:   18,
-                fontWeight: FontWeight.w800))),
-      GestureDetector(
-        onTap: () => onChanged(rounds + 1),
-        child: Container(width: 32, height: 32,
-          decoration: BoxDecoration(
-            color:  kCyan.withOpacity(0.1),
-            shape:  BoxShape.circle,
-            border: Border.all(color: kCyan.withOpacity(0.4), width: 1)),
-          child: const Icon(Icons.add_rounded, size: 16, color: kCyan))),
-    ]);
+                fontWeight: FontWeight.w800),
+          ),
+        ),
+        GestureDetector(
+          onTap: () => onChanged(rounds + 1),
+          child: Container(
+            width:  32,
+            height: 32,
+            decoration: BoxDecoration(
+              color:  kCyan.withOpacity(0.1),
+              shape:  BoxShape.circle,
+              border: Border.all(
+                  color: kCyan.withOpacity(0.4), width: 1),
+            ),
+            child: const Icon(Icons.add_rounded,
+                size: 16, color: kCyan),
+          ),
+        ),
+      ],
+    );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _PickerExerciseTile
+// _PickerExerciseTile — FIX: testi theme-aware
+// PRIMA: Colors.white / Colors.white.withOpacity(0.35/0.4)
+// ORA: c.textPrimary / c.textTertiary
 // ─────────────────────────────────────────────────────────────
 class _PickerExerciseTile extends StatelessWidget {
-  final HiveExercise exercise;
-  final bool         isSelected, isDisabled;
-  final Color        accentColor;
+  final HiveExercise  exercise;
+  final bool          isSelected;
+  final bool          isDisabled;
+  final Color         accentColor;
   final VoidCallback? onTap;
+
   const _PickerExerciseTile({
-    required this.exercise,    required this.isSelected,
-    required this.isDisabled,  required this.accentColor,
-    required this.onTap});
+    required this.exercise,
+    required this.isSelected,
+    required this.isDisabled,
+    required this.accentColor,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor =
-        isDisabled ? Colors.white.withOpacity(0.3) : accentColor;
+    final c              = context.mfc;
+    final effectiveColor = isDisabled ? c.textTertiary : accentColor;
+
     return ListTile(
       dense: true,
       leading: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        width: 22, height: 22,
+        width:  22,
+        height: 22,
         decoration: BoxDecoration(
           color: isSelected ? effectiveColor : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isSelected
-                ? effectiveColor : Colors.white.withOpacity(0.25),
-            width: 1.2)),
+            // FIX: era Colors.white.withOpacity(0.25)
+            color: isSelected ? effectiveColor : c.glassBorder,
+            width: 1.2,
+          ),
+        ),
         child: isSelected
-            ? Icon(Icons.check_rounded, size: 14,
+            ? Icon(
+                Icons.check_rounded,
+                size:  14,
+                // check bianco su sfondo colorato — OK in entrambi i temi
                 color: isDisabled
-                    ? Colors.white.withOpacity(0.5) : Colors.white)
-            : null),
+                    ? c.textTertiary
+                    : Colors.white,
+              )
+            : null,
+      ),
+      // FIX: era Colors.white / Colors.white.withOpacity(0.35)
       title: Text(exercise.name, style: TextStyle(
-          color: isDisabled
-              ? Colors.white.withOpacity(0.35) : Colors.white,
+          color: isDisabled ? c.textTertiary : c.textPrimary,
           fontSize:   14,
           fontWeight: FontWeight.w600)),
+      // FIX: era Colors.white.withOpacity(0.4)
       subtitle: Text(exercise.muscleGroup, style: TextStyle(
-          color: Colors.white.withOpacity(0.4), fontSize: 11)),
-      onTap: onTap);
+          color: c.textTertiary, fontSize: 11)),
+      enabled: !isDisabled,
+      onTap:   onTap,
+    );
   }
 }

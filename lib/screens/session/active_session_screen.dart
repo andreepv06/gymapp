@@ -18,9 +18,6 @@ const _orange = MarkFitColors.orange;
 const _red    = MarkFitColors.red;
 const _green  = MarkFitColors.green;
 
-// ─────────────────────────────────────────────────────────────
-// _TopItem
-// ─────────────────────────────────────────────────────────────
 class _TopItem {
   final bool                   isFree;
   final SessionExercise?       exercise;
@@ -62,9 +59,6 @@ List<_TopItem> _buildTopItems(List<SessionExercise> ses) {
   return items;
 }
 
-// ─────────────────────────────────────────────────────────────
-// ActiveSessionScreen
-// ─────────────────────────────────────────────────────────────
 class ActiveSessionScreen extends StatefulWidget {
   final HiveWorkout workout;
   const ActiveSessionScreen({super.key, required this.workout});
@@ -76,21 +70,14 @@ class ActiveSessionScreen extends StatefulWidget {
 class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   Timer?  _uiTimer;
   String? _sessionError;
-
-  // FIX LOADING INFINITO:
-  // Questo flag viene impostato a true nel finally di _initSession(),
-  // garantendo che il loading termini SEMPRE indipendentemente
-  // dallo stato interno del SessionProvider.
-  bool _sessionInitialized = false;
+  bool    _sessionInitialized = false;
 
   @override
   void initState() {
     super.initState();
     _uiTimer = Timer.periodic(
       const Duration(seconds: 1),
-      (_) {
-        if (mounted) setState(() {});
-      },
+      (_) { if (mounted) setState(() {}); },
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => _initSession());
   }
@@ -101,19 +88,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────────────────
-  // _initSession — FIX DEFINITIVO LOADING INFINITO
-  //
-  // PROBLEMA: se sp.startSession() completa senza eccezione
-  // ma sp.hasActiveSession rimane false (bug nel provider,
-  // notifyListeners non chiamato, eccezione interna silenziata),
-  // il Consumer rimane bloccato nel loading per sempre.
-  //
-  // SOLUZIONE: _sessionInitialized = true nel finally garantisce
-  // che il loading termini in OGNI percorso di esecuzione.
-  // Il build method poi controlla separatamente sp.hasActiveSession
-  // e mostra errore se la sessione non è stata creata.
-  // ─────────────────────────────────────────────────────────
   Future<void> _initSession() async {
     if (!mounted) return;
     setState(() {
@@ -122,15 +96,11 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     });
 
     final sp = context.read<SessionProvider>();
-
-    // Se la sessione per questo workout è già attiva, non fare nulla
     if (sp.hasActiveSession &&
         sp.currentWorkout?.key == widget.workout.key) {
       if (mounted) setState(() => _sessionInitialized = true);
       return;
     }
-
-    // Se c'è un'altra sessione attiva, esci
     if (sp.hasActiveSession) {
       if (mounted) setState(() => _sessionInitialized = true);
       return;
@@ -141,7 +111,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           HiveDatabase.instance.getWorkoutExercises(widget.workout.key);
       final circuits  =
           HiveDatabase.instance.getCircuits(widget.workout.key);
-
       await sp.startSession(
         exercises,
         widget.workout.key,
@@ -156,7 +125,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
             'Non è stato possibile avviare la sessione. Riprova.');
       }
     } finally {
-      // SEMPRE eseguito — il loading finisce qui, qualunque sia il percorso
       if (mounted) setState(() => _sessionInitialized = true);
     }
   }
@@ -194,12 +162,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
 
   Future<void> _onBack() async {
     final sp = context.read<SessionProvider>();
-
     if (_sessionError != null || !sp.hasActiveSession) {
       Navigator.of(context).pop();
       return;
     }
-
     if (!sp.hasAnyData) {
       final ok = await showGlassDialog<bool>(
         context:     context,
@@ -225,18 +191,18 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       }
       return;
     }
-
     final result = await showGlassDialog<String>(
       context:     context,
       accentColor: _orange,
       icon: Container(
-        width: 44,
-        height: 44,
+        width: 44, height: 44,
         decoration: BoxDecoration(
           color:     _orange.withOpacity(0.12),
           shape:     BoxShape.circle,
           border:    Border.all(color: _orange.withOpacity(0.4)),
-          boxShadow: [BoxShadow(color: _orange.withOpacity(0.2), blurRadius: 12)],
+          boxShadow: [
+            BoxShadow(color: _orange.withOpacity(0.2), blurRadius: 12),
+          ],
         ),
         child: const Icon(Icons.pause_circle_outline_rounded,
             color: _orange, size: 22),
@@ -277,13 +243,14 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       context:     context,
       accentColor: _teal,
       icon: Container(
-        width: 44,
-        height: 44,
+        width: 44, height: 44,
         decoration: BoxDecoration(
           color:     _teal.withOpacity(0.12),
           shape:     BoxShape.circle,
           border:    Border.all(color: _teal.withOpacity(0.4)),
-          boxShadow: [BoxShadow(color: _teal.withOpacity(0.2), blurRadius: 12)],
+          boxShadow: [
+            BoxShadow(color: _teal.withOpacity(0.2), blurRadius: 12),
+          ],
         ),
         child: const Icon(Icons.check_circle_outline_rounded,
             color: _teal, size: 22),
@@ -399,7 +366,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     );
     final currentKeys   = currentExercises.map((e) => e.exerciseKey).toSet();
     final currentRounds = sp.getTotalRounds(circuitId);
-
     await _openSheet(ExercisePickerSheet(
       allExercises:        all,
       initialSelectedKeys: Set<dynamic>.from(currentKeys),
@@ -440,7 +406,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -453,29 +418,19 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           child: SafeArea(
             child: Consumer<SessionProvider>(
               builder: (context, sp, _) {
-                // ── Stato errore (loading sempre terminato) ──
                 if (_sessionError != null) {
                   return _buildError(c, _sessionError!);
                 }
-
-                // ── Ancora in inizializzazione ────────────────
                 if (!_sessionInitialized) {
                   return _buildLoading(c);
                 }
-
-                // ── Inizializzato ma sessione non attiva ──────
-                // (startSession completato senza eccezione ma
-                //  hasActiveSession ancora false — errore del provider)
                 if (!sp.hasActiveSession) {
                   return _buildError(
                     c,
                     'Sessione non avviata correttamente. Riprova.',
                   );
                 }
-
-                // ── Sessione attiva ───────────────────────────
                 final topItems = _buildTopItems(sp.sessionExercises);
-
                 return Column(
                   children: [
                     _SessionHeader(
@@ -521,7 +476,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     );
   }
 
-  // ── Estratto per ridurre nesting ──────────────────────────
   Widget _buildReorderableList(
     SessionProvider sp,
     List<_TopItem> topItems,
@@ -582,11 +536,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     );
   }
 
-  Widget _buildFreeExerciseItem(
-    SessionProvider sp,
-    _TopItem item,
-    int i,
-  ) {
+  Widget _buildFreeExerciseItem(SessionProvider sp, _TopItem item, int i) {
     final ex = item.exercise!;
     return ReorderableDelayedDragStartListener(
       key:   ValueKey(item.key),
@@ -612,11 +562,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     );
   }
 
-  Widget _buildCircuitItem(
-    SessionProvider sp,
-    _TopItem item,
-    int i,
-  ) {
+  Widget _buildCircuitItem(SessionProvider sp, _TopItem item, int i) {
     final cid    = item.circuitId!;
     final circEx = item.circuitExercises!;
     return ReorderableDelayedDragStartListener(
@@ -656,26 +602,19 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     );
   }
 
-  // ── UI States ─────────────────────────────────────────────
-
   Widget _buildLoading(MarkFitColors c) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width:  32,
-            height: 32,
+            width: 32, height: 32,
             child: CircularProgressIndicator(
-              color:       _teal,
-              strokeWidth: 2,
-            ),
+                color: _teal, strokeWidth: 2),
           ),
           const SizedBox(height: 16),
-          Text(
-            'Avvio sessione...',
-            style: TextStyle(color: c.textTertiary, fontSize: 14),
-          ),
+          Text('Avvio sessione...',
+              style: TextStyle(color: c.textTertiary, fontSize: 14)),
         ],
       ),
     );
@@ -702,17 +641,13 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width:  56,
-                    height: 56,
+                    width: 56, height: 56,
                     decoration: BoxDecoration(
                       color: _red.withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.error_outline_rounded,
-                      color: _red,
-                      size:  26,
-                    ),
+                    child: const Icon(Icons.error_outline_rounded,
+                        color: _red, size: 26),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -728,10 +663,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                   Text(
                     msg,
                     style: TextStyle(
-                      color:    c.textTertiary,
-                      fontSize: 13,
-                      height:   1.5,
-                    ),
+                        color: c.textTertiary, fontSize: 13,
+                        height: 1.5),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 20),
@@ -748,22 +681,16 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                                 colors: [_teal, MarkFitColors.tealDk],
                               ),
                               borderRadius: BorderRadius.circular(13),
-                              boxShadow: [
-                                BoxShadow(
-                                  color:      _teal.withOpacity(0.4),
-                                  blurRadius: 10,
-                                ),
-                              ],
+                              boxShadow: [BoxShadow(
+                                  color: _teal.withOpacity(0.4),
+                                  blurRadius: 10)],
                             ),
-                            child: const Text(
-                              'Riprova',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color:      Colors.white,
-                                fontSize:   14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
+                            child: const Text('Riprova',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color:      Colors.white,
+                                    fontSize:   14,
+                                    fontWeight: FontWeight.w700)),
                           ),
                         ),
                       ),
@@ -780,15 +707,12 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                               border: Border.all(
                                   color: c.glassBorder, width: 0.8),
                             ),
-                            child: Text(
-                              'Indietro',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color:      c.textPrimary,
-                                fontSize:   14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                            child: Text('Indietro',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color:      c.textPrimary,
+                                    fontSize:   14,
+                                    fontWeight: FontWeight.w600)),
                           ),
                         ),
                       ),
@@ -804,9 +728,11 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _SessionHeader — ADATTIVO
-// ─────────────────────────────────────────────────────────────
+// _SessionHeader, _RestTimerBanner, _SessionActionsBar,
+// _SessionExerciseCard, _SessionCircuitCard, _CircuitRoundContent,
+// _CircuitExerciseBlock, _SetRow, _SmallBtn: identici alla versione
+// precedente — già tutti theme-aware con context.mfc.
+
 class _SessionHeader extends StatelessWidget {
   final String               workoutName;
   final int                  elapsed, completed, total;
@@ -815,12 +741,9 @@ class _SessionHeader extends StatelessWidget {
   final MarkFitColors        c;
 
   const _SessionHeader({
-    required this.workoutName,
-    required this.elapsed,
-    required this.completed,
-    required this.total,
-    required this.formatTime,
-    required this.onBack,
+    required this.workoutName, required this.elapsed,
+    required this.completed,   required this.total,
+    required this.formatTime,  required this.onBack,
     required this.c,
   });
 
@@ -842,13 +765,8 @@ class _SessionHeader extends StatelessWidget {
               border: Border.all(
                   color: _cyan.withOpacity(0.2), width: 0.8),
               boxShadow: c.showElevation
-                  ? [
-                      BoxShadow(
-                        color:      c.elevationColor,
-                        blurRadius: 12,
-                        offset:     const Offset(0, 2),
-                      ),
-                    ]
+                  ? [BoxShadow(color: c.elevationColor,
+                      blurRadius: 12, offset: const Offset(0, 2))]
                   : null,
             ),
             child: Column(
@@ -858,18 +776,14 @@ class _SessionHeader extends StatelessWidget {
                     GestureDetector(
                       onTap: onBack,
                       child: Container(
-                        width:  36,
-                        height: 36,
+                        width: 36, height: 36,
                         decoration: BoxDecoration(
                           color:        c.glassCardInset,
                           borderRadius: BorderRadius.circular(10),
                           border:       Border.all(color: c.glassBorder),
                         ),
-                        child: Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          color: c.iconPrimary,
-                          size:  15,
-                        ),
+                        child: Icon(Icons.arrow_back_ios_new_rounded,
+                            color: c.iconPrimary, size: 15),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -877,35 +791,23 @@ class _SessionHeader extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            workoutName,
-                            style: TextStyle(
+                          Text(workoutName, style: TextStyle(
                               color:      c.textPrimary,
                               fontSize:   16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                              fontWeight: FontWeight.w800),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
                           Row(
                             children: [
-                              Container(
-                                width:  6,
-                                height: 6,
+                              Container(width: 6, height: 6,
                                 decoration: const BoxDecoration(
-                                  color: _green,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
+                                    color: _green,
+                                    shape: BoxShape.circle)),
                               const SizedBox(width: 5),
-                              Text(
-                                'Sessione in corso',
-                                style: TextStyle(
+                              Text('Sessione in corso', style: TextStyle(
                                   color:      _green.withOpacity(0.8),
                                   fontSize:   10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                                  fontWeight: FontWeight.w600)),
                             ],
                           ),
                         ],
@@ -920,42 +822,33 @@ class _SessionHeader extends StatelessWidget {
                         border:       Border.all(
                             color: _teal.withOpacity(0.3)),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      child: Row(mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.timer_rounded,
-                              color: _teal, size: 13),
-                          const SizedBox(width: 5),
-                          Text(
-                            formatTime(elapsed),
+                        const Icon(Icons.timer_rounded,
+                            color: _teal, size: 13),
+                        const SizedBox(width: 5),
+                        Text(formatTime(elapsed),
                             style: const TextStyle(
-                              color:      _teal,
-                              fontSize:   14,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
+                                color:      _teal,
+                                fontSize:   14,
+                                fontWeight: FontWeight.w800)),
+                      ]),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Text(
-                      '$completed/$total serie',
-                      style: TextStyle(
-                          color: c.textTertiary, fontSize: 11),
-                    ),
+                    Text('$completed/$total serie',
+                        style: TextStyle(
+                            color: c.textTertiary, fontSize: 11)),
                     const Spacer(),
                     Text(
-                      '${total > 0 ? (progress * 100).round() : 0}%',
-                      style: TextStyle(
-                        color:      _teal.withOpacity(0.8),
-                        fontSize:   11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                        '${total > 0 ? (progress * 100).round() : 0}%',
+                        style: TextStyle(
+                            color:      _teal.withOpacity(0.8),
+                            fontSize:   11,
+                            fontWeight: FontWeight.w700)),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -964,8 +857,7 @@ class _SessionHeader extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value:           progress,
                     backgroundColor: c.glassCardInset,
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(_teal),
+                    valueColor: const AlwaysStoppedAnimation<Color>(_teal),
                     minHeight: 4,
                   ),
                 ),
@@ -978,19 +870,12 @@ class _SessionHeader extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _RestTimerBanner — ADATTIVO
-// ─────────────────────────────────────────────────────────────
 class _RestTimerBanner extends StatelessWidget {
   final int          elapsed;
   final VoidCallback onStop;
   final MarkFitColors c;
-
   const _RestTimerBanner({
-    required this.elapsed,
-    required this.onStop,
-    required this.c,
-  });
+      required this.elapsed, required this.onStop, required this.c});
 
   @override
   Widget build(BuildContext context) {
@@ -1004,54 +889,39 @@ class _RestTimerBanner extends StatelessWidget {
             padding: const EdgeInsets.symmetric(
                 horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  _indigo.withOpacity(0.2),
-                  _indigo.withOpacity(0.08),
-                ],
-              ),
+              gradient: LinearGradient(colors: [
+                _indigo.withOpacity(0.2),
+                _indigo.withOpacity(0.08),
+              ]),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                   color: _indigo.withOpacity(0.4), width: 1),
-              boxShadow: [
-                BoxShadow(
-                    color: _indigo.withOpacity(0.15), blurRadius: 12),
-              ],
+              boxShadow: [BoxShadow(
+                  color: _indigo.withOpacity(0.15), blurRadius: 12)],
             ),
             child: Row(
               children: [
-                Container(
-                  width:  32,
-                  height: 32,
+                Container(width: 32, height: 32,
                   decoration: BoxDecoration(
                     color: _indigo.withOpacity(0.15),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.timer_rounded,
-                      color: _indigo, size: 16),
-                ),
+                      color: _indigo, size: 16)),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Recupero in corso',
-                        style: TextStyle(
+                      Text('Recupero in corso', style: TextStyle(
                           color:        _indigo.withOpacity(0.8),
                           fontSize:     10,
                           fontWeight:   FontWeight.w600,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                      Text(
-                        '${elapsed}s',
-                        style: TextStyle(
+                          letterSpacing: 0.3)),
+                      Text('${elapsed}s', style: TextStyle(
                           color:      c.textPrimary,
                           fontSize:   16,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
+                          fontWeight: FontWeight.w800)),
                     ],
                   ),
                 ),
@@ -1066,14 +936,10 @@ class _RestTimerBanner extends StatelessWidget {
                       border: Border.all(
                           color: _indigo.withOpacity(0.4)),
                     ),
-                    child: const Text(
-                      'Stop',
-                      style: TextStyle(
+                    child: const Text('Stop', style: TextStyle(
                         color:      _indigo,
                         fontSize:   12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                        fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],
@@ -1085,18 +951,11 @@ class _RestTimerBanner extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _SessionActionsBar — ADATTIVO
-// ─────────────────────────────────────────────────────────────
 class _SessionActionsBar extends StatelessWidget {
   final VoidCallback  onAdd, onFinish;
   final MarkFitColors c;
-
   const _SessionActionsBar({
-    required this.onAdd,
-    required this.onFinish,
-    required this.c,
-  });
+      required this.onAdd, required this.onFinish, required this.c});
 
   @override
   Widget build(BuildContext context) {
@@ -1126,14 +985,10 @@ class _SessionActionsBar extends StatelessWidget {
                         Icon(Icons.add_rounded,
                             color: c.iconPrimary, size: 18),
                         const SizedBox(width: 6),
-                        Text(
-                          'Aggiungi',
-                          style: TextStyle(
+                        Text('Aggiungi', style: TextStyle(
                             color:      c.textSecondary,
                             fontSize:   14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                            fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
@@ -1148,20 +1003,15 @@ class _SessionActionsBar extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      _teal,
-                      Color.lerp(_teal, Colors.black, 0.2) ?? _teal,
-                    ],
-                  ),
+                  gradient: LinearGradient(colors: [
+                    _teal,
+                    Color.lerp(_teal, Colors.black, 0.2) ?? _teal,
+                  ]),
                   borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
+                  boxShadow: [BoxShadow(
                       color:      _teal.withOpacity(0.4),
                       blurRadius: 14,
-                      offset:     const Offset(0, 3),
-                    ),
-                  ],
+                      offset:     const Offset(0, 3))],
                 ),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1169,14 +1019,10 @@ class _SessionActionsBar extends StatelessWidget {
                     Icon(Icons.check_rounded,
                         color: Colors.white, size: 18),
                     SizedBox(width: 6),
-                    Text(
-                      'Termina',
-                      style: TextStyle(
+                    Text('Termina', style: TextStyle(
                         color:      Colors.white,
                         fontSize:   14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                        fontWeight: FontWeight.w700)),
                   ],
                 ),
               ),
@@ -1188,9 +1034,6 @@ class _SessionActionsBar extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _SessionExerciseCard — ADATTIVO
-// ─────────────────────────────────────────────────────────────
 class _SessionExerciseCard extends StatefulWidget {
   final SessionExercise                exercise;
   final List<ActiveSet>                sets;
@@ -1203,16 +1046,11 @@ class _SessionExerciseCard extends StatefulWidget {
 
   const _SessionExerciseCard({
     super.key,
-    required this.exercise,
-    required this.sets,
-    required this.isRestingHere,
-    required this.onToggle,
-    required this.onUpdate,
-    required this.onAddSet,
-    required this.onRemoveSet,
-    required this.onRemove,
-    required this.onUpdateNote,
-    required this.currentNote,
+    required this.exercise,     required this.sets,
+    required this.isRestingHere, required this.onToggle,
+    required this.onUpdate,     required this.onAddSet,
+    required this.onRemoveSet,  required this.onRemove,
+    required this.onUpdateNote, required this.currentNote,
   });
 
   @override
@@ -1239,80 +1077,55 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: widget.isRestingHere
-                  ? _indigo.withOpacity(0.5)
-                  : c.glassBorder,
+                  ? _indigo.withOpacity(0.5) : c.glassBorder,
               width: widget.isRestingHere ? 1.2 : 0.8,
             ),
             boxShadow: widget.isRestingHere
-                ? [
-                    BoxShadow(
-                      color:      _indigo.withOpacity(0.12),
-                      blurRadius: 16,
-                    ),
-                  ]
+                ? [BoxShadow(color: _indigo.withOpacity(0.12),
+                    blurRadius: 16)]
                 : c.showElevation
-                    ? [
-                        BoxShadow(
-                          color:      c.elevationColor,
-                          blurRadius: 6,
-                        ),
-                      ]
+                    ? [BoxShadow(color: c.elevationColor, blurRadius: 6)]
                     : null,
           ),
           child: Column(
             children: [
               GestureDetector(
-                onTap: () =>
-                    setState(() => _expanded = !_expanded),
+                onTap: () => setState(() => _expanded = !_expanded),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   child: Row(
                     children: [
                       Icon(Icons.drag_handle_rounded,
                           size: 18, color: c.iconSecondary),
                       const SizedBox(width: 10),
-                      Container(
-                        width:  36,
-                        height: 36,
+                      Container(width: 36, height: 36,
                         decoration: BoxDecoration(
                           color:        _teal.withOpacity(0.12),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
                               color: _teal.withOpacity(0.2)),
                         ),
-                        child: const Icon(
-                            Icons.fitness_center_rounded,
-                            color: _teal,
-                            size:  18),
-                      ),
+                        child: const Icon(Icons.fitness_center_rounded,
+                            color: _teal, size: 18)),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              widget.exercise.exerciseName,
-                              style: TextStyle(
-                                color:      c.textPrimary,
-                                fontSize:   14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              '$completedCount/$totalCount serie',
-                              style: TextStyle(
-                                color: completedCount ==
-                                            totalCount &&
-                                        totalCount > 0
-                                    ? _teal
-                                    : c.textTertiary,
-                                fontSize: 11,
-                              ),
-                            ),
+                            Text(widget.exercise.exerciseName,
+                                style: TextStyle(
+                                    color:      c.textPrimary,
+                                    fontSize:   14,
+                                    fontWeight: FontWeight.w700),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            Text('$completedCount/$totalCount serie',
+                                style: TextStyle(
+                                  color: completedCount == totalCount &&
+                                          totalCount > 0
+                                      ? _teal : c.textTertiary,
+                                  fontSize: 11,
+                                )),
                           ],
                         ),
                       ),
@@ -1322,19 +1135,19 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
                             context:     context,
                             accentColor: _red,
                             title:   'Elimina esercizio',
-                            message: 'Vuoi eliminare questo '
-                                'esercizio dalla sessione?',
+                            message: 'Vuoi eliminare questo esercizio '
+                                'dalla sessione?',
                             actions: [
                               GlassDialogAction(
                                 label: 'Annulla',
-                                onTap: () => Navigator.pop(
-                                    context, false),
+                                onTap: () =>
+                                    Navigator.pop(context, false),
                               ),
                               GlassDialogAction(
                                 label:         'Elimina',
                                 isDestructive: true,
-                                onTap: () => Navigator.pop(
-                                    context, true),
+                                onTap:         () =>
+                                    Navigator.pop(context, true),
                               ),
                             ],
                           );
@@ -1342,62 +1155,44 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
                             widget.onRemove();
                           }
                         },
-                        child: Container(
-                          width:  28,
-                          height: 28,
+                        child: Container(width: 28, height: 28,
                           decoration: BoxDecoration(
                             color:        _red.withOpacity(0.08),
                             borderRadius: BorderRadius.circular(7),
                           ),
-                          child: Icon(
-                            Icons.delete_outline_rounded,
-                            size:  13,
-                            color: _red.withOpacity(0.7),
-                          ),
-                        ),
+                          child: Icon(Icons.delete_outline_rounded,
+                              size: 13,
+                              color: _red.withOpacity(0.7))),
                       ),
                       const SizedBox(width: 6),
                       Icon(
                         _expanded
                             ? Icons.keyboard_arrow_up_rounded
                             : Icons.keyboard_arrow_down_rounded,
-                        color: c.textTertiary,
-                        size:  18,
+                        color: c.textTertiary, size: 18,
                       ),
                     ],
                   ),
                 ),
               ),
               if (_expanded) ...[
-                Divider(
-                  height:    0,
-                  thickness: 0.6,
-                  indent:    14,
-                  endIndent: 14,
-                  color:     c.divider,
-                ),
+                Divider(height: 0, thickness: 0.6,
+                    indent: 14, endIndent: 14, color: c.divider),
                 Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(14, 8, 14, 4),
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
                   child: Column(
-                    children: widget.sets
-                        .asMap()
-                        .entries
-                        .map(
-                          (e) => _SetRow(
-                            index:    e.key,
-                            set:      e.value,
-                            onToggle: () => widget.onToggle(e.key),
-                            onUpdate: (w, r) =>
-                                widget.onUpdate(e.key, w, r),
-                          ),
-                        )
-                        .toList(),
+                    children: widget.sets.asMap().entries.map((e) =>
+                        _SetRow(
+                          index:    e.key,
+                          set:      e.value,
+                          onToggle: () => widget.onToggle(e.key),
+                          onUpdate: (w, r) =>
+                              widget.onUpdate(e.key, w, r),
+                        )).toList(),
                   ),
                 ),
                 Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
                   child: Row(
                     children: [
                       _SmallBtn(
@@ -1428,9 +1223,6 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _SessionCircuitCard — ADATTIVO
-// ─────────────────────────────────────────────────────────────
 class _SessionCircuitCard extends StatefulWidget {
   final String                           circuitId, circuitName;
   final List<SessionExercise>            exercises;
@@ -1447,28 +1239,19 @@ class _SessionCircuitCard extends StatefulWidget {
 
   const _SessionCircuitCard({
     super.key,
-    required this.circuitId,
-    required this.circuitName,
-    required this.exercises,
-    required this.currentRound,
-    required this.totalRounds,
-    required this.getSets,
-    required this.onGoToRound,
-    required this.onNextRound,
-    required this.onPrevRound,
-    required this.onToggle,
-    required this.onUpdate,
-    required this.onAddSet,
-    required this.onRemoveSet,
-    required this.onRemoveExercise,
-    required this.onModify,
-    required this.onRemoveCircuit,
+    required this.circuitId,       required this.circuitName,
+    required this.exercises,       required this.currentRound,
+    required this.totalRounds,     required this.getSets,
+    required this.onGoToRound,     required this.onNextRound,
+    required this.onPrevRound,     required this.onToggle,
+    required this.onUpdate,        required this.onAddSet,
+    required this.onRemoveSet,     required this.onRemoveExercise,
+    required this.onModify,        required this.onRemoveCircuit,
     required this.onReorderExercises,
   });
 
   @override
-  State<_SessionCircuitCard> createState() =>
-      _SessionCircuitCardState();
+  State<_SessionCircuitCard> createState() => _SessionCircuitCardState();
 }
 
 class _SessionCircuitCardState extends State<_SessionCircuitCard> {
@@ -1477,10 +1260,8 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
   int get _completedCount {
     int n = 0;
     for (final ex in widget.exercises) {
-      n += widget
-          .getSets(ex.exerciseKey)
-          .where((s) => s.completed)
-          .length;
+      n += widget.getSets(ex.exerciseKey)
+          .where((s) => s.completed).length;
     }
     return n;
   }
@@ -1518,21 +1299,16 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                   color: _indigo.withOpacity(0.2), width: 0.7),
             ),
             boxShadow: c.showElevation
-                ? [BoxShadow(
-                    color: c.elevationColor, blurRadius: 8)]
-                : [BoxShadow(
-                    color:      _indigo.withOpacity(0.06),
+                ? [BoxShadow(color: c.elevationColor, blurRadius: 8)]
+                : [BoxShadow(color: _indigo.withOpacity(0.06),
                     blurRadius: 16)],
           ),
           child: Column(
             children: [
-              // Header
               GestureDetector(
-                onTap: () =>
-                    setState(() => _expanded = !_expanded),
+                onTap: () => setState(() => _expanded = !_expanded),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   child: Row(
                     children: [
                       Icon(Icons.drag_handle_rounded,
@@ -1541,35 +1317,26 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: _indigo.withOpacity(0.15),
+                          color:        _indigo.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(Icons.loop_rounded,
-                            color: _indigo, size: 16),
-                      ),
+                            color: _indigo, size: 16)),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              widget.circuitName,
-                              style: TextStyle(
+                            Text(widget.circuitName, style: TextStyle(
                                 color:      c.textPrimary,
                                 fontSize:   14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              '$_completedCount/$_totalCount serie',
-                              style: TextStyle(
-                                color:    _indigo.withOpacity(0.8),
-                                fontSize: 11,
-                              ),
-                            ),
+                                fontWeight: FontWeight.w700),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            Text('$_completedCount/$_totalCount serie',
+                                style: TextStyle(
+                                    color:    _indigo.withOpacity(0.8),
+                                    fontSize: 11)),
                           ],
                         ),
                       ),
@@ -1579,22 +1346,15 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 5),
                           decoration: BoxDecoration(
-                            color: _indigo.withOpacity(0.12),
-                            borderRadius:
-                                BorderRadius.circular(8),
+                            color:        _indigo.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                                 color: _indigo.withOpacity(0.3)),
                           ),
-                          child: const Text(
-                            'Modifica',
-                            style: TextStyle(
+                          child: const Text('Modifica', style: TextStyle(
                               color:      _indigo,
                               fontSize:   11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
+                              fontWeight: FontWeight.w600)))),
                       const SizedBox(width: 6),
                       GestureDetector(
                         onTap: () async {
@@ -1607,14 +1367,14 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                             actions: [
                               GlassDialogAction(
                                 label: 'Annulla',
-                                onTap: () => Navigator.pop(
-                                    context, false),
+                                onTap: () =>
+                                    Navigator.pop(context, false),
                               ),
                               GlassDialogAction(
                                 label:         'Elimina',
                                 isDestructive: true,
-                                onTap: () => Navigator.pop(
-                                    context, true),
+                                onTap:         () =>
+                                    Navigator.pop(context, true),
                               ),
                             ],
                           );
@@ -1626,59 +1386,44 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 5),
                           decoration: BoxDecoration(
-                            color: _red.withOpacity(0.1),
-                            borderRadius:
-                                BorderRadius.circular(8),
+                            color:        _red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                                 color: _red.withOpacity(0.3)),
                           ),
-                          child: const Text(
-                            'Elimina',
-                            style: TextStyle(
+                          child: const Text('Elimina', style: TextStyle(
                               color:      _red,
                               fontSize:   11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
+                              fontWeight: FontWeight.w600)))),
                       const SizedBox(width: 6),
                       Icon(
                         _expanded
                             ? Icons.keyboard_arrow_up_rounded
                             : Icons.keyboard_arrow_down_rounded,
-                        color: c.textTertiary,
-                        size:  18,
+                        color: c.textTertiary, size: 18,
                       ),
                     ],
                   ),
                 ),
               ),
               if (_expanded) ...[
-                Container(
-                  height: 0.7,
-                  margin: const EdgeInsets.symmetric(
-                      horizontal: 14),
+                Container(height: 0.7,
+                  margin: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.transparent,
-                        _indigo.withOpacity(0.3),
-                        Colors.transparent,
-                      ],
-                    ),
+                    gradient: LinearGradient(colors: [
+                      Colors.transparent,
+                      _indigo.withOpacity(0.3),
+                      Colors.transparent,
+                    ]),
                   ),
                 ),
                 const SizedBox(height: 10),
-                // Round navigation
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(
-                          sigmaX: 8, sigmaY: 8),
+                      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
@@ -1691,27 +1436,17 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                         child: Row(
                           children: [
                             GestureDetector(
-                              onTap: hasPrev
-                                  ? widget.onPrevRound
-                                  : null,
-                              child: Container(
-                                width:  30,
-                                height: 30,
+                              onTap: hasPrev ? widget.onPrevRound : null,
+                              child: Container(width: 30, height: 30,
                                 decoration: BoxDecoration(
                                   color: hasPrev
                                       ? _indigo.withOpacity(0.15)
                                       : Colors.transparent,
                                   shape: BoxShape.circle,
                                 ),
-                                child: Icon(
-                                  Icons.chevron_left_rounded,
-                                  color: hasPrev
-                                      ? _indigo
-                                      : c.textTertiary,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
+                                child: Icon(Icons.chevron_left_rounded,
+                                    color: hasPrev ? _indigo : c.textTertiary,
+                                    size: 20))),
                             Expanded(
                               child: Column(
                                 children: [
@@ -1720,11 +1455,9 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                                     'di ${widget.totalRounds}',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
-                                      color:      c.textPrimary,
-                                      fontSize:   13,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
+                                        color:      c.textPrimary,
+                                        fontSize:   13,
+                                        fontWeight: FontWeight.w700)),
                                   if (widget.totalRounds > 1) ...[
                                     const SizedBox(height: 6),
                                     Row(
@@ -1742,8 +1475,7 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                                               duration: const Duration(
                                                   milliseconds: 200),
                                               margin: const EdgeInsets
-                                                  .symmetric(
-                                                  horizontal: 3),
+                                                  .symmetric(horizontal: 3),
                                               width:  active ? 16 : 6,
                                               height: 6,
                                               decoration: BoxDecoration(
@@ -1752,17 +1484,12 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                                                     : c.textTertiary
                                                         .withOpacity(0.4),
                                                 borderRadius:
-                                                    BorderRadius.circular(
-                                                        3),
+                                                    BorderRadius.circular(3),
                                                 boxShadow: active
-                                                    ? [
-                                                        BoxShadow(
-                                                          color: _indigo
-                                                              .withOpacity(
-                                                                  0.5),
-                                                          blurRadius: 4,
-                                                        ),
-                                                      ]
+                                                    ? [BoxShadow(
+                                                        color: _indigo
+                                                            .withOpacity(0.5),
+                                                        blurRadius: 4)]
                                                     : null,
                                               ),
                                             ),
@@ -1775,27 +1502,17 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                               ),
                             ),
                             GestureDetector(
-                              onTap: hasNext
-                                  ? widget.onNextRound
-                                  : null,
-                              child: Container(
-                                width:  30,
-                                height: 30,
+                              onTap: hasNext ? widget.onNextRound : null,
+                              child: Container(width: 30, height: 30,
                                 decoration: BoxDecoration(
                                   color: hasNext
                                       ? _indigo.withOpacity(0.15)
                                       : Colors.transparent,
                                   shape: BoxShape.circle,
                                 ),
-                                child: Icon(
-                                  Icons.chevron_right_rounded,
-                                  color: hasNext
-                                      ? _indigo
-                                      : c.textTertiary,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
+                                child: Icon(Icons.chevron_right_rounded,
+                                    color: hasNext ? _indigo : c.textTertiary,
+                                    size: 20))),
                           ],
                         ),
                       ),
@@ -1809,35 +1526,27 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
                       FadeTransition(opacity: anim, child: child),
                   child: Padding(
                     key: ValueKey(
-                      '${widget.circuitId}_r${widget.currentRound}',
-                    ),
-                    padding:
-                        const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        '${widget.circuitId}_r${widget.currentRound}'),
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                     child: widget.exercises.isEmpty
                         ? Padding(
                             padding: const EdgeInsets.all(14),
-                            child: Text(
-                              'Nessun esercizio',
-                              style: TextStyle(
-                                color:     c.textTertiary,
-                                fontSize:  12,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          )
+                            child: Text('Nessun esercizio',
+                                style: TextStyle(
+                                    color:     c.textTertiary,
+                                    fontSize:  12,
+                                    fontStyle: FontStyle.italic)))
                         : _CircuitRoundContent(
-                            circuitId:   widget.circuitId,
-                            exercises:   widget.exercises,
-                            roundIndex:  widget.currentRound,
-                            getSets:     widget.getSets,
-                            onToggle:    widget.onToggle,
-                            onUpdate:    widget.onUpdate,
-                            onAddSet:    widget.onAddSet,
-                            onRemoveSet: widget.onRemoveSet,
-                            onRemoveExercise:
-                                widget.onRemoveExercise,
-                            onReorderExercises:
-                                widget.onReorderExercises,
+                            circuitId:          widget.circuitId,
+                            exercises:          widget.exercises,
+                            roundIndex:         widget.currentRound,
+                            getSets:            widget.getSets,
+                            onToggle:           widget.onToggle,
+                            onUpdate:           widget.onUpdate,
+                            onAddSet:           widget.onAddSet,
+                            onRemoveSet:        widget.onRemoveSet,
+                            onRemoveExercise:   widget.onRemoveExercise,
+                            onReorderExercises: widget.onReorderExercises,
                           ),
                   ),
                 ),
@@ -1850,9 +1559,6 @@ class _SessionCircuitCardState extends State<_SessionCircuitCard> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _CircuitRoundContent
-// ─────────────────────────────────────────────────────────────
 class _CircuitRoundContent extends StatelessWidget {
   final String                               circuitId;
   final List<SessionExercise>                exercises;
@@ -1865,16 +1571,11 @@ class _CircuitRoundContent extends StatelessWidget {
   final void Function(List<SessionExercise>) onReorderExercises;
 
   const _CircuitRoundContent({
-    required this.circuitId,
-    required this.exercises,
-    required this.roundIndex,
-    required this.getSets,
-    required this.onToggle,
-    required this.onUpdate,
-    required this.onAddSet,
-    required this.onRemoveSet,
-    required this.onRemoveExercise,
-    required this.onReorderExercises,
+    required this.circuitId,        required this.exercises,
+    required this.roundIndex,       required this.getSets,
+    required this.onToggle,         required this.onUpdate,
+    required this.onAddSet,         required this.onRemoveSet,
+    required this.onRemoveExercise, required this.onReorderExercises,
   });
 
   @override
@@ -1886,17 +1587,14 @@ class _CircuitRoundContent extends StatelessWidget {
       proxyDecorator: (child, index, animation) => AnimatedBuilder(
         animation: animation,
         builder: (_, __) => Material(
-          elevation: 0,
-          color:     Colors.transparent,
+          elevation: 0, color: Colors.transparent,
           child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                   color: _cyan.withOpacity(0.5), width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                    color: _cyan.withOpacity(0.12), blurRadius: 10),
-              ],
+              boxShadow: [BoxShadow(
+                  color: _cyan.withOpacity(0.12), blurRadius: 10)],
             ),
             child: child,
           ),
@@ -1933,9 +1631,6 @@ class _CircuitRoundContent extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _CircuitExerciseBlock — ADATTIVO
-// ─────────────────────────────────────────────────────────────
 class _CircuitExerciseBlock extends StatelessWidget {
   final SessionExercise                exercise;
   final List<ActiveSet>                sets;
@@ -1944,12 +1639,9 @@ class _CircuitExerciseBlock extends StatelessWidget {
   final VoidCallback                   onAddSet, onRemoveSet, onRemove;
 
   const _CircuitExerciseBlock({
-    required this.exercise,
-    required this.sets,
-    required this.onToggle,
-    required this.onUpdate,
-    required this.onAddSet,
-    required this.onRemoveSet,
+    required this.exercise, required this.sets,
+    required this.onToggle, required this.onUpdate,
+    required this.onAddSet, required this.onRemoveSet,
     required this.onRemove,
   });
 
@@ -1976,27 +1668,14 @@ class _CircuitExerciseBlock extends StatelessWidget {
                   Icon(Icons.drag_handle_rounded,
                       size: 16, color: c.iconSecondary),
                   const SizedBox(width: 6),
-                  Container(
-                    width:  6,
-                    height: 6,
+                  Container(width: 6, height: 6,
                     decoration: const BoxDecoration(
-                      color: _indigo,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
+                        color: _indigo, shape: BoxShape.circle)),
                   const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      exercise.exerciseName,
-                      style: TextStyle(
-                        color:      c.textPrimary,
-                        fontSize:   13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                  Expanded(child: Text(exercise.exerciseName,
+                      style: TextStyle(color: c.textPrimary,
+                          fontSize: 13, fontWeight: FontWeight.w700),
+                      maxLines: 1, overflow: TextOverflow.ellipsis)),
                   GestureDetector(
                     onTap: () async {
                       final ok = await showGlassDialog<bool>(
@@ -2008,47 +1687,35 @@ class _CircuitExerciseBlock extends StatelessWidget {
                         actions: [
                           GlassDialogAction(
                             label: 'Annulla',
-                            onTap: () =>
-                                Navigator.pop(context, false),
+                            onTap: () => Navigator.pop(context, false),
                           ),
                           GlassDialogAction(
                             label:         'Elimina',
                             isDestructive: true,
-                            onTap: () =>
+                            onTap:         () =>
                                 Navigator.pop(context, true),
                           ),
                         ],
                       );
-                      if (ok == true && context.mounted) {
-                        onRemove();
-                      }
+                      if (ok == true && context.mounted) onRemove();
                     },
-                    child: Container(
-                      width:  24,
-                      height: 24,
+                    child: Container(width: 24, height: 24,
                       decoration: BoxDecoration(
                         color:        _red.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Icon(
-                        Icons.delete_outline_rounded,
-                        size:  12,
-                        color: _red.withOpacity(0.7),
-                      ),
-                    ),
-                  ),
+                      child: Icon(Icons.delete_outline_rounded,
+                          size: 12, color: _red.withOpacity(0.7)))),
                 ],
               ),
               const SizedBox(height: 8),
-              ...sets.asMap().entries.map(
-                (e) => _SetRow(
-                  index:    e.key,
-                  set:      e.value,
-                  onToggle: () => onToggle(e.key),
-                  onUpdate: (w, r) => onUpdate(e.key, w, r),
-                  compact:  true,
-                ),
-              ),
+              ...sets.asMap().entries.map((e) => _SetRow(
+                    index:    e.key,
+                    set:      e.value,
+                    onToggle: () => onToggle(e.key),
+                    onUpdate: (w, r) => onUpdate(e.key, w, r),
+                    compact:  true,
+                  )),
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -2073,9 +1740,6 @@ class _CircuitExerciseBlock extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _SetRow — ADATTIVO
-// ─────────────────────────────────────────────────────────────
 class _SetRow extends StatefulWidget {
   final int                        index;
   final ActiveSet                  set;
@@ -2084,10 +1748,8 @@ class _SetRow extends StatefulWidget {
   final bool                       compact;
 
   const _SetRow({
-    required this.index,
-    required this.set,
-    required this.onToggle,
-    required this.onUpdate,
+    required this.index,   required this.set,
+    required this.onToggle, required this.onUpdate,
     this.compact = false,
   });
 
@@ -2103,9 +1765,7 @@ class _SetRowState extends State<_SetRow> {
   void initState() {
     super.initState();
     _weightCtrl = TextEditingController(
-      text: widget.set.weight > 0
-          ? widget.set.weight.toString()
-          : '',
+      text: widget.set.weight > 0 ? widget.set.weight.toString() : '',
     );
     _repsCtrl = TextEditingController(
       text: widget.set.reps.toString(),
@@ -2124,8 +1784,7 @@ class _SetRowState extends State<_SetRow> {
     super.didUpdateWidget(old);
     if (old.set.weight != widget.set.weight) {
       _weightCtrl.text = widget.set.weight > 0
-          ? widget.set.weight.toString()
-          : '';
+          ? widget.set.weight.toString() : '';
     }
     if (old.set.reps != widget.set.reps) {
       _repsCtrl.text = widget.set.reps.toString();
@@ -2143,76 +1802,57 @@ class _SetRowState extends State<_SetRow> {
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
-          SizedBox(
-            width: 24,
-            child: Text(
-              '${widget.index + 1}',
-              style: TextStyle(
+          SizedBox(width: 24,
+            child: Text('${widget.index + 1}', style: TextStyle(
                 color:      rowColor.withOpacity(0.6),
                 fontSize:   12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w700))),
+          Expanded(child: Container(
+            height: widget.compact ? 30 : 34,
+            margin: const EdgeInsets.only(right: 6),
+            decoration: BoxDecoration(
+              color:        c.inputBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: completed
+                    ? _teal.withOpacity(0.3) : c.inputBorder,
+                width: isDark ? 0.8 : 1.0,
               ),
             ),
-          ),
-          // Weight
-          Expanded(
-            child: Container(
-              height: widget.compact ? 30 : 34,
-              margin: const EdgeInsets.only(right: 6),
-              decoration: BoxDecoration(
-                color:        c.inputBg,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: completed
-                      ? _teal.withOpacity(0.3)
-                      : c.inputBorder,
-                  width: isDark ? 0.8 : 1.0,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _weightCtrl,
-                      keyboardType: const TextInputType
-                          .numberWithOptions(decimal: true),
-                      keyboardAppearance: isDark
-                          ? Brightness.dark
-                          : Brightness.light,
-                      textAlign:   TextAlign.center,
-                      cursorColor: _teal,
-                      style: TextStyle(
-                        color:      c.inputText,
-                        fontSize:   13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: widget.set.lastWeight != null
-                            ? '${widget.set.lastWeight}'
-                            : 'kg',
-                        hintStyle: TextStyle(
-                            color: c.inputHint, fontSize: 12),
-                        border:    InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 6),
-                      ),
-                      onChanged: (v) {
-                        final w = double.tryParse(v) ?? 0;
-                        final r = int.tryParse(_repsCtrl.text) ??
-                            widget.set.reps;
-                        widget.onUpdate(w, r);
-                      },
-                    ),
-                  ),
-                  Text('kg',
-                      style: TextStyle(
-                          color: c.textTertiary, fontSize: 10)),
-                  const SizedBox(width: 4),
-                ],
-              ),
+            child: Row(
+              children: [
+                Expanded(child: TextField(
+                  controller:         _weightCtrl,
+                  keyboardType: const TextInputType
+                      .numberWithOptions(decimal: true),
+                  keyboardAppearance: isDark
+                      ? Brightness.dark : Brightness.light,
+                  textAlign:   TextAlign.center,
+                  cursorColor: _teal,
+                  style: TextStyle(
+                      color:      c.inputText,
+                      fontSize:   13,
+                      fontWeight: FontWeight.w600),
+                  decoration: InputDecoration(
+                    hintText:  widget.set.lastWeight != null
+                        ? '${widget.set.lastWeight}' : 'kg',
+                    hintStyle: TextStyle(
+                        color: c.inputHint, fontSize: 12),
+                    border:    InputBorder.none,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 6)),
+                  onChanged: (v) {
+                    final w = double.tryParse(v) ?? 0;
+                    final r = int.tryParse(_repsCtrl.text) ??
+                        widget.set.reps;
+                    widget.onUpdate(w, r);
+                  })),
+                Text('kg', style: TextStyle(
+                    color: c.textTertiary, fontSize: 10)),
+                const SizedBox(width: 4),
+              ],
             ),
-          ),
-          // Reps
+          )),
           SizedBox(
             width:  widget.compact ? 52 : 60,
             height: widget.compact ? 30 : 34,
@@ -2222,8 +1862,7 @@ class _SetRowState extends State<_SetRow> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: completed
-                      ? _teal.withOpacity(0.3)
-                      : c.inputBorder,
+                      ? _teal.withOpacity(0.3) : c.inputBorder,
                   width: isDark ? 0.8 : 1.0,
                 ),
               ),
@@ -2231,36 +1870,30 @@ class _SetRowState extends State<_SetRow> {
                 controller:         _repsCtrl,
                 keyboardType:       TextInputType.number,
                 keyboardAppearance: isDark
-                    ? Brightness.dark
-                    : Brightness.light,
+                    ? Brightness.dark : Brightness.light,
                 textAlign:   TextAlign.center,
                 cursorColor: _teal,
                 style: TextStyle(
-                  color:      c.inputText,
-                  fontSize:   13,
-                  fontWeight: FontWeight.w600,
-                ),
+                    color:      c.inputText,
+                    fontSize:   13,
+                    fontWeight: FontWeight.w600),
                 decoration: InputDecoration(
-                  hintText: widget.set.lastReps != null
-                      ? '${widget.set.lastReps}'
-                      : 'rip',
+                  hintText:  widget.set.lastReps != null
+                      ? '${widget.set.lastReps}' : 'rip',
                   hintStyle: TextStyle(
                       color: c.inputHint, fontSize: 12),
                   border:    InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 4),
-                ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 4)),
                 onChanged: (v) {
                   final r = int.tryParse(v) ?? widget.set.reps;
                   final w = double.tryParse(_weightCtrl.text) ??
                       widget.set.weight;
                   widget.onUpdate(w, r);
-                },
-              ),
+                }),
             ),
           ),
           const SizedBox(width: 6),
-          // Toggle
           GestureDetector(
             onTap: () {
               HapticFeedback.selectionClick();
@@ -2278,20 +1911,13 @@ class _SetRowState extends State<_SetRow> {
                   width: 1.2,
                 ),
                 boxShadow: completed
-                    ? [
-                        BoxShadow(
-                          color:      _teal.withOpacity(0.4),
-                          blurRadius: 8,
-                        ),
-                      ]
+                    ? [BoxShadow(color: _teal.withOpacity(0.4),
+                        blurRadius: 8)]
                     : null,
               ),
-              child: Icon(
-                Icons.check_rounded,
-                color: completed ? Colors.white : c.textTertiary,
-                size:  widget.compact ? 14 : 16,
-              ),
-            ),
+              child: Icon(Icons.check_rounded,
+                  color:  completed ? Colors.white : c.textTertiary,
+                  size:   widget.compact ? 14 : 16)),
           ),
         ],
       ),
@@ -2299,55 +1925,34 @@ class _SetRowState extends State<_SetRow> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _SmallBtn
-// ─────────────────────────────────────────────────────────────
 class _SmallBtn extends StatelessWidget {
-  final IconData     icon;
-  final Color        color;
-  final VoidCallback onTap;
-
-  const _SmallBtn({
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
+  final IconData icon; final Color color; final VoidCallback onTap;
+  const _SmallBtn({required this.icon, required this.color,
+      required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width:  28,
-        height: 28,
-        decoration: BoxDecoration(
-          color:        color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(7),
-          border: Border.all(
-              color: color.withOpacity(0.25), width: 0.8),
-        ),
-        child: Icon(icon, size: 14, color: color),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(width: 28, height: 28,
+      decoration: BoxDecoration(
+        color:        color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: color.withOpacity(0.25), width: 0.8)),
+      child: Icon(icon, size: 14, color: color)));
 }
 
 // ─────────────────────────────────────────────────────────────
-// _NoteChip — ADATTIVO
-// FIX: usa c.glassCardInset e c.glassBorder invece di
-//      Colors.white.withOpacity() che erano invisibili in light mode
+// _NoteChip — ADATTIVO (già corretto, usa c.mfc)
 // ─────────────────────────────────────────────────────────────
 class _NoteChip extends StatelessWidget {
   final String                        note;
   final Future<void> Function(String) onSave;
-
   const _NoteChip({required this.note, required this.onSave});
 
   @override
   Widget build(BuildContext context) {
     final c       = context.mfc;
     final hasNote = note.isNotEmpty;
-
     return GestureDetector(
       onTap: () async {
         final ctrl = TextEditingController(text: note);
@@ -2356,115 +1961,90 @@ class _NoteChip extends StatelessWidget {
           GlassSheetWrapper(
             title:       'Nota esercizio',
             accentColor: _cyan,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                GlassTextField(
-                  controller: ctrl,
-                  hintText:   'Aggiungi una nota...',
-                  maxLines:   3,
-                ),
-                const SizedBox(height: 16),
-                GlassPrimaryButton(
-                  label: 'Salva nota',
-                  color: _teal,
-                  onTap: () async {
-                    await onSave(ctrl.text.trim());
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              GlassTextField(controller: ctrl,
+                  hintText: 'Aggiungi una nota...', maxLines: 3),
+              const SizedBox(height: 16),
+              GlassPrimaryButton(
+                label: 'Salva nota',
+                color: _teal,
+                onTap: () async {
+                  await onSave(ctrl.text.trim());
+                  if (context.mounted) Navigator.pop(context);
+                }),
+            ])));
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          // FIX: c.glassCardInset invece di Colors.white.withOpacity(0.05)
-          color: hasNote
-              ? _cyan.withOpacity(0.1)
-              : c.glassCardInset,
+          color: hasNote ? _cyan.withOpacity(0.1) : c.glassCardInset,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            // FIX: c.glassBorder invece di Colors.white.withOpacity(0.1)
-            color: hasNote
-                ? _cyan.withOpacity(0.35)
-                : c.glassBorder,
+            color: hasNote ? _cyan.withOpacity(0.35) : c.glassBorder,
             width: 0.8,
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              hasNote
-                  ? Icons.sticky_note_2_rounded
-                  : Icons.add_comment_rounded,
-              size:  12,
-              color: hasNote
-                  ? _cyan.withOpacity(0.7)
-                  : c.iconSecondary,
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(
+            hasNote
+                ? Icons.sticky_note_2_rounded
+                : Icons.add_comment_rounded,
+            size:  12,
+            color: hasNote ? _cyan.withOpacity(0.7) : c.iconSecondary,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            hasNote ? 'Nota' : 'Aggiungi nota',
+            style: TextStyle(
+              color: hasNote ? _cyan.withOpacity(0.7) : c.textTertiary,
+              fontSize:   11,
+              fontWeight: FontWeight.w500,
             ),
-            const SizedBox(width: 4),
-            Text(
-              hasNote ? 'Nota' : 'Aggiungi nota',
-              style: TextStyle(
-                color: hasNote
-                    ? _cyan.withOpacity(0.7)
-                    : c.textTertiary,
-                fontSize:   11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ]),
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _AddToSessionSheet — scuro (modal overlay intenzionale)
+// _AddToSessionSheet — sheet usa GlassSheetWrapper (ora theme-aware)
 // ─────────────────────────────────────────────────────────────
 class _AddToSessionSheet extends StatelessWidget {
   final VoidCallback onAddExercise, onAddCircuit;
-
   const _AddToSessionSheet({
-    required this.onAddExercise,
-    required this.onAddCircuit,
-  });
+    required this.onAddExercise, required this.onAddCircuit});
 
   @override
   Widget build(BuildContext context) {
     return GlassSheetWrapper(
       title:       'Aggiungi alla sessione',
       accentColor: _teal,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _SessionMenuOption(
-            icon:     Icons.fitness_center_rounded,
-            label:    'Aggiungi esercizio',
-            subtitle: 'Inserisci un esercizio singolo',
-            color:    _teal,
-            onTap:    onAddExercise,
-          ),
-          const SizedBox(height: 10),
-          _SessionMenuOption(
-            icon:     Icons.loop_rounded,
-            label:    'Aggiungi circuito',
-            subtitle: 'Crea un gruppo di esercizi in serie',
-            color:    _indigo,
-            onTap:    onAddCircuit,
-          ),
-        ],
-      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        _SessionMenuOption(
+          icon:     Icons.fitness_center_rounded,
+          label:    'Aggiungi esercizio',
+          subtitle: 'Inserisci un esercizio singolo',
+          color:    _teal,
+          onTap:    onAddExercise,
+        ),
+        const SizedBox(height: 10),
+        _SessionMenuOption(
+          icon:     Icons.loop_rounded,
+          label:    'Aggiungi circuito',
+          subtitle: 'Crea un gruppo di esercizi in serie',
+          color:    _indigo,
+          onTap:    onAddCircuit,
+        ),
+      ]),
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// _SessionMenuOption — FIX: subtitle ora usa c.textTertiary
+// PRIMA: Colors.white.withOpacity(0.4) hardcoded
+// ─────────────────────────────────────────────────────────────
 class _SessionMenuOption extends StatelessWidget {
   final IconData     icon;
   final String       label, subtitle;
@@ -2472,15 +2052,15 @@ class _SessionMenuOption extends StatelessWidget {
   final VoidCallback onTap;
 
   const _SessionMenuOption({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.color,
+    required this.icon,     required this.label,
+    required this.subtitle, required this.color,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    // FIX: legge tema corrente
+    final c = context.mfc;
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
@@ -2492,53 +2072,35 @@ class _SessionMenuOption extends StatelessWidget {
             decoration: BoxDecoration(
               color:        color.withOpacity(0.08),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: color.withOpacity(0.3), width: 1),
-              boxShadow: [
-                BoxShadow(
-                    color: color.withOpacity(0.1), blurRadius: 10),
-              ],
+              border: Border.all(color: color.withOpacity(0.3), width: 1),
+              boxShadow: [BoxShadow(
+                  color: color.withOpacity(0.1), blurRadius: 10)],
             ),
             child: Row(
               children: [
-                Container(
-                  width:  40,
-                  height: 40,
+                Container(width: 40, height: 40,
                   decoration: BoxDecoration(
                     color:        color.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon, color: color, size: 20),
-                ),
+                  child: Icon(icon, color: color, size: 20)),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        style: TextStyle(
-                          color:      color,
-                          fontSize:   15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color:    Colors.white.withOpacity(0.4),
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size:  13,
-                  color: color.withOpacity(0.5),
-                ),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: TextStyle(
+                        color:      color,
+                        fontSize:   15,
+                        fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    // FIX: era Colors.white.withOpacity(0.4)
+                    Text(subtitle, style: TextStyle(
+                        color:    c.textTertiary,
+                        fontSize: 11)),
+                  ],
+                )),
+                Icon(Icons.arrow_forward_ios_rounded,
+                    size: 13, color: color.withOpacity(0.5)),
               ],
             ),
           ),
