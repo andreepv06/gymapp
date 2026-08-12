@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import '../../core/navigation/app_router.dart';
 import '../../core/theme/markfit_colors.dart';
 import '../../db/hive_database.dart';
@@ -17,7 +16,6 @@ import '../session/active_session_screen.dart';
 import 'workout_detail_screen.dart';
 import 'workouts_screen.dart';
 
-// Accent tokens — fissi in entrambi i temi
 const _teal       = Color(0xFF00D4AA);
 const _tealDark   = Color(0xFF00A880);
 const _green      = Color(0xFF22C55E);
@@ -29,9 +27,9 @@ const _cyan       = Color(0xFF00E5FF);
 // ─────────────────────────────────────────────────────────────
 // AllenamentiScreen
 // ─────────────────────────────────────────────────────────────
-
 class AllenamentiScreen extends StatefulWidget {
   const AllenamentiScreen({super.key});
+
   @override
   State<AllenamentiScreen> createState() => _AllenamentiScreenState();
 }
@@ -49,7 +47,10 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
   }
 
   @override
-  void dispose() { _pageController.dispose(); super.dispose(); }
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   Future<void> _handlePlayTap(BuildContext ctx, HiveWorkout workout) async {
     final wp = ctx.read<WorkoutProvider>();
@@ -64,7 +65,8 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFF3B82F6).withOpacity(0.12),
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.4))),
+            border: Border.all(
+                color: const Color(0xFF3B82F6).withOpacity(0.4))),
           child: const Icon(Icons.sports_gymnastics_rounded,
               color: Color(0xFF60A5FA), size: 22)),
         title:       'Sessione in corso',
@@ -95,7 +97,8 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
           decoration: BoxDecoration(
             color: _orange.withOpacity(0.12), shape: BoxShape.circle,
             border: Border.all(color: _orange.withOpacity(0.4)),
-            boxShadow: [BoxShadow(color: _orange.withOpacity(0.2), blurRadius: 12)]),
+            boxShadow: [BoxShadow(
+                color: _orange.withOpacity(0.2), blurRadius: 12)]),
           child: const Icon(Icons.pause_circle_outline_rounded,
               color: _orange, size: 22)),
         title:       'Sessione in pausa',
@@ -118,6 +121,7 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
       pushPage(ctx, ActiveSessionScreen(workout: workout));
       return;
     }
+
     pushPage(ctx, ActiveSessionScreen(workout: workout));
   }
 
@@ -131,8 +135,11 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
     await showKeyboardSafeSheet(context,
       WorkoutCreateSheet(onConfirm: (name) {
         HiveDatabase.instance.addWorkout(HiveWorkout(
-          name: name, iconId: 'dumbbell', iconColorIndex: 0,
-          createdAt: DateTime.now().toIso8601String()));
+          name:           name,
+          iconId:         'dumbbell',
+          iconColorIndex: 0,
+          createdAt:      DateTime.now().toIso8601String(),
+        ));
         if (mounted) {
           context.read<WorkoutProvider>().loadWorkouts();
           Navigator.pop(context);
@@ -144,11 +151,14 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
     final exercises = context.read<ExerciseProvider>().exercises;
     await showKeyboardSafeSheet(context,
       ExerciseFormSheet(
-        existingNames: exercises.map((e) => e.name.toLowerCase()).toSet(),
+        existingNames:
+            exercises.map((e) => e.name.toLowerCase()).toSet(),
         onConfirm: (name, muscleGroup, notes) {
           HiveDatabase.instance.addExercise(HiveExercise(
-            name: name, muscleGroup: muscleGroup,
-            notes: notes.isNotEmpty ? notes : null));
+            name:        name,
+            muscleGroup: muscleGroup,
+            notes:       notes.isNotEmpty ? notes : null,
+          ));
           if (mounted) {
             context.read<ExerciseProvider>().loadExercises();
             Navigator.pop(context);
@@ -156,19 +166,46 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
         }));
   }
 
+  // FIX: metodo per aprire direttamente l'editor icona/colore
+  // dal tap sull'icona nella card di Allenamenti.
+  // Usa WorkoutIconColorSheet (stesso componente di WorkoutDetailScreen)
+  // → stessa lista icone, stessa logica di salvataggio ARGB.
+  Future<void> _showIconColorSheet(HiveWorkout workout) async {
+    await showKeyboardSafeSheet(
+      context,
+      WorkoutIconColorSheet(
+        initialIconId:     workout.iconId,
+        initialColorValue: workout.iconColorIndex,
+        onSelect: (iconId, colorArgb) {
+          // Salvataggio identico a WorkoutDetailScreen._showIconColorSheet
+          workout.iconId         = iconId;
+          workout.iconColorIndex = colorArgb;
+          workout.save();
+          if (mounted) {
+            context.read<WorkoutProvider>().loadWorkouts();
+            Navigator.pop(context);
+          }
+        },
+      ),
+    );
+  }
+
   Future<void> _deleteWorkout(HiveWorkout workout) async {
     final confirm = await showGlassDialog<bool>(
       context: context, accentColor: kRed,
       icon: Container(width: 44, height: 44,
         decoration: BoxDecoration(
-          color: kRed.withOpacity(0.12), shape: BoxShape.circle,
-          border: Border.all(color: kRed.withOpacity(0.4), width: 1),
-          boxShadow: [BoxShadow(color: kRed.withOpacity(0.2), blurRadius: 12)]),
+          color:     kRed.withOpacity(0.12),
+          shape:     BoxShape.circle,
+          border:    Border.all(color: kRed.withOpacity(0.4), width: 1),
+          boxShadow: [BoxShadow(
+              color: kRed.withOpacity(0.2), blurRadius: 12)]),
         child: Icon(Icons.delete_outline_rounded,
             color: kRed.withOpacity(0.9), size: 20)),
       title:   'Eliminare questa scheda?',
-      message: 'Sei sicuro di voler eliminare definitivamente "${workout.name}"?\n'
-          'Tutti gli esercizi e i circuiti associati verranno rimossi.',
+      message: 'Sei sicuro di voler eliminare definitivamente '
+          '"${workout.name}"?\nTutti gli esercizi e i circuiti '
+          'associati verranno rimossi.',
       actions: [
         GlassDialogAction(label: 'Annulla',
             onTap: () => Navigator.pop(context, false)),
@@ -198,22 +235,24 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           padding: EdgeInsets.fromLTRB(
-            20, 24, 20, 88 + MediaQuery.of(context).viewPadding.bottom),
+            20, 24, 20,
+            88 + MediaQuery.of(context).viewPadding.bottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header ─────────────────────────────────────
+              // ── Header ──────────────────────────────────
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                   Text('Allenamenti', style: TextStyle(
-                      color: c.textPrimary,   // was Colors.white
-                      fontSize: 32, fontWeight: FontWeight.w800,
+                      color:        c.textPrimary,
+                      fontSize:     32,
+                      fontWeight:   FontWeight.w800,
                       letterSpacing: -0.5)),
                   const SizedBox(height: 4),
                   Text('Il tuo spazio fitness', style: TextStyle(
-                      color: c.textTertiary,  // was Colors.white.withOpacity(0.5)
+                      color:    c.textTertiary,
                       fontSize: 14)),
                 ])),
                 const SizedBox(width: 12),
@@ -232,12 +271,13 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                 _SectionLabel(
                   label: 'PAUSED SESSION',
                   color: _orange,
-                  icon: Icons.pause_circle_filled_rounded),
+                  icon:  Icons.pause_circle_filled_rounded),
                 const SizedBox(height: 10),
                 ...sp.pausedSessions.map((data) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _PausedSessionPanel(
-                    data: data, sp: sp,
+                    data:     data,
+                    sp:       sp,
                     onResume: () async {
                       final id = data['id'] as String?;
                       if (id == null) return;
@@ -248,7 +288,8 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                       try {
                         final workout = HiveDatabase.instance
                             .getWorkouts().firstWhere((w) => w.key == wk);
-                        pushPage(context, ActiveSessionScreen(workout: workout));
+                        pushPage(context,
+                            ActiveSessionScreen(workout: workout));
                       } catch (_) {}
                     },
                     onDelete: () async {
@@ -268,6 +309,8 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                 onDelete:       _deleteWorkout,
                 onViewAll:      () => pushPage(context, const WorkoutsScreen()),
                 onCreateNew:    _showCreateWorkoutSheet,
+                // FIX: callback per tap diretto sull'icona della card
+                onIconTap:      _showIconColorSheet,
                 sp:             sp),
             ],
           ),
@@ -280,7 +323,6 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
 // ─────────────────────────────────────────────────────────────
 // _GestioneEserciziPill — ADATTIVO
 // ─────────────────────────────────────────────────────────────
-
 class _GestioneEserciziPill extends StatelessWidget {
   final VoidCallback onLibrary, onNewExercise;
   const _GestioneEserciziPill(
@@ -295,16 +337,21 @@ class _GestioneEserciziPill extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
           decoration: BoxDecoration(
-            color: c.glassCard,
+            color:        c.glassCard,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: c.glassBorder, width: 1)),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            _PillButton(icon: Icons.list_alt_rounded,
-                color: c.iconPrimary,   // was Colors.white70
-                onTap: onLibrary, tooltip: 'Libreria esercizi'),
-            Container(width: 1, height: 20, color: c.divider),  // was white.withOpacity(0.15)
-            _PillButton(icon: Icons.add_rounded,
-                color: _teal, onTap: onNewExercise, tooltip: 'Nuovo esercizio'),
+            _PillButton(
+              icon:    Icons.list_alt_rounded,
+              color:   c.iconPrimary,
+              onTap:   onLibrary,
+              tooltip: 'Libreria esercizi'),
+            Container(width: 1, height: 20, color: c.divider),
+            _PillButton(
+              icon:    Icons.add_rounded,
+              color:   _teal,
+              onTap:   onNewExercise,
+              tooltip: 'Nuovo esercizio'),
           ]),
         ),
       ),
@@ -313,8 +360,10 @@ class _GestioneEserciziPill extends StatelessWidget {
 }
 
 class _PillButton extends StatefulWidget {
-  final IconData icon; final Color color;
-  final VoidCallback onTap; final String tooltip;
+  final IconData icon;
+  final Color    color;
+  final VoidCallback onTap;
+  final String   tooltip;
   const _PillButton({required this.icon, required this.color,
       required this.onTap, required this.tooltip});
   @override
@@ -328,13 +377,14 @@ class _PillButtonState extends State<_PillButton> {
     return Tooltip(
       message: widget.tooltip,
       child: GestureDetector(
-        onTapDown:  (_) => setState(() => _pressed = true),
-        onTapUp:    (_) { setState(() => _pressed = false); widget.onTap(); },
+        onTapDown:   (_) => setState(() => _pressed = true),
+        onTapUp:     (_) { setState(() => _pressed = false); widget.onTap(); },
         onTapCancel: () => setState(() => _pressed = false),
         child: AnimatedScale(
           scale:    _pressed ? 0.85 : 1.0,
           duration: const Duration(milliseconds: 120),
-          child: Container(width: 44, height: 44,
+          child: Container(
+            width: 44, height: 44,
             decoration: BoxDecoration(
               color: _pressed
                   ? widget.color.withOpacity(0.15) : Colors.transparent,
@@ -344,24 +394,31 @@ class _PillButtonState extends State<_PillButton> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _SectionLabel — invariato (usa accent colors)
+// _SectionLabel
 // ─────────────────────────────────────────────────────────────
-
 class _SectionLabel extends StatelessWidget {
-  final String label; final Color color; final IconData icon;
-  const _SectionLabel({required this.label, required this.color,
-      required this.icon});
+  final String   label;
+  final Color    color;
+  final IconData icon;
+  const _SectionLabel({
+    required this.label, required this.color, required this.icon});
+
   @override
   Widget build(BuildContext context) {
     return Row(children: [
       Container(width: 6, height: 6, decoration: BoxDecoration(
-          color: color, shape: BoxShape.circle,
-          boxShadow: [BoxShadow(color: color.withOpacity(0.6), blurRadius: 4)])),
+          color:     color,
+          shape:     BoxShape.circle,
+          boxShadow: [BoxShadow(
+              color: color.withOpacity(0.6), blurRadius: 4)])),
       const SizedBox(width: 8),
       Icon(icon, size: 14, color: color),
       const SizedBox(width: 6),
-      Text(label, style: TextStyle(color: color, fontSize: 11,
-          fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+      Text(label, style: TextStyle(
+          color:        color,
+          fontSize:     11,
+          fontWeight:   FontWeight.w800,
+          letterSpacing: 1.2)),
     ]);
   }
 }
@@ -369,13 +426,13 @@ class _SectionLabel extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 // _ActiveRecoveryBanner — ADATTIVO
 // ─────────────────────────────────────────────────────────────
-
 class _ActiveRecoveryBanner extends StatelessWidget {
   final SessionProvider sp;
   const _ActiveRecoveryBanner({required this.sp});
 
   String _fmt(int s) {
-    final h = s ~/ 3600; final m = (s % 3600) ~/ 60;
+    final h = s ~/ 3600;
+    final m = (s % 3600) ~/ 60;
     if (h > 0) return '${h}h ${m}min';
     if (m > 0) return '${m}min';
     return '${s}s';
@@ -404,8 +461,9 @@ class _ActiveRecoveryBanner extends StatelessWidget {
             border: Border.all(
                 color: const Color(0xFF3B82F6).withOpacity(0.4), width: 1.2),
             boxShadow: [BoxShadow(
-                color: const Color(0xFF3B82F6).withOpacity(0.15),
-                blurRadius: 24, spreadRadius: 1)]),
+                color:       const Color(0xFF3B82F6).withOpacity(0.15),
+                blurRadius:  24,
+                spreadRadius: 1)]),
           child: Row(children: [
             Container(width: 46, height: 46,
               decoration: BoxDecoration(
@@ -418,17 +476,21 @@ class _ActiveRecoveryBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
               Text('Sessione interrotta', style: TextStyle(
-                  color: c.textSecondary,   // was Colors.white.withOpacity(0.6)
-                  fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                  color:        c.textSecondary,
+                  fontSize:     11,
+                  fontWeight:   FontWeight.w600,
+                  letterSpacing: 0.5)),
               const SizedBox(height: 2),
               Text(name, style: TextStyle(
-                  color: c.textPrimary,   // was Colors.white
-                  fontSize: 15, fontWeight: FontWeight.w700),
+                  color:      c.textPrimary,
+                  fontSize:   15,
+                  fontWeight: FontWeight.w700),
                   maxLines: 1, overflow: TextOverflow.ellipsis),
               const SizedBox(height: 4),
               Row(children: [
                 _StatChip(icon: Icons.timer_outlined,
-                    label: _fmt(elapsed), color: const Color(0xFF60A5FA)),
+                    label: _fmt(elapsed),
+                    color: const Color(0xFF60A5FA)),
                 const SizedBox(width: 8),
                 _StatChip(icon: Icons.check_rounded,
                     label: '$completed/$total serie',
@@ -446,14 +508,16 @@ class _ActiveRecoveryBanner extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF3B82F6),
+                  color:        const Color(0xFF3B82F6),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [BoxShadow(
-                      color: const Color(0xFF3B82F6).withOpacity(0.4),
-                      blurRadius: 10, offset: const Offset(0, 3))]),
+                      color:     const Color(0xFF3B82F6).withOpacity(0.4),
+                      blurRadius: 10,
+                      offset:    const Offset(0, 3))]),
                 child: const Text('Riprendi', style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w700,
-                    fontSize: 13)))),
+                    color:      Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize:   13)))),
           ]),
         ),
       ),
@@ -464,17 +528,17 @@ class _ActiveRecoveryBanner extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 // _PausedSessionPanel — ADATTIVO
 // ─────────────────────────────────────────────────────────────
-
 class _PausedSessionPanel extends StatelessWidget {
   final Map<String, dynamic> data;
-  final SessionProvider sp;
-  final VoidCallback onResume, onDelete;
+  final SessionProvider      sp;
+  final VoidCallback         onResume, onDelete;
   const _PausedSessionPanel({
     required this.data, required this.sp,
     required this.onResume, required this.onDelete});
 
   String _fmt(int s) {
-    final h = s ~/ 3600; final m = (s % 3600) ~/ 60;
+    final h = s ~/ 3600;
+    final m = (s % 3600) ~/ 60;
     if (h > 0) return '${h}h ${m}min';
     if (m > 0) return '${m}min';
     return '${s}s';
@@ -520,20 +584,29 @@ class _PausedSessionPanel extends StatelessWidget {
               end: Alignment.bottomRight,
               colors: [_orange.withOpacity(0.18), _orangeWarm.withOpacity(0.08)]),
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: _orange.withOpacity(0.45), width: 1.3),
-            boxShadow: [BoxShadow(color: _orange.withOpacity(0.2),
-                blurRadius: 28, spreadRadius: 1)]),
+            border: Border.all(
+                color: _orange.withOpacity(0.45), width: 1.3),
+            boxShadow: [BoxShadow(
+                color:       _orange.withOpacity(0.2),
+                blurRadius:  28,
+                spreadRadius: 1)]),
           child: Padding(
             padding: const EdgeInsets.all(18),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Row(children: [
                 Container(width: 7, height: 7, decoration: BoxDecoration(
-                    color: _orange, shape: BoxShape.circle,
+                    color:     _orange,
+                    shape:     BoxShape.circle,
                     boxShadow: [BoxShadow(
-                        color: _orange.withOpacity(0.7), blurRadius: 6)])),
+                        color:     _orange.withOpacity(0.7),
+                        blurRadius: 6)])),
                 const SizedBox(width: 8),
                 Text('PAUSED SESSION', style: TextStyle(
-                    color: _orange, fontSize: 10, fontWeight: FontWeight.w800,
+                    color:        _orange,
+                    fontSize:     10,
+                    fontWeight:   FontWeight.w800,
                     letterSpacing: 1.1)),
                 const Spacer(),
                 GestureDetector(
@@ -542,19 +615,23 @@ class _PausedSessionPanel extends StatelessWidget {
                       context: context, accentColor: _red,
                       icon: Container(width: 44, height: 44,
                         decoration: BoxDecoration(
-                          color: _red.withOpacity(0.12), shape: BoxShape.circle,
-                          border: Border.all(color: _red.withOpacity(0.4)),
+                          color:     _red.withOpacity(0.12),
+                          shape:     BoxShape.circle,
+                          border:    Border.all(color: _red.withOpacity(0.4)),
                           boxShadow: [BoxShadow(
-                              color: _red.withOpacity(0.2), blurRadius: 12)]),
+                              color:     _red.withOpacity(0.2),
+                              blurRadius: 12)]),
                         child: Icon(Icons.delete_outline_rounded,
                             color: _red.withOpacity(0.9), size: 20)),
                       title:   'Eliminare sessione?',
-                      message: 'Sei sicuro di voler eliminare questa sessione in pausa? '
-                          'Tutti i progressi correnti saranno persi.',
+                      message: 'Sei sicuro di voler eliminare questa '
+                          'sessione in pausa? Tutti i progressi '
+                          'correnti saranno persi.',
                       actions: [
                         GlassDialogAction(label: 'Annulla',
                             onTap: () => Navigator.pop(context, false)),
-                        GlassDialogAction(label: 'Elimina', isDestructive: true,
+                        GlassDialogAction(label: 'Elimina',
+                            isDestructive: true,
                             onTap: () => Navigator.pop(context, true)),
                       ]);
                     if (ok == true && context.mounted) onDelete();
@@ -563,16 +640,19 @@ class _PausedSessionPanel extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: _red.withOpacity(0.12),
+                      color:        _red.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: _red.withOpacity(0.35))),
                     child: const Text('Elimina', style: TextStyle(
-                        color: _red, fontSize: 11, fontWeight: FontWeight.w600)))),
+                        color:      _red,
+                        fontSize:   11,
+                        fontWeight: FontWeight.w600)))),
               ]),
               const SizedBox(height: 14),
               Text(_name(), style: TextStyle(
-                  color: c.textPrimary,   // was Colors.white
-                  fontSize: 18, fontWeight: FontWeight.w800),
+                  color:      c.textPrimary,
+                  fontSize:   18,
+                  fontWeight: FontWeight.w800),
                   maxLines: 1, overflow: TextOverflow.ellipsis),
               const SizedBox(height: 10),
               Wrap(spacing: 8, runSpacing: 6, children: [
@@ -584,18 +664,19 @@ class _PausedSessionPanel extends StatelessWidget {
                     label: '$completed/$total serie', color: _orange),
               ]),
               const SizedBox(height: 16),
-              // "Riprendi" button: white on orange gradient — keep white
               GestureDetector(
                 onTap: onResume,
                 child: Container(
-                  width: double.infinity,
+                  width:   double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                         colors: [_orange, _orangeWarm]),
                     borderRadius: BorderRadius.circular(14),
-                    boxShadow: [BoxShadow(color: _orange.withOpacity(0.4),
-                        blurRadius: 16, offset: const Offset(0, 4))]),
+                    boxShadow: [BoxShadow(
+                        color:     _orange.withOpacity(0.4),
+                        blurRadius: 16,
+                        offset:    const Offset(0, 4))]),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -603,8 +684,9 @@ class _PausedSessionPanel extends StatelessWidget {
                         color: Colors.white, size: 22),
                     SizedBox(width: 8),
                     Text('Riprendi allenamento', style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w800,
-                        fontSize: 15)),
+                        color:      Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize:   15)),
                   ]))),
             ]),
           ),
@@ -616,25 +698,40 @@ class _PausedSessionPanel extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────
 // _NuovaSessionePanel — ADATTIVO
+// FIX: aggiunto parametro onIconTap passato a _WorkoutCarouselCard
 // ─────────────────────────────────────────────────────────────
-
 class _NuovaSessionePanel extends StatelessWidget {
-  final List<HiveWorkout> workouts;
-  final int currentPage;
-  final PageController pageController;
-  final void Function(int) onPageChanged;
-  final void Function(HiveWorkout) onPlay, onEdit, onDelete;
-  final VoidCallback onViewAll, onCreateNew;
-  final SessionProvider sp;
+  final List<HiveWorkout>           workouts;
+  final int                         currentPage;
+  final PageController              pageController;
+  final void Function(int)          onPageChanged;
+  final void Function(HiveWorkout)  onPlay;
+  final void Function(HiveWorkout)  onEdit;
+  final void Function(HiveWorkout)  onDelete;
+  // FIX: callback tap diretto sull'icona della card
+  final void Function(HiveWorkout)  onIconTap;
+  final VoidCallback                onViewAll;
+  final VoidCallback                onCreateNew;
+  final SessionProvider             sp;
+
   const _NuovaSessionePanel({
-    required this.workouts, required this.currentPage,
-    required this.pageController, required this.onPageChanged,
-    required this.onPlay, required this.onEdit, required this.onDelete,
-    required this.onViewAll, required this.onCreateNew, required this.sp});
+    required this.workouts,
+    required this.currentPage,
+    required this.pageController,
+    required this.onPageChanged,
+    required this.onPlay,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onIconTap,   // FIX
+    required this.onViewAll,
+    required this.onCreateNew,
+    required this.sp,
+  });
 
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: BackdropFilter(
@@ -664,18 +761,20 @@ class _NuovaSessionePanel extends StatelessWidget {
                 const SizedBox(width: 12),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Nuova Sessione', style: TextStyle(
-                      color: c.textPrimary,   // was Colors.white
-                      fontSize: 20, fontWeight: FontWeight.w800)),
+                      color:      c.textPrimary,
+                      fontSize:   20,
+                      fontWeight: FontWeight.w800)),
                   Text('Scegli come iniziare', style: TextStyle(
-                      color: c.textTertiary,  // was Colors.white.withOpacity(0.45)
+                      color:    c.textTertiary,
                       fontSize: 12)),
                 ]),
               ]),
               const SizedBox(height: 22),
               Row(children: [
                 Text('Le tue schede', style: TextStyle(
-                    color: c.textSecondary,  // was Colors.white.withOpacity(0.7)
-                    fontSize: 13, fontWeight: FontWeight.w700,
+                    color:        c.textSecondary,
+                    fontSize:     13,
+                    fontWeight:   FontWeight.w700,
                     letterSpacing: 0.3)),
                 const Spacer(),
                 if (workouts.isNotEmpty)
@@ -689,13 +788,14 @@ class _NuovaSessionePanel extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 7),
                           decoration: BoxDecoration(
-                            color: _teal.withOpacity(0.12),
+                            color:        _teal.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                                 color: _teal.withOpacity(0.35), width: 1)),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
                             Text('Vedi tutte', style: TextStyle(
-                                color: _teal, fontSize: 12,
+                                color:      _teal,
+                                fontSize:   12,
                                 fontWeight: FontWeight.w700)),
                             const SizedBox(width: 4),
                             Icon(Icons.arrow_forward_ios_rounded,
@@ -721,9 +821,12 @@ class _NuovaSessionePanel extends StatelessWidget {
                           hasPaused: sp.hasPausedSessionForWorkout(w.key),
                           hasActive: sp.hasActiveSession &&
                               sp.currentWorkout?.key == w.key,
-                          onPlay:   () => onPlay(w),
-                          onEdit:   () => onEdit(w),
-                          onDelete: () => onDelete(w)));
+                          onPlay:    () => onPlay(w),
+                          onEdit:    () => onEdit(w),
+                          onDelete:  () => onDelete(w),
+                          // FIX: tap sull'icona → apre editor icona
+                          onIconTap: () => onIconTap(w),
+                        ));
                     })),
                 const SizedBox(height: 14),
                 if (workouts.length > 1)
@@ -734,9 +837,10 @@ class _NuovaSessionePanel extends StatelessWidget {
                       return AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
                         margin: const EdgeInsets.symmetric(horizontal: 3),
-                        width: active ? 18 : 6, height: 6,
+                        width:  active ? 18 : 6,
+                        height: 6,
                         decoration: BoxDecoration(
-                          color: active ? _teal : c.textTertiary,  // was white.withOpacity(0.25)
+                          color: active ? _teal : c.textTertiary,
                           borderRadius: BorderRadius.circular(3),
                           boxShadow: active
                               ? [BoxShadow(color: _teal.withOpacity(0.5),
@@ -745,31 +849,37 @@ class _NuovaSessionePanel extends StatelessWidget {
                     }))),
               ],
               const SizedBox(height: 20),
-              Divider(color: c.divider, height: 1),  // was Colors.white.withOpacity(0.1)
+              Divider(color: c.divider, height: 1),
               const SizedBox(height: 20),
-              // "Crea nuova scheda" button — ghost teal, text stays _teal
               GestureDetector(
                 onTap: onCreateNew,
                 child: Container(
-                  width: double.infinity,
+                  width:   double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(colors: [
-                      _teal.withOpacity(0.25), _tealDark.withOpacity(0.15)]),
+                      _teal.withOpacity(0.25),
+                      _tealDark.withOpacity(0.15)]),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: _teal.withOpacity(0.5), width: 1.3),
-                    boxShadow: [BoxShadow(color: _teal.withOpacity(0.2),
-                        blurRadius: 20, spreadRadius: 1)]),
+                    border: Border.all(
+                        color: _teal.withOpacity(0.5), width: 1.3),
+                    boxShadow: [BoxShadow(
+                        color:       _teal.withOpacity(0.2),
+                        blurRadius:  20,
+                        spreadRadius: 1)]),
                   child: Row(mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                     Container(width: 22, height: 22,
                       decoration: BoxDecoration(
-                          color: _teal.withOpacity(0.2), shape: BoxShape.circle),
+                          color:  _teal.withOpacity(0.2),
+                          shape:  BoxShape.circle),
                       child: const Icon(Icons.add_rounded,
                           color: _teal, size: 16)),
                     const SizedBox(width: 10),
                     const Text('Crea nuova scheda', style: TextStyle(
-                        color: _teal, fontWeight: FontWeight.w700, fontSize: 15)),
+                        color:      _teal,
+                        fontWeight: FontWeight.w700,
+                        fontSize:   15)),
                   ]))),
             ]),
           ),
@@ -781,15 +891,26 @@ class _NuovaSessionePanel extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────
 // _WorkoutCarouselCard — ADATTIVO
+// FIX: aggiunto onIconTap + GestureDetector sull'icona con badge edit
 // ─────────────────────────────────────────────────────────────
-
 class _WorkoutCarouselCard extends StatelessWidget {
-  final HiveWorkout workout;
-  final bool hasPaused, hasActive;
-  final VoidCallback onPlay, onEdit, onDelete;
+  final HiveWorkout  workout;
+  final bool         hasPaused, hasActive;
+  final VoidCallback onPlay;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  // FIX: callback tap sull'icona → apre WorkoutIconColorSheet
+  final VoidCallback onIconTap;
+
   const _WorkoutCarouselCard({
-    required this.workout, required this.hasPaused, required this.hasActive,
-    required this.onPlay, required this.onEdit, required this.onDelete});
+    required this.workout,
+    required this.hasPaused,
+    required this.hasActive,
+    required this.onPlay,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onIconTap,  // FIX
+  });
 
   Map<String, int> _stats() {
     final allEx    = HiveDatabase.instance.getWorkoutExercises(workout.key);
@@ -805,11 +926,12 @@ class _WorkoutCarouselCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c        = context.mfc;
     final stats    = _stats();
-    final freeEx   = stats['free'] ?? 0;
+    final freeEx   = stats['free']     ?? 0;
     final circuits = stats['circuits'] ?? 0;
-    final sets     = stats['sets'] ?? 0;
-    final indicator = hasPaused ? _orange : hasActive
-        ? const Color(0xFF3B82F6) : null;
+    final sets     = stats['sets']     ?? 0;
+    final indicator = hasPaused
+        ? _orange
+        : hasActive ? const Color(0xFF3B82F6) : null;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
@@ -817,11 +939,12 @@ class _WorkoutCarouselCard extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           decoration: BoxDecoration(
-            color: c.glassCard,
+            color:        c.glassCard,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
                 color: indicator != null
-                    ? indicator.withOpacity(0.5) : _teal.withOpacity(0.35),
+                    ? indicator.withOpacity(0.5)
+                    : _teal.withOpacity(0.35),
                 width: 1.3),
             boxShadow: [
               if (c.showElevation)
@@ -840,27 +963,65 @@ class _WorkoutCarouselCard extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(children: [
                     Container(width: 6, height: 6, decoration: BoxDecoration(
-                        color: indicator, shape: BoxShape.circle,
+                        color:     indicator,
+                        shape:     BoxShape.circle,
                         boxShadow: [BoxShadow(
-                            color: indicator.withOpacity(0.6), blurRadius: 4)])),
+                            color:      indicator.withOpacity(0.6),
+                            blurRadius: 4)])),
                     const SizedBox(width: 6),
                     Text(hasPaused ? 'In pausa' : 'In corso',
-                        style: TextStyle(color: indicator, fontSize: 10,
-                            fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                        style: TextStyle(
+                            color:        indicator,
+                            fontSize:     10,
+                            fontWeight:   FontWeight.w700,
+                            letterSpacing: 0.5)),
                   ])),
               Row(children: [
-                WorkoutAvatar(
-                  iconId: workout.iconId ?? 'dumbbell',
-                  iconColorIndex: workout.iconColorIndex ?? 0,
-                  customImagePath: workout.customImagePath,
-                  size: 44, iconSize: 22, borderRadius: 12),
+                // FIX: tap sull'icona → _showIconColorSheet
+                // GestureDetector separato dalla card intera per
+                // non interferire con il tap sul resto della card.
+                // Badge edit per comunicare l'interattività.
+                GestureDetector(
+                  onTap: onIconTap,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      WorkoutAvatar(
+                        iconId:         workout.iconId ?? 'dumbbell',
+                        iconColorIndex: workout.iconColorIndex ?? 0,
+                        customImagePath: workout.customImagePath,
+                        size:           44,
+                        iconSize:       22,
+                        borderRadius:   12,
+                      ),
+                      // Badge edit (come in _WorkoutHeader di workout_detail)
+                      Positioned(
+                        right:  -3,
+                        bottom: -3,
+                        child: Container(
+                          width:  17,
+                          height: 17,
+                          decoration: BoxDecoration(
+                            color:  _cyan,
+                            shape:  BoxShape.circle,
+                            border: Border.all(
+                                color: c.scaffoldBg, width: 1.5),
+                          ),
+                          child: const Icon(Icons.edit_rounded,
+                              size: 9, color: Colors.black),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(width: 12),
                 Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                   Text(workout.name, style: TextStyle(
-                      color: c.textPrimary,   // was Colors.white
-                      fontSize: 16, fontWeight: FontWeight.w800),
+                      color:      c.textPrimary,
+                      fontSize:   16,
+                      fontWeight: FontWeight.w800),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
                   Wrap(spacing: 6, children: [
@@ -872,35 +1033,47 @@ class _WorkoutCarouselCard extends StatelessWidget {
               ]),
               const Spacer(),
               Row(children: [
-                GestureDetector(onTap: onEdit,
+                GestureDetector(
+                  onTap: onEdit,
                   child: Row(children: [
                     Icon(Icons.edit_outlined, size: 13, color: c.iconSecondary),
                     const SizedBox(width: 5),
                     Text('Modifica', style: TextStyle(
-                        color: c.textTertiary,  // was Colors.white.withOpacity(0.5)
-                        fontSize: 13, fontWeight: FontWeight.w500))])),
+                        color:      c.textTertiary,
+                        fontSize:   13,
+                        fontWeight: FontWeight.w500))])),
                 const SizedBox(width: 12),
-                GestureDetector(onTap: onDelete,
-                  child: Container(width: 30, height: 30,
+                GestureDetector(
+                  onTap: onDelete,
+                  child: Container(
+                    width:  30,
+                    height: 30,
                     decoration: BoxDecoration(
-                      color: _red.withOpacity(0.1),
+                      color:        _red.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _red.withOpacity(0.3), width: 0.8)),
+                      border: Border.all(
+                          color: _red.withOpacity(0.3), width: 0.8)),
                     child: Icon(Icons.delete_outline_rounded,
                         size: 15, color: _red.withOpacity(0.8)))),
                 const Spacer(),
-                GestureDetector(onTap: onPlay,
-                  child: Container(width: 50, height: 50,
+                GestureDetector(
+                  onTap: onPlay,
+                  child: Container(
+                    width:  50,
+                    height: 50,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end:   Alignment.bottomRight,
                         colors: hasPaused
                             ? [_orange, _orangeWarm]
-                            : [const Color(0xFF22C55E), const Color(0xFF16A34A)]),
-                      shape: BoxShape.circle,
+                            : [const Color(0xFF22C55E),
+                               const Color(0xFF16A34A)]),
+                      shape:     BoxShape.circle,
                       boxShadow: [BoxShadow(
                           color: (hasPaused ? _orange : _green).withOpacity(0.5),
-                          blurRadius: 14, offset: const Offset(0, 3))]),
+                          blurRadius: 14,
+                          offset:    const Offset(0, 3))]),
                     child: const Icon(Icons.play_arrow_rounded,
                         color: Colors.white, size: 28))),
               ]),
@@ -915,7 +1088,6 @@ class _WorkoutCarouselCard extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 // _EmptyCarouselCard — ADATTIVO
 // ─────────────────────────────────────────────────────────────
-
 class _EmptyCarouselCard extends StatelessWidget {
   final VoidCallback onCreateNew;
   const _EmptyCarouselCard({required this.onCreateNew});
@@ -930,9 +1102,10 @@ class _EmptyCarouselCard extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
-            width: double.infinity, height: 196,
+            width:  double.infinity,
+            height: 196,
             decoration: BoxDecoration(
-              color: c.glassCardInset,
+              color:        c.glassCardInset,
               borderRadius: BorderRadius.circular(22),
               border: Border.all(color: _cyan.withOpacity(0.2), width: 1),
               boxShadow: c.showElevation
@@ -943,16 +1116,20 @@ class _EmptyCarouselCard extends StatelessWidget {
               children: [
               Container(width: 52, height: 52,
                 decoration: BoxDecoration(
-                  color: _teal.withOpacity(0.12), shape: BoxShape.circle,
-                  border: Border.all(color: _teal.withOpacity(0.3), width: 1)),
-                child: const Icon(Icons.add_rounded, color: _teal, size: 28)),
+                  color:  _teal.withOpacity(0.12),
+                  shape:  BoxShape.circle,
+                  border: Border.all(
+                      color: _teal.withOpacity(0.3), width: 1)),
+                child: const Icon(Icons.add_rounded,
+                    color: _teal, size: 28)),
               const SizedBox(height: 12),
               Text('Crea la tua prima scheda', style: TextStyle(
-                  color: c.textPrimary,   // was Colors.white
-                  fontSize: 15, fontWeight: FontWeight.w700)),
+                  color:      c.textPrimary,
+                  fontSize:   15,
+                  fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
               Text('Tocca per iniziare', style: TextStyle(
-                  color: c.textTertiary,  // was Colors.white.withOpacity(0.4)
+                  color:    c.textTertiary,
                   fontSize: 12)),
             ]),
           ),
@@ -963,19 +1140,23 @@ class _EmptyCarouselCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _StatChip — invariato (usa accent colors)
+// _StatChip — accent colors fissi
 // ─────────────────────────────────────────────────────────────
-
 class _StatChip extends StatelessWidget {
-  final IconData icon; final String label; final Color color;
-  const _StatChip({required this.icon, required this.label, required this.color});
+  final IconData icon;
+  final String   label;
+  final Color    color;
+  const _StatChip({required this.icon, required this.label,
+      required this.color});
+
   @override
   Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min,
     children: [
     Icon(icon, size: 12, color: color.withOpacity(0.8)),
     const SizedBox(width: 4),
     Text(label, style: TextStyle(
-        color: color.withOpacity(0.9), fontSize: 11,
+        color:      color.withOpacity(0.9),
+        fontSize:   11,
         fontWeight: FontWeight.w600)),
   ]);
 }
@@ -983,21 +1164,22 @@ class _StatChip extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 // _TinyChip — ADATTIVO
 // ─────────────────────────────────────────────────────────────
-
 class _TinyChip extends StatelessWidget {
   final String label;
   const _TinyChip({required this.label});
+
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: c.glassCardInset,
+        color:        c.glassCardInset,
         borderRadius: BorderRadius.circular(5),
         border: Border.all(color: c.glassBorder, width: 0.7)),
       child: Text(label, style: TextStyle(
-          color: c.textTertiary,  // was Colors.white.withOpacity(0.55)
-          fontSize: 10, fontWeight: FontWeight.w600)));
+          color:      c.textTertiary,
+          fontSize:   10,
+          fontWeight: FontWeight.w600)));
   }
 }

@@ -19,7 +19,7 @@ const _kRed    = MarkFitColors.red;
 const _kOrange = MarkFitColors.orange;
 
 // ─────────────────────────────────────────────────────────────
-// WorkoutsScreen
+// WorkoutsScreen — "Le mie schede"
 // ─────────────────────────────────────────────────────────────
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
@@ -36,6 +36,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       isScrollControlled: true,
       useSafeArea:        true,
       backgroundColor:    Colors.transparent,
+      isDismissible:      true,
+      enableDrag:         true,
       builder: (ctx) => GestureDetector(
         onTap: () => FocusScope.of(ctx).unfocus(),
         child: Padding(
@@ -55,7 +57,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   Future<void> _showCreateSheet() async {
     await _openSheet(WorkoutCreateSheet(
       onConfirm: (name) async {
-        // FIX: addWorkout richiede HiveWorkout, non String
         await HiveDatabase.instance.addWorkout(HiveWorkout(
           name:           name,
           iconId:         'dumbbell',
@@ -137,7 +138,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       initialIconId:     workout.iconId,
       initialColorValue: workout.iconColorIndex,
       onSelect: (iconId, colorArgb) {
-        // FIX: salva ARGB diretto, non indice
         workout.iconId         = iconId;
         workout.iconColorIndex = colorArgb;
         workout.save();
@@ -200,7 +200,11 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              _GlassAppBar(onAdd: _showCreateSheet),
+              // FIX: passa canGoBack per mostrare il pulsante indietro
+              _GlassAppBar(
+                onAdd:     _showCreateSheet,
+                canGoBack: Navigator.of(context).canPop(),
+              ),
               Expanded(
                 child: Consumer<WorkoutProvider>(
                   builder: (ctx, wp, _) {
@@ -252,11 +256,16 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GlassAppBar
+// _GlassAppBar — FIX: aggiunto pulsante indietro Glass
+//
+// Il pulsante è mostrato quando canGoBack == true
+// (WorkoutsScreen è sempre pushata, non è mai root tab).
+// Coerente con _WorkoutHeader e _SessionHeader già presenti.
 // ─────────────────────────────────────────────────────────────
 class _GlassAppBar extends StatelessWidget {
   final VoidCallback onAdd;
-  const _GlassAppBar({required this.onAdd});
+  final bool         canGoBack;
+  const _GlassAppBar({required this.onAdd, this.canGoBack = true});
 
   @override
   Widget build(BuildContext context) {
@@ -285,6 +294,28 @@ class _GlassAppBar extends StatelessWidget {
             ),
             child: Row(
               children: [
+                // FIX: pulsante indietro Glass (coerente con _WorkoutHeader)
+                if (canGoBack) ...[
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width:  36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color:        c.glassCardInset,
+                        borderRadius: BorderRadius.circular(10),
+                        border:       Border.all(color: c.glassBorder),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: c.iconPrimary,
+                        size:  15,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                // Titolo
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -299,6 +330,7 @@ class _GlassAppBar extends StatelessWidget {
                     ],
                   ),
                 ),
+                // Pulsante aggiungi
                 GestureDetector(
                   onTap: onAdd,
                   child: Container(
@@ -327,7 +359,7 @@ class _GlassAppBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutGlassCard
+// _WorkoutGlassCard — ADATTIVO
 // ─────────────────────────────────────────────────────────────
 class _WorkoutGlassCard extends StatelessWidget {
   final HiveWorkout  workout;
@@ -529,13 +561,9 @@ class _EmptyState extends StatelessWidget {
 }
 
 // ═════════════════════════════════════════════════════════════
-// SHEET WIDGETS
+// SHEET WIDGETS — tutti theme-aware via GlassSheetWrapper
 // ═════════════════════════════════════════════════════════════
 
-// ─────────────────────────────────────────────────────────────
-// _WorkoutOptionsSheet — FIX popup tre puntini
-// Usa _OptionTile con c.textPrimary → visibile in entrambi i temi
-// ─────────────────────────────────────────────────────────────
 class _WorkoutOptionsSheet extends StatelessWidget {
   final HiveWorkout  workout;
   final VoidCallback onStartSession;
@@ -653,7 +681,6 @@ class _OptionTile extends StatelessWidget {
               child: Text(
                 label,
                 style: TextStyle(
-                  // FIX: c.textPrimary → visibile in dark e light
                   color:      c.textPrimary,
                   fontSize:   15,
                   fontWeight: FontWeight.w600,
@@ -669,9 +696,6 @@ class _OptionTile extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _WorkoutRenameSheet
-// ─────────────────────────────────────────────────────────────
 class _WorkoutRenameSheet extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback          onConfirm;

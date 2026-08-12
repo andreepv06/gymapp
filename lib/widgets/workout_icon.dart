@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../core/theme/markfit_colors.dart';
@@ -8,36 +9,29 @@ import 'shared_sheets.dart';
 // PALETTE LEGACY — backward compat (indici 0–7 dai dati vecchi)
 // ─────────────────────────────────────────────────────────────
 const List<Color> _kLegacyPalette = [
-  Color(0xFF00D4AA), // 0 – teal
-  Color(0xFF6366F1), // 1 – indigo
-  Color(0xFF22C55E), // 2 – green
-  Color(0xFFF59E0B), // 3 – amber
-  Color(0xFFEC4899), // 4 – pink
-  Color(0xFFEF4444), // 5 – red
-  Color(0xFF3B82F6), // 6 – blue
-  Color(0xFF8B5CF6), // 7 – purple
+  Color(0xFF00D4AA), // 0
+  Color(0xFF6366F1), // 1
+  Color(0xFF22C55E), // 2
+  Color(0xFFF59E0B), // 3
+  Color(0xFFEC4899), // 4
+  Color(0xFFEF4444), // 5
+  Color(0xFF3B82F6), // 6
+  Color(0xFF8B5CF6), // 7
 ];
 
 // ─────────────────────────────────────────────────────────────
-// PALETTE ESTESA — nuova selezione colori
-// Salvata come ARGB (color.value), non come indice.
+// PALETTE ESTESA
 // ─────────────────────────────────────────────────────────────
 const List<Color> kWorkoutPaletteExtended = [
-  // Verdi & teal
   Color(0xFF00D4AA), Color(0xFF0FD9B4), Color(0xFF14B8A6), Color(0xFF10B981),
   Color(0xFF22C55E), Color(0xFF4ADE80), Color(0xFF84CC16), Color(0xFFA3E635),
-  // Blu & ciano
   Color(0xFF06B6D4), Color(0xFF38BDF8), Color(0xFF0EA5E9), Color(0xFF60A5FA),
   Color(0xFF3B82F6), Color(0xFF2563EB), Color(0xFF1D4ED8), Color(0xFF3730A3),
-  // Viola & indigo
   Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFA855F7), Color(0xFFD946EF),
-  // Rosa & rossi
   Color(0xFFEC4899), Color(0xFFF472B6), Color(0xFFF43F5E), Color(0xFFEF4444),
   Color(0xFFDC2626), Color(0xFFB91C1C),
-  // Arancioni & gialli
   Color(0xFFF97316), Color(0xFFFB923C), Color(0xFFF59E0B), Color(0xFFEAB308),
   Color(0xFFD97706), Color(0xFFB45309),
-  // Neutri
   Color(0xFF64748B), Color(0xFF475569), Color(0xFF334155), Color(0xFF1E293B),
 ];
 
@@ -45,13 +39,11 @@ const List<Color> kWorkoutPaletteExtended = [
 // LIBRERIA ICONE ESTESA (56 voci)
 // ─────────────────────────────────────────────────────────────
 const List<(String, IconData)> kWorkoutIconLibrary = [
-  // Palestra & forza
   ('dumbbell',      Icons.fitness_center_rounded),
   ('barbell',       Icons.sports_gymnastics_rounded),
   ('weight',        Icons.monitor_weight_rounded),
   ('flex',          Icons.back_hand_rounded),
   ('push',          Icons.arrow_upward_rounded),
-  // Cardio
   ('run',           Icons.directions_run_rounded),
   ('walk',          Icons.directions_walk_rounded),
   ('bike',          Icons.directions_bike_rounded),
@@ -59,7 +51,6 @@ const List<(String, IconData)> kWorkoutIconLibrary = [
   ('swim',          Icons.pool_rounded),
   ('rowing',        Icons.rowing_rounded),
   ('skate',         Icons.ice_skating_rounded),
-  // Sport
   ('sports',        Icons.sports_rounded),
   ('soccer',        Icons.sports_soccer_rounded),
   ('basketball',    Icons.sports_basketball_rounded),
@@ -68,30 +59,25 @@ const List<(String, IconData)> kWorkoutIconLibrary = [
   ('boxing',        Icons.sports_mma_rounded),
   ('martial_arts',  Icons.sports_kabaddi_rounded),
   ('golf',          Icons.sports_golf_rounded),
-  // Yoga & corpo
   ('yoga',          Icons.self_improvement_rounded),
   ('stretch',       Icons.emoji_people_rounded),
   ('meditation',    Icons.spa_rounded),
   ('accessibility', Icons.accessibility_new_rounded),
-  // Salute
   ('heart',         Icons.favorite_rounded),
   ('heart_pulse',   Icons.monitor_heart_rounded),
   ('lungs',         Icons.air_rounded),
   ('health',        Icons.health_and_safety_rounded),
-  // Movimento & velocità
   ('flash',         Icons.bolt_rounded),
   ('speed',         Icons.speed_rounded),
   ('timer',         Icons.timer_rounded),
   ('loop',          Icons.loop_rounded),
   ('trending',      Icons.trending_up_rounded),
   ('repeat',        Icons.repeat_rounded),
-  // Outdoor
   ('mountain',      Icons.terrain_rounded),
   ('nature',        Icons.nature_rounded),
   ('hiking',        Icons.hiking_rounded),
   ('park',          Icons.park_rounded),
   ('camp',          Icons.fireplace_rounded),
-  // Achievement & obiettivi
   ('target',        Icons.track_changes_rounded),
   ('flag',          Icons.flag_rounded),
   ('medal',         Icons.military_tech_rounded),
@@ -100,12 +86,10 @@ const List<(String, IconData)> kWorkoutIconLibrary = [
   ('crown',         Icons.workspace_premium_rounded),
   ('diamond',       Icons.diamond_rounded),
   ('grade',         Icons.grade_rounded),
-  // Energia & fuoco
   ('fire',          Icons.local_fire_department_rounded),
   ('rocket',        Icons.rocket_launch_rounded),
   ('electric',      Icons.electric_bolt_rounded),
   ('power',         Icons.power_rounded),
-  // Altro
   ('chart',         Icons.bar_chart_rounded),
   ('calendar',      Icons.calendar_today_rounded),
   ('person',        Icons.person_rounded),
@@ -114,21 +98,13 @@ const List<(String, IconData)> kWorkoutIconLibrary = [
 
 // ─────────────────────────────────────────────────────────────
 // resolveWorkoutColor — PUNTO UNICO DI VERITÀ
-//
-// Backward compat:
-//   null           → teal default
-//   0–7            → _kLegacyPalette[value]
-//   > 0xFFFF       → Color(value) — ARGB diretto (dati nuovi)
-//   8..0xFFFF      → fallback sicuro
 // ─────────────────────────────────────────────────────────────
 Color resolveWorkoutColor(int? value) {
   if (value == null) return _kLegacyPalette.first;
   if (value >= 0 && value < _kLegacyPalette.length) {
     return _kLegacyPalette[value];
   }
-  if (value > 0xFFFF) {
-    return Color(value);
-  }
+  if (value > 0xFFFF) return Color(value);
   return _kLegacyPalette.first;
 }
 
@@ -147,17 +123,13 @@ IconData resolveWorkoutIcon(String? iconId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// WorkoutAvatar
-//
-// FIX: ripristinato customImagePath per backward compat con
-//      history_screen, home_screen, allenamenti_screen.
-//      Se customImagePath è non-null e il file esiste, viene
-//      mostrata l'immagine custom al posto dell'icona.
+// WorkoutAvatar — usa resolveWorkoutColor (PUNTO UNICO)
+// customImagePath ripristinato per backward compat
 // ─────────────────────────────────────────────────────────────
 class WorkoutAvatar extends StatelessWidget {
   final String? iconId;
-  final int?    iconColorIndex; // ARGB o indice legacy
-  final String? customImagePath; // FIX: ripristinato
+  final int?    iconColorIndex;
+  final String? customImagePath;
   final double  size;
   final double  iconSize;
   final double  borderRadius;
@@ -166,7 +138,7 @@ class WorkoutAvatar extends StatelessWidget {
     super.key,
     this.iconId,
     this.iconColorIndex,
-    this.customImagePath,  // FIX: ripristinato
+    this.customImagePath,
     this.size         = 48,
     this.iconSize     = 24,
     this.borderRadius = 14,
@@ -176,9 +148,7 @@ class WorkoutAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final color    = resolveWorkoutColor(iconColorIndex);
     final iconData = resolveWorkoutIcon(iconId);
-
-    // Se esiste un'immagine custom, la mostra
-    final hasCustomImage = customImagePath != null &&
+    final hasCustom = customImagePath != null &&
         customImagePath!.isNotEmpty;
 
     return ClipRRect(
@@ -186,7 +156,7 @@ class WorkoutAvatar extends StatelessWidget {
       child: SizedBox(
         width:  size,
         height: size,
-        child: hasCustomImage
+        child: hasCustom
             ? _buildCustomImage(color, iconData)
             : _buildIconAvatar(color, iconData),
       ),
@@ -220,7 +190,6 @@ class WorkoutAvatar extends StatelessWidget {
   }
 
   Widget _buildCustomImage(Color fallbackColor, IconData fallbackIcon) {
-    // Prova a caricare l'immagine; in caso di errore usa l'icona
     try {
       final file = File(customImagePath!);
       return Container(
@@ -250,15 +219,21 @@ class WorkoutAvatar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// WorkoutIconColorSheet — componente condiviso per la selezione
-// di icona e colore. Usato da workouts_screen e workout_detail.
+// WorkoutIconColorSheet — componente condiviso
 //
-// Salva il colore come ARGB (color.value), non come indice.
-// resolveWorkoutColor() garantisce backward compat per dati vecchi.
+// FIX: aggiunto pulsante "Annulla" affiancato ad "Applica".
 //
-// Callback onSelect restituisce:
-//   iconId    : String  – ID icona da kWorkoutIconLibrary
-//   colorArgb : int     – color.value (ARGB da salvare in Hive)
+// Flusso corretto:
+//   Apri → modifica temporanea locale
+//   ↓
+//   Annulla / Swipe Down → chiude senza salvare (Navigator.pop)
+//   Applica              → chiama onSelect → salva in Hive
+//
+// Lo swipe-to-dismiss funziona nativamente via showModalBottomSheet
+// (isDismissible: true, enableDrag: true — default Flutter).
+// Con ClampingScrollPhysics, il drag verso il basso dal top
+// della scroll non viene assorbito e viene passato al modal
+// sheet dismiss handler.
 // ─────────────────────────────────────────────────────────────
 class WorkoutIconColorSheet extends StatefulWidget {
   final String? initialIconId;
@@ -287,9 +262,8 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
   void initState() {
     super.initState();
     _iconId = widget.initialIconId ?? 'dumbbell';
-    // FIX: usa resolveWorkoutColor (NO .clamp che corrompeva ARGB)
-    _color = resolveWorkoutColor(widget.initialColorValue);
-    _hsv   = HSVColor.fromColor(_color);
+    _color  = resolveWorkoutColor(widget.initialColorValue);
+    _hsv    = HSVColor.fromColor(_color);
   }
 
   void _pickPaletteColor(Color c) {
@@ -310,12 +284,11 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Anteprima ────────────────────────────────────
+          // ── Anteprima ──────────────────────────────────
           Center(
             child: Column(children: [
               WorkoutAvatar(
                 iconId:         _iconId,
-                // Passa ARGB → risolto correttamente da resolveWorkoutColor
                 iconColorIndex: _color.value,
                 size:           72,
                 iconSize:       36,
@@ -328,7 +301,7 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
           ),
           const SizedBox(height: 20),
 
-          // ── Sezione Colore ───────────────────────────────
+          // ── Colore ─────────────────────────────────────
           Align(
             alignment: Alignment.centerLeft,
             child: Text('Colore', style: TextStyle(
@@ -342,10 +315,8 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
             spacing:    10,
             runSpacing: 10,
             children: [
-              // Palette estesa
               ...kWorkoutPaletteExtended.map((p) {
-                final sel = !_showCustomPicker &&
-                    _color.value == p.value;
+                final sel = !_showCustomPicker && _color.value == p.value;
                 return GestureDetector(
                   onTap: () => _pickPaletteColor(p),
                   child: AnimatedContainer(
@@ -371,7 +342,7 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
                   ),
                 );
               }),
-              // Pulsante colore personalizzato (rainbow)
+              // Colore personalizzato (rainbow)
               GestureDetector(
                 onTap: () => setState(
                     () => _showCustomPicker = !_showCustomPicker),
@@ -380,14 +351,12 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
                   width:  34,
                   height: 34,
                   decoration: BoxDecoration(
-                    gradient: const SweepGradient(
-                      colors: [
-                        Color(0xFFFF0000), Color(0xFFFF7F00),
-                        Color(0xFFFFFF00), Color(0xFF00FF00),
-                        Color(0xFF0000FF), Color(0xFF8B00FF),
-                        Color(0xFFFF0000),
-                      ],
-                    ),
+                    gradient: const SweepGradient(colors: [
+                      Color(0xFFFF0000), Color(0xFFFF7F00),
+                      Color(0xFFFFFF00), Color(0xFF00FF00),
+                      Color(0xFF0000FF), Color(0xFF8B00FF),
+                      Color(0xFFFF0000),
+                    ]),
                     shape:  BoxShape.circle,
                     border: _showCustomPicker
                         ? Border.all(color: Colors.white, width: 2.5)
@@ -410,7 +379,7 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
             ],
           ),
 
-          // ── Custom picker inline ─────────────────────────
+          // ── Custom picker inline ────────────────────────
           AnimatedCrossFade(
             firstChild:  const SizedBox.shrink(),
             secondChild: Padding(
@@ -431,7 +400,7 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
 
           const SizedBox(height: 20),
 
-          // ── Sezione Icona ────────────────────────────────
+          // ── Icone ──────────────────────────────────────
           Align(
             alignment: Alignment.centerLeft,
             child: Text('Icona', style: TextStyle(
@@ -469,22 +438,54 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
                             blurRadius: 8)]
                         : null,
                   ),
-                  child: Icon(
-                    icon.$2,
-                    color: sel ? _color : c.iconSecondary,
-                    size:  22,
-                  ),
+                  child: Icon(icon.$2,
+                      color: sel ? _color : c.iconSecondary, size: 22),
                 ),
               );
             }).toList(),
           ),
 
           const SizedBox(height: 22),
-          GlassPrimaryButton(
-            label: 'Applica',
-            color: _color,
-            // FIX: passa ARGB (color.value), non un indice
-            onTap: () => widget.onSelect(_iconId, _color.value),
+
+          // ── Pulsanti Annulla + Applica ──────────────────
+          // FIX: aggiunto "Annulla" affiancato ad "Applica".
+          // Annulla = Navigator.pop senza chiamare onSelect → nessun salvataggio.
+          // Applica = chiama onSelect → salva in Hive.
+          // Swipe-down = equivalente ad Annulla (modal bottom sheet
+          //              non chiama onSelect al dismiss nativo).
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color:        c.glassCardInset,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: c.glassBorder),
+                    ),
+                    child: Text(
+                      'Annulla',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color:      c.textSecondary,
+                        fontSize:   15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: GlassPrimaryButton(
+                  label: 'Applica',
+                  color: _color,
+                  onTap: () => widget.onSelect(_iconId, _color.value),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -493,7 +494,7 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _HsvPickerWidget — Color picker puro Flutter (nessuna dep)
+// _HsvPickerWidget — Color picker puro Flutter (no deps)
 // ─────────────────────────────────────────────────────────────
 class _HsvPickerWidget extends StatelessWidget {
   final HSVColor                hsv;
@@ -539,7 +540,6 @@ class _HsvPickerWidget extends StatelessWidget {
           );
         }),
         const SizedBox(height: 12),
-        // Preview + hex
         Row(
           children: [
             Container(
@@ -578,9 +578,6 @@ class _HsvPickerWidget extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// CustomPainter — SV selector 2D
-// ─────────────────────────────────────────────────────────────
 class _SatValPainter extends CustomPainter {
   final double hue, saturation, value;
   const _SatValPainter({
@@ -592,39 +589,28 @@ class _SatValPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-
     canvas.drawRect(rect,
         Paint()..color = HSVColor.fromAHSV(1, hue, 1, 1).toColor());
-
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = const LinearGradient(
-          colors: [Colors.white, Colors.transparent],
-        ).createShader(rect),
-    );
-
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = const LinearGradient(
-          begin:  Alignment.topCenter,
-          end:    Alignment.bottomCenter,
-          colors: [Colors.transparent, Colors.black],
-        ).createShader(rect),
-    );
-
+    canvas.drawRect(rect,
+        Paint()
+          ..shader = const LinearGradient(
+            colors: [Colors.white, Colors.transparent],
+          ).createShader(rect));
+    canvas.drawRect(rect,
+        Paint()
+          ..shader = const LinearGradient(
+            begin:  Alignment.topCenter,
+            end:    Alignment.bottomCenter,
+            colors: [Colors.transparent, Colors.black],
+          ).createShader(rect));
     final cx = saturation * size.width;
     final cy = (1 - value) * size.height;
-
-    canvas.drawCircle(
-        Offset(cx, cy), 11,
+    canvas.drawCircle(Offset(cx, cy), 11,
         Paint()
           ..color       = Colors.white
           ..style       = PaintingStyle.stroke
           ..strokeWidth = 2.5);
-    canvas.drawCircle(
-        Offset(cx, cy), 9,
+    canvas.drawCircle(Offset(cx, cy), 9,
         Paint()
           ..color = HSVColor.fromAHSV(1, hue, saturation, value).toColor());
   }
@@ -634,9 +620,6 @@ class _SatValPainter extends CustomPainter {
       old.hue != hue || old.saturation != saturation || old.value != value;
 }
 
-// ─────────────────────────────────────────────────────────────
-// CustomPainter — Hue strip
-// ─────────────────────────────────────────────────────────────
 class _HuePainter extends CustomPainter {
   final double hue;
   const _HuePainter({required this.hue});
@@ -644,16 +627,13 @@ class _HuePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-
     final colors = List<Color>.generate(
         7, (i) => HSVColor.fromAHSV(1, i * 60.0, 1, 1).toColor())
       ..add(HSVColor.fromAHSV(1, 0, 1, 1).toColor());
-
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, const Radius.circular(6)),
       Paint()..shader = LinearGradient(colors: colors).createShader(rect),
     );
-
     final cx = (hue / 360) * size.width;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
