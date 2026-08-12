@@ -1,667 +1,673 @@
-import 'dart:convert';
-import 'dart:ui';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import '../models/hive_models.dart';
 
-class WorkoutIconDef {
-  final String id;
-  final String label;
-  final IconData icon;
-  final String category;
+import '../core/theme/markfit_colors.dart';
+import 'shared_sheets.dart';
 
-  const WorkoutIconDef({
-    required this.id,
-    required this.label,
-    required this.icon,
-    required this.category,
-  });
+// ─────────────────────────────────────────────────────────────
+// PALETTE LEGACY — backward compat (indici 0–7 dai dati vecchi)
+// ─────────────────────────────────────────────────────────────
+const List<Color> _kLegacyPalette = [
+  Color(0xFF00D4AA), // 0 – teal
+  Color(0xFF6366F1), // 1 – indigo
+  Color(0xFF22C55E), // 2 – green
+  Color(0xFFF59E0B), // 3 – amber
+  Color(0xFFEC4899), // 4 – pink
+  Color(0xFFEF4444), // 5 – red
+  Color(0xFF3B82F6), // 6 – blue
+  Color(0xFF8B5CF6), // 7 – purple
+];
+
+// ─────────────────────────────────────────────────────────────
+// PALETTE ESTESA — nuova selezione colori
+// Salvata come ARGB (color.value), non come indice.
+// ─────────────────────────────────────────────────────────────
+const List<Color> kWorkoutPaletteExtended = [
+  // Verdi & teal
+  Color(0xFF00D4AA), Color(0xFF0FD9B4), Color(0xFF14B8A6), Color(0xFF10B981),
+  Color(0xFF22C55E), Color(0xFF4ADE80), Color(0xFF84CC16), Color(0xFFA3E635),
+  // Blu & ciano
+  Color(0xFF06B6D4), Color(0xFF38BDF8), Color(0xFF0EA5E9), Color(0xFF60A5FA),
+  Color(0xFF3B82F6), Color(0xFF2563EB), Color(0xFF1D4ED8), Color(0xFF3730A3),
+  // Viola & indigo
+  Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFA855F7), Color(0xFFD946EF),
+  // Rosa & rossi
+  Color(0xFFEC4899), Color(0xFFF472B6), Color(0xFFF43F5E), Color(0xFFEF4444),
+  Color(0xFFDC2626), Color(0xFFB91C1C),
+  // Arancioni & gialli
+  Color(0xFFF97316), Color(0xFFFB923C), Color(0xFFF59E0B), Color(0xFFEAB308),
+  Color(0xFFD97706), Color(0xFFB45309),
+  // Neutri
+  Color(0xFF64748B), Color(0xFF475569), Color(0xFF334155), Color(0xFF1E293B),
+];
+
+// ─────────────────────────────────────────────────────────────
+// LIBRERIA ICONE ESTESA (56 voci)
+// ─────────────────────────────────────────────────────────────
+const List<(String, IconData)> kWorkoutIconLibrary = [
+  // Palestra & forza
+  ('dumbbell',      Icons.fitness_center_rounded),
+  ('barbell',       Icons.sports_gymnastics_rounded),
+  ('weight',        Icons.monitor_weight_rounded),
+  ('flex',          Icons.back_hand_rounded),
+  ('push',          Icons.arrow_upward_rounded),
+  // Cardio
+  ('run',           Icons.directions_run_rounded),
+  ('walk',          Icons.directions_walk_rounded),
+  ('bike',          Icons.directions_bike_rounded),
+  ('ebike',         Icons.electric_bike_rounded),
+  ('swim',          Icons.pool_rounded),
+  ('rowing',        Icons.rowing_rounded),
+  ('skate',         Icons.ice_skating_rounded),
+  // Sport
+  ('sports',        Icons.sports_rounded),
+  ('soccer',        Icons.sports_soccer_rounded),
+  ('basketball',    Icons.sports_basketball_rounded),
+  ('tennis',        Icons.sports_tennis_rounded),
+  ('volleyball',    Icons.sports_volleyball_rounded),
+  ('boxing',        Icons.sports_mma_rounded),
+  ('martial_arts',  Icons.sports_kabaddi_rounded),
+  ('golf',          Icons.sports_golf_rounded),
+  // Yoga & corpo
+  ('yoga',          Icons.self_improvement_rounded),
+  ('stretch',       Icons.emoji_people_rounded),
+  ('meditation',    Icons.spa_rounded),
+  ('accessibility', Icons.accessibility_new_rounded),
+  // Salute
+  ('heart',         Icons.favorite_rounded),
+  ('heart_pulse',   Icons.monitor_heart_rounded),
+  ('lungs',         Icons.air_rounded),
+  ('health',        Icons.health_and_safety_rounded),
+  // Movimento & velocità
+  ('flash',         Icons.bolt_rounded),
+  ('speed',         Icons.speed_rounded),
+  ('timer',         Icons.timer_rounded),
+  ('loop',          Icons.loop_rounded),
+  ('trending',      Icons.trending_up_rounded),
+  ('repeat',        Icons.repeat_rounded),
+  // Outdoor
+  ('mountain',      Icons.terrain_rounded),
+  ('nature',        Icons.nature_rounded),
+  ('hiking',        Icons.hiking_rounded),
+  ('park',          Icons.park_rounded),
+  ('camp',          Icons.fireplace_rounded),
+  // Achievement & obiettivi
+  ('target',        Icons.track_changes_rounded),
+  ('flag',          Icons.flag_rounded),
+  ('medal',         Icons.military_tech_rounded),
+  ('trophy',        Icons.emoji_events_rounded),
+  ('star',          Icons.star_rounded),
+  ('crown',         Icons.workspace_premium_rounded),
+  ('diamond',       Icons.diamond_rounded),
+  ('grade',         Icons.grade_rounded),
+  // Energia & fuoco
+  ('fire',          Icons.local_fire_department_rounded),
+  ('rocket',        Icons.rocket_launch_rounded),
+  ('electric',      Icons.electric_bolt_rounded),
+  ('power',         Icons.power_rounded),
+  // Altro
+  ('chart',         Icons.bar_chart_rounded),
+  ('calendar',      Icons.calendar_today_rounded),
+  ('person',        Icons.person_rounded),
+  ('group',         Icons.group_rounded),
+];
+
+// ─────────────────────────────────────────────────────────────
+// resolveWorkoutColor — PUNTO UNICO DI VERITÀ
+//
+// Backward compat:
+//   null           → teal default
+//   0–7            → _kLegacyPalette[value]
+//   > 0xFFFF       → Color(value) — ARGB diretto (dati nuovi)
+//   8..0xFFFF      → fallback sicuro
+// ─────────────────────────────────────────────────────────────
+Color resolveWorkoutColor(int? value) {
+  if (value == null) return _kLegacyPalette.first;
+  if (value >= 0 && value < _kLegacyPalette.length) {
+    return _kLegacyPalette[value];
+  }
+  if (value > 0xFFFF) {
+    return Color(value);
+  }
+  return _kLegacyPalette.first;
 }
 
-class WorkoutIcons {
-  static const List<WorkoutIconDef> all = [
-    WorkoutIconDef(
-        id: 'chest',
-        label: 'Petto',
-        icon: Icons.self_improvement,
-        category: 'Muscoli'),
-    WorkoutIconDef(
-        id: 'back',
-        label: 'Schiena',
-        icon: Icons.accessibility_new,
-        category: 'Muscoli'),
-    WorkoutIconDef(
-        id: 'shoulders',
-        label: 'Spalle',
-        icon: Icons.sports_gymnastics,
-        category: 'Muscoli'),
-    WorkoutIconDef(
-        id: 'arms',
-        label: 'Braccia',
-        icon: Icons.fitness_center,
-        category: 'Muscoli'),
-    WorkoutIconDef(
-        id: 'biceps',
-        label: 'Bicipiti',
-        icon: Icons.sports_handball,
-        category: 'Muscoli'),
-    WorkoutIconDef(
-        id: 'triceps',
-        label: 'Tricipiti',
-        icon: Icons.sports_volleyball,
-        category: 'Muscoli'),
-    WorkoutIconDef(
-        id: 'legs',
-        label: 'Gambe',
-        icon: Icons.directions_run,
-        category: 'Muscoli'),
-    WorkoutIconDef(
-        id: 'abs',
-        label: 'Addome',
-        icon: Icons.grid_on,
-        category: 'Muscoli'),
-    WorkoutIconDef(
-        id: 'glutes',
-        label: 'Glutei',
-        icon: Icons.airline_seat_recline_extra,
-        category: 'Muscoli'),
-    WorkoutIconDef(
-        id: 'push',
-        label: 'Push',
-        icon: Icons.open_with,
-        category: 'Split'),
-    WorkoutIconDef(
-        id: 'pull',
-        label: 'Pull',
-        icon: Icons.compress,
-        category: 'Split'),
-    WorkoutIconDef(
-        id: 'push_pull_legs',
-        label: 'PPL',
-        icon: Icons.loop,
-        category: 'Split'),
-    WorkoutIconDef(
-        id: 'upper',
-        label: 'Upper',
-        icon: Icons.person,
-        category: 'Split'),
-    WorkoutIconDef(
-        id: 'lower',
-        label: 'Lower',
-        icon: Icons.transfer_within_a_station,
-        category: 'Split'),
-    WorkoutIconDef(
-        id: 'full_body',
-        label: 'Full Body',
-        icon: Icons.accessibility,
-        category: 'Split'),
-    WorkoutIconDef(
-        id: 'strength',
-        label: 'Forza',
-        icon: Icons.bolt,
-        category: 'Obiettivi'),
-    WorkoutIconDef(
-        id: 'mass',
-        label: 'Massa',
-        icon: Icons.trending_up,
-        category: 'Obiettivi'),
-    WorkoutIconDef(
-        id: 'definition',
-        label: 'Defin.',
-        icon: Icons.show_chart,
-        category: 'Obiettivi'),
-    WorkoutIconDef(
-        id: 'cardio',
-        label: 'Cardio',
-        icon: Icons.favorite,
-        category: 'Obiettivi'),
-    WorkoutIconDef(
-        id: 'hiit',
-        label: 'HIIT',
-        icon: Icons.local_fire_department,
-        category: 'Obiettivi'),
-    WorkoutIconDef(
-        id: 'endurance',
-        label: 'Resist.',
-        icon: Icons.timer,
-        category: 'Obiettivi'),
-    WorkoutIconDef(
-        id: 'mobility',
-        label: 'Mobilità',
-        icon: Icons.self_improvement,
-        category: 'Recupero'),
-    WorkoutIconDef(
-        id: 'stretching',
-        label: 'Stretch',
-        icon: Icons.spa,
-        category: 'Recupero'),
-    WorkoutIconDef(
-        id: 'recovery',
-        label: 'Recupero',
-        icon: Icons.healing,
-        category: 'Recupero'),
-    WorkoutIconDef(
-        id: 'cycling',
-        label: 'Bici',
-        icon: Icons.directions_bike,
-        category: 'Sport'),
-    WorkoutIconDef(
-        id: 'running',
-        label: 'Corsa',
-        icon: Icons.directions_run,
-        category: 'Sport'),
-    WorkoutIconDef(
-        id: 'swimming',
-        label: 'Nuoto',
-        icon: Icons.pool,
-        category: 'Sport'),
-    WorkoutIconDef(
-        id: 'boxing',
-        label: 'Boxe',
-        icon: Icons.sports_mma,
-        category: 'Sport'),
-  ];
-
-  static const List<Color> colors = [
-    Color(0xFF6750A4),
-    Color(0xFF2196F3),
-    Color(0xFF4CAF50),
-    Color(0xFFF44336),
-    Color(0xFFFF9800),
-    Color(0xFF00BCD4),
-    Color(0xFFE91E63),
-    Color(0xFF795548),
-    Color(0xFF607D8B),
-    Color(0xFF9C27B0),
-  ];
-
-  static WorkoutIconDef? getById(String? id) {
-    if (id == null) return null;
-    try {
-      return all.firstWhere((i) => i.id == id);
-    } catch (_) {
-      return null;
-    }
+// ─────────────────────────────────────────────────────────────
+// resolveWorkoutIcon — fallback sicuro
+// ─────────────────────────────────────────────────────────────
+IconData resolveWorkoutIcon(String? iconId) {
+  if (iconId == null || iconId.isEmpty) {
+    return Icons.fitness_center_rounded;
   }
-
-  static Color getColor(int? index) {
-    if (index == null || index < 0 || index >= colors.length) {
-      return colors[0];
-    }
-    return colors[index];
-  }
-
-  static Map<String, List<WorkoutIconDef>> get byCategory {
-    final map = <String, List<WorkoutIconDef>>{};
-    for (final icon in all) {
-      map.putIfAbsent(icon.category, () => []).add(icon);
-    }
-    return map;
+  try {
+    return kWorkoutIconLibrary.firstWhere((e) => e.$1 == iconId).$2;
+  } catch (_) {
+    return Icons.fitness_center_rounded;
   }
 }
 
-/// Avatar della scheda — usato in tutta l'app
+// ─────────────────────────────────────────────────────────────
+// WorkoutAvatar
+//
+// FIX: ripristinato customImagePath per backward compat con
+//      history_screen, home_screen, allenamenti_screen.
+//      Se customImagePath è non-null e il file esiste, viene
+//      mostrata l'immagine custom al posto dell'icona.
+// ─────────────────────────────────────────────────────────────
 class WorkoutAvatar extends StatelessWidget {
   final String? iconId;
-  final int? iconColorIndex;
-  final String? customImagePath;
-  final double size;
-  final double iconSize;
-  final double borderRadius;
+  final int?    iconColorIndex; // ARGB o indice legacy
+  final String? customImagePath; // FIX: ripristinato
+  final double  size;
+  final double  iconSize;
+  final double  borderRadius;
 
   const WorkoutAvatar({
     super.key,
     this.iconId,
     this.iconColorIndex,
-    this.customImagePath,
-    this.size = 48,
-    this.iconSize = 24,
-    this.borderRadius = 12,
+    this.customImagePath,  // FIX: ripristinato
+    this.size         = 48,
+    this.iconSize     = 24,
+    this.borderRadius = 14,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = WorkoutIcons.getColor(iconColorIndex);
-    final iconDef = WorkoutIcons.getById(iconId);
+    final color    = resolveWorkoutColor(iconColorIndex);
+    final iconData = resolveWorkoutIcon(iconId);
 
-    if (customImagePath != null && customImagePath!.isNotEmpty) {
-      try {
-        final bytes = base64Decode(customImagePath!);
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(borderRadius),
-          child: Image.memory(
-            bytes,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-          ),
-        );
-      } catch (_) {}
-    }
+    // Se esiste un'immagine custom, la mostra
+    final hasCustomImage = customImagePath != null &&
+        customImagePath!.isNotEmpty;
 
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: SizedBox(
+        width:  size,
+        height: size,
+        child: hasCustomImage
+            ? _buildCustomImage(color, iconData)
+            : _buildIconAvatar(color, iconData),
+      ),
+    );
+  }
+
+  Widget _buildIconAvatar(Color color, IconData iconData) {
     return Container(
-      width: size,
+      width:  size,
       height: size,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end:   Alignment.bottomRight,
+          colors: [
+            color,
+            Color.lerp(color, Colors.black, 0.25) ?? color,
+          ],
+        ),
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: color.withOpacity(0.3), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color:      color.withOpacity(0.35),
+            blurRadius: 10,
+            offset:     const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Icon(
-        iconDef?.icon ?? Icons.fitness_center,
-        color: color,
-        size: iconSize,
-      ),
+      child: Icon(iconData, color: Colors.white, size: iconSize),
     );
+  }
+
+  Widget _buildCustomImage(Color fallbackColor, IconData fallbackIcon) {
+    // Prova a caricare l'immagine; in caso di errore usa l'icona
+    try {
+      final file = File(customImagePath!);
+      return Container(
+        width:  size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(borderRadius),
+          boxShadow: [
+            BoxShadow(
+              color:      fallbackColor.withOpacity(0.3),
+              blurRadius: 10,
+              offset:     const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Image.file(
+          file,
+          fit:          BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              _buildIconAvatar(fallbackColor, fallbackIcon),
+        ),
+      );
+    } catch (_) {
+      return _buildIconAvatar(fallbackColor, fallbackIcon);
+    }
   }
 }
 
-/// Selettore icona completo e riutilizzabile (solo grid + colori,
-/// SENZA chrome di sheet: il chrome con header/footer fissi e
-/// scroll è gestito da showIconPickerBottomSheet più sotto).
-class WorkoutIconSelector extends StatelessWidget {
-  final String? selectedIconId;
-  final int selectedColorIndex;
-  final String? customImageBase64;
-  final void Function(String? iconId, int colorIndex, String? imgBase64)
-      onChanged;
+// ─────────────────────────────────────────────────────────────
+// WorkoutIconColorSheet — componente condiviso per la selezione
+// di icona e colore. Usato da workouts_screen e workout_detail.
+//
+// Salva il colore come ARGB (color.value), non come indice.
+// resolveWorkoutColor() garantisce backward compat per dati vecchi.
+//
+// Callback onSelect restituisce:
+//   iconId    : String  – ID icona da kWorkoutIconLibrary
+//   colorArgb : int     – color.value (ARGB da salvare in Hive)
+// ─────────────────────────────────────────────────────────────
+class WorkoutIconColorSheet extends StatefulWidget {
+  final String? initialIconId;
+  final int?    initialColorValue;
+  final void Function(String iconId, int colorArgb) onSelect;
 
-  const WorkoutIconSelector({
+  const WorkoutIconColorSheet({
     super.key,
-    required this.selectedIconId,
-    required this.selectedColorIndex,
-    required this.customImageBase64,
-    required this.onChanged,
+    this.initialIconId,
+    this.initialColorValue,
+    required this.onSelect,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final color = WorkoutIcons.getColor(selectedColorIndex);
+  State<WorkoutIconColorSheet> createState() =>
+      _WorkoutIconColorSheetState();
+}
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _GlassOutlinedSmallButton(
-                onTap: () async {
-                  try {
-                    final picker = ImagePicker();
-                    final file = await picker.pickImage(
-                      source: ImageSource.gallery,
-                      maxWidth: 400,
-                      maxHeight: 400,
-                      imageQuality: 80,
-                    );
-                    if (file != null) {
-                      final bytes = await file.readAsBytes();
-                      onChanged(null, selectedColorIndex, base64Encode(bytes));
-                    }
-                  } catch (_) {}
-                },
-                label: 'Usa foto galleria',
-                icon: Icons.photo_library_outlined,
-                color: cs.primary,
+class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
+  late String   _iconId;
+  late Color    _color;
+  late HSVColor _hsv;
+  bool          _showCustomPicker = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _iconId = widget.initialIconId ?? 'dumbbell';
+    // FIX: usa resolveWorkoutColor (NO .clamp che corrompeva ARGB)
+    _color = resolveWorkoutColor(widget.initialColorValue);
+    _hsv   = HSVColor.fromColor(_color);
+  }
+
+  void _pickPaletteColor(Color c) {
+    setState(() {
+      _color            = c;
+      _hsv              = HSVColor.fromColor(c);
+      _showCustomPicker = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.mfc;
+
+    return GlassSheetWrapper(
+      title:       'Icona e colore',
+      accentColor: _color,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Anteprima ────────────────────────────────────
+          Center(
+            child: Column(children: [
+              WorkoutAvatar(
+                iconId:         _iconId,
+                // Passa ARGB → risolto correttamente da resolveWorkoutColor
+                iconColorIndex: _color.value,
+                size:           72,
+                iconSize:       36,
+                borderRadius:   18,
               ),
-            ),
-            if (customImageBase64 != null || selectedIconId != null) ...[
-              const SizedBox(width: 8),
-              _GlassOutlinedSmallButton(
-                onTap: () => onChanged(null, selectedColorIndex, null),
-                label: 'Rimuovi',
-                icon: Icons.close,
-                color: Colors.red,
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 16),
-        Text('Colore', style: Theme.of(context).textTheme.labelMedium),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 44,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: WorkoutIcons.colors.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) {
-              final c = WorkoutIcons.colors[i];
-              final isSelected = selectedColorIndex == i;
-              return GestureDetector(
-                onTap: () => onChanged(selectedIconId, i, customImageBase64),
+              const SizedBox(height: 6),
+              Text('Anteprima', style: TextStyle(
+                  color: c.textTertiary, fontSize: 11)),
+            ]),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Sezione Colore ───────────────────────────────
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Colore', style: TextStyle(
+                color:        c.textSecondary,
+                fontSize:     12,
+                fontWeight:   FontWeight.w600,
+                letterSpacing: 0.4)),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing:    10,
+            runSpacing: 10,
+            children: [
+              // Palette estesa
+              ...kWorkoutPaletteExtended.map((p) {
+                final sel = !_showCustomPicker &&
+                    _color.value == p.value;
+                return GestureDetector(
+                  onTap: () => _pickPaletteColor(p),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width:  34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color:  p,
+                      shape:  BoxShape.circle,
+                      border: sel
+                          ? Border.all(color: Colors.white, width: 2.5)
+                          : null,
+                      boxShadow: sel
+                          ? [BoxShadow(
+                              color:      p.withOpacity(0.6),
+                              blurRadius: 10)]
+                          : null,
+                    ),
+                    child: sel
+                        ? const Icon(Icons.check_rounded,
+                            color: Colors.white, size: 16)
+                        : null,
+                  ),
+                );
+              }),
+              // Pulsante colore personalizzato (rainbow)
+              GestureDetector(
+                onTap: () => setState(
+                    () => _showCustomPicker = !_showCustomPicker),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  width: isSelected ? 40 : 34,
-                  height: isSelected ? 40 : 34,
+                  width:  34,
+                  height: 34,
                   decoration: BoxDecoration(
-                    color: c,
-                    shape: BoxShape.circle,
-                    border: isSelected
-                        ? Border.all(color: Colors.white, width: 3)
+                    gradient: const SweepGradient(
+                      colors: [
+                        Color(0xFFFF0000), Color(0xFFFF7F00),
+                        Color(0xFFFFFF00), Color(0xFF00FF00),
+                        Color(0xFF0000FF), Color(0xFF8B00FF),
+                        Color(0xFFFF0000),
+                      ],
+                    ),
+                    shape:  BoxShape.circle,
+                    border: _showCustomPicker
+                        ? Border.all(color: Colors.white, width: 2.5)
                         : null,
-                    boxShadow: isSelected
-                        ? [BoxShadow(color: c.withOpacity(0.5), blurRadius: 8)]
+                    boxShadow: _showCustomPicker
+                        ? [BoxShadow(
+                            color:      _color.withOpacity(0.5),
+                            blurRadius: 10)]
                         : null,
                   ),
-                  child: isSelected
-                      ? const Icon(Icons.check, color: Colors.white, size: 18)
-                      : null,
+                  child: Icon(
+                    _showCustomPicker
+                        ? Icons.check_rounded
+                        : Icons.colorize_rounded,
+                    color: Colors.white,
+                    size:  16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // ── Custom picker inline ─────────────────────────
+          AnimatedCrossFade(
+            firstChild:  const SizedBox.shrink(),
+            secondChild: Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: _HsvPickerWidget(
+                hsv: _hsv,
+                onChanged: (newHsv) => setState(() {
+                  _hsv   = newHsv;
+                  _color = newHsv.toColor();
+                }),
+              ),
+            ),
+            crossFadeState: _showCustomPicker
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 250),
+          ),
+
+          const SizedBox(height: 20),
+
+          // ── Sezione Icona ────────────────────────────────
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Icona', style: TextStyle(
+                color:        c.textSecondary,
+                fontSize:     12,
+                fontWeight:   FontWeight.w600,
+                letterSpacing: 0.4)),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing:    8,
+            runSpacing: 8,
+            children: kWorkoutIconLibrary.map((icon) {
+              final sel = _iconId == icon.$1;
+              return GestureDetector(
+                onTap: () => setState(() => _iconId = icon.$1),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width:  48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? _color.withOpacity(0.2)
+                        : c.glassCardInset,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: sel
+                          ? _color.withOpacity(0.7)
+                          : c.glassBorder,
+                      width: sel ? 1.5 : 1,
+                    ),
+                    boxShadow: sel
+                        ? [BoxShadow(
+                            color:      _color.withOpacity(0.25),
+                            blurRadius: 8)]
+                        : null,
+                  ),
+                  child: Icon(
+                    icon.$2,
+                    color: sel ? _color : c.iconSecondary,
+                    size:  22,
+                  ),
                 ),
               );
-            },
+            }).toList(),
           ),
-        ),
-        const SizedBox(height: 16),
-        ...WorkoutIcons.byCategory.entries.map((entry) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8, top: 4),
-                child: Text(
-                  entry.key.toUpperCase(),
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelSmall
-                      ?.copyWith(color: cs.outline, letterSpacing: 1.0),
-                ),
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: entry.value.map((iconDef) {
-                  final isSelected = selectedIconId == iconDef.id;
-                  return GestureDetector(
-                    onTap: () =>
-                        onChanged(iconDef.id, selectedColorIndex, null),
-                    child: Tooltip(
-                      message: iconDef.label,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? color.withOpacity(0.2)
-                              : cs.surfaceContainerHighest.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isSelected ? color : cs.outlineVariant,
-                            width: isSelected ? 2 : 1,
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(iconDef.icon,
-                                color: isSelected ? color : cs.outline,
-                                size: 22),
-                            const SizedBox(height: 2),
-                            Text(
-                              iconDef.label,
-                              style: TextStyle(
-                                  fontSize: 7,
-                                  color: isSelected ? color : cs.outline),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 8),
-            ],
-          );
-        }),
-      ],
-    );
-  }
-}
 
-class _GlassOutlinedSmallButton extends StatelessWidget {
-  final VoidCallback onTap;
-  final String label;
-  final IconData icon;
-  final Color color;
-
-  const _GlassOutlinedSmallButton({
-    required this.onTap,
-    required this.label,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withOpacity(0.35), width: 1),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 6),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w600, color: color)),
-          ],
-        ),
+          const SizedBox(height: 22),
+          GlassPrimaryButton(
+            label: 'Applica',
+            color: _color,
+            // FIX: passa ARGB (color.value), non un indice
+            onTap: () => widget.onSelect(_iconId, _color.value),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Label scheda con icona — usata ovunque compare il nome
-class WorkoutLabel extends StatelessWidget {
-  final HiveWorkout workout;
-  final double avatarSize;
-  final TextStyle? nameStyle;
-  final int maxLines;
-
-  const WorkoutLabel({
-    super.key,
-    required this.workout,
-    this.avatarSize = 32,
-    this.nameStyle,
-    this.maxLines = 1,
-  });
+// ─────────────────────────────────────────────────────────────
+// _HsvPickerWidget — Color picker puro Flutter (nessuna dep)
+// ─────────────────────────────────────────────────────────────
+class _HsvPickerWidget extends StatelessWidget {
+  final HSVColor                hsv;
+  final void Function(HSVColor) onChanged;
+  const _HsvPickerWidget({required this.hsv, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    final c = context.mfc;
+    return Column(
       children: [
-        WorkoutAvatar(
-          iconId: workout.iconId,
-          iconColorIndex: workout.iconColorIndex,
-          customImagePath: workout.customImagePath,
-          size: avatarSize,
-          iconSize: avatarSize * 0.5,
-          borderRadius: avatarSize * 0.25,
+        // SV selector 2D
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: LayoutBuilder(builder: (_, constraints) {
+            const h = 180.0;
+            final w = constraints.maxWidth;
+            return GestureDetector(
+              onPanUpdate: (d) => _updateSV(d.localPosition, w, h),
+              onTapDown:   (d) => _updateSV(d.localPosition, w, h),
+              child: CustomPaint(
+                size: Size(w, h),
+                painter: _SatValPainter(
+                  hue:        hsv.hue,
+                  saturation: hsv.saturation,
+                  value:      hsv.value,
+                ),
+              ),
+            );
+          }),
         ),
-        const SizedBox(width: 10),
-        Flexible(
-          child: Text(
-            workout.name,
-            style: nameStyle,
-            maxLines: maxLines,
-            overflow: TextOverflow.ellipsis,
-          ),
+        const SizedBox(height: 12),
+        // Hue strip
+        LayoutBuilder(builder: (_, constraints) {
+          final w = constraints.maxWidth;
+          return GestureDetector(
+            onPanUpdate: (d) => _updateHue(d.localPosition.dx, w),
+            onTapDown:   (d) => _updateHue(d.localPosition.dx, w),
+            child: CustomPaint(
+              size: Size(w, 30),
+              painter: _HuePainter(hue: hsv.hue),
+            ),
+          );
+        }),
+        const SizedBox(height: 12),
+        // Preview + hex
+        Row(
+          children: [
+            Container(
+              width:  50,
+              height: 36,
+              decoration: BoxDecoration(
+                color:        hsv.toColor(),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: c.glassBorder, width: 0.8),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '#${hsv.toColor().value.toRadixString(16).substring(2).toUpperCase()}',
+              style: TextStyle(
+                color:      c.textSecondary,
+                fontSize:   13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
+
+  void _updateSV(Offset pos, double w, double h) {
+    final s = (pos.dx / w).clamp(0.0, 1.0);
+    final v = (1.0 - pos.dy / h).clamp(0.01, 1.0);
+    onChanged(HSVColor.fromAHSV(1, hsv.hue, s, v));
+  }
+
+  void _updateHue(double dx, double w) {
+    final hue = (dx / w * 360).clamp(0.0, 359.9);
+    onChanged(HSVColor.fromAHSV(1, hue, hsv.saturation, hsv.value));
+  }
 }
 
-// ─────────────────────────────────────────────
-// showIconPickerBottomSheet
-//
-// Componente CONDIVISO per la scelta dell'icona, usato sia in
-// creazione scheda sia in modifica icona scheda esistente.
-//
-// Header sticky: anteprima icona selezionata, sempre visibile.
-// Footer sticky: pulsanti Annulla / Salva, sempre visibili.
-// Contenuto centrale: scrollabile (la griglia delle icone).
-// Chiusura tramite drag verso il basso: comportamento di default
-// di showModalBottomSheet (enableDrag = true), funzionante quando
-// si afferra l'area dell'header/handle (fuori dalla zona scroll).
-// ─────────────────────────────────────────────
-Future<Map<String, dynamic>?> showIconPickerBottomSheet(
-  BuildContext context, {
-  required String? initialIconId,
-  required int initialColorIndex,
-  required String? initialImageBase64,
-}) {
-  String? iconId = initialIconId;
-  int colorIndex = initialColorIndex;
-  String? imageBase64 = initialImageBase64;
+// ─────────────────────────────────────────────────────────────
+// CustomPainter — SV selector 2D
+// ─────────────────────────────────────────────────────────────
+class _SatValPainter extends CustomPainter {
+  final double hue, saturation, value;
+  const _SatValPainter({
+    required this.hue,
+    required this.saturation,
+    required this.value,
+  });
 
-  return showModalBottomSheet<Map<String, dynamic>>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    backgroundColor: Colors.transparent,
-    builder: (sheetContext) {
-      final screenHeight = MediaQuery.of(sheetContext).size.height;
-      return StatefulBuilder(
-        builder: (ctx, setModal) {
-          final cs = Theme.of(ctx).colorScheme;
-          final isDark = Theme.of(ctx).brightness == Brightness.dark;
-          return SizedBox(
-            height: screenHeight * 0.85,
-            child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(28)),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? cs.surface.withOpacity(0.92)
-                        : cs.surface.withOpacity(0.96),
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(28)),
-                    border: Border(
-                      top: BorderSide(
-                        color: isDark
-                            ? Colors.white.withOpacity(0.12)
-                            : cs.outlineVariant.withOpacity(0.4),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      // ── Header sticky: handle + anteprima icona ──
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                        child: Column(
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: cs.outlineVariant.withOpacity(0.7),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                WorkoutAvatar(
-                                  iconId: iconId,
-                                  iconColorIndex: colorIndex,
-                                  customImagePath: imageBase64,
-                                  size: 48,
-                                  iconSize: 24,
-                                  borderRadius: 12,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'Scegli icona',
-                                    style: Theme.of(ctx)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
-                                            fontWeight: FontWeight.w700),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      Divider(
-                          height: 1, color: cs.outlineVariant.withOpacity(0.3)),
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
 
-                      // ── Contenuto scrollabile ──
-                      Expanded(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                          child: WorkoutIconSelector(
-                            selectedIconId: iconId,
-                            selectedColorIndex: colorIndex,
-                            customImageBase64: imageBase64,
-                            onChanged: (id, idx, img) {
-                              setModal(() {
-                                iconId = id;
-                                colorIndex = idx;
-                                imageBase64 = img;
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-                      Divider(
-                          height: 1, color: cs.outlineVariant.withOpacity(0.3)),
+    canvas.drawRect(rect,
+        Paint()..color = HSVColor.fromAHSV(1, hue, 1, 1).toColor());
 
-                      // ── Footer sticky: Annulla / Salva ──
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(
-                            20, 12, 20, 12 + MediaQuery.of(ctx).padding.bottom),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => Navigator.pop(sheetContext),
-                                child: const Text('Annulla'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: FilledButton(
-                                onPressed: () => Navigator.pop(sheetContext, {
-                                  'iconId': iconId,
-                                  'colorIndex': colorIndex,
-                                  'imageBase64': imageBase64,
-                                }),
-                                child: const Text('Salva'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    },
-  );
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [Colors.white, Colors.transparent],
+        ).createShader(rect),
+    );
+
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin:  Alignment.topCenter,
+          end:    Alignment.bottomCenter,
+          colors: [Colors.transparent, Colors.black],
+        ).createShader(rect),
+    );
+
+    final cx = saturation * size.width;
+    final cy = (1 - value) * size.height;
+
+    canvas.drawCircle(
+        Offset(cx, cy), 11,
+        Paint()
+          ..color       = Colors.white
+          ..style       = PaintingStyle.stroke
+          ..strokeWidth = 2.5);
+    canvas.drawCircle(
+        Offset(cx, cy), 9,
+        Paint()
+          ..color = HSVColor.fromAHSV(1, hue, saturation, value).toColor());
+  }
+
+  @override
+  bool shouldRepaint(covariant _SatValPainter old) =>
+      old.hue != hue || old.saturation != saturation || old.value != value;
+}
+
+// ─────────────────────────────────────────────────────────────
+// CustomPainter — Hue strip
+// ─────────────────────────────────────────────────────────────
+class _HuePainter extends CustomPainter {
+  final double hue;
+  const _HuePainter({required this.hue});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+
+    final colors = List<Color>.generate(
+        7, (i) => HSVColor.fromAHSV(1, i * 60.0, 1, 1).toColor())
+      ..add(HSVColor.fromAHSV(1, 0, 1, 1).toColor());
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(6)),
+      Paint()..shader = LinearGradient(colors: colors).createShader(rect),
+    );
+
+    final cx = (hue / 360) * size.width;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(cx, size.height / 2),
+          width:  4,
+          height: size.height + 4,
+        ),
+        const Radius.circular(2),
+      ),
+      Paint()..color = Colors.white,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _HuePainter old) => old.hue != hue;
 }
