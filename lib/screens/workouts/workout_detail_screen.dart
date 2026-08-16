@@ -6,10 +6,13 @@ import 'package:provider/provider.dart';
 import '../../core/theme/markfit_colors.dart';
 import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
+import '../../models/training_mode.dart';
+import '../../providers/training_mode_provider.dart';
 import '../../providers/workout_provider.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
 import '../../widgets/workout_icon.dart'; // FIX: import centralizzato
+import '../training_modes/training_mode_picker_sheet.dart';
 
 // ─── Accent tokens ─────────────────────────────────────────────
 const _kCyan   = MarkFitColors.cyan;
@@ -27,6 +30,12 @@ const _kMuscleGroups = [
   'Tutti', 'Petto', 'Schiena', 'Spalle',
   'Bicipiti', 'Tricipiti', 'Gambe', 'Addominali',
 ];
+
+// FASE 3 — Sistema Modalità di Allenamento: helper per convertire
+// in modo sicuro la chiave dinamica di Hive in int? (le chiavi dei
+// box con add() sono int auto-incrementali). Mai un cast diretto
+// che possa lanciare un'eccezione (Parte 63 — nessun crash).
+int? _asIntKey(dynamic k) => k is int ? k : null;
 
 enum _ItemType { exercise, circuit }
 
@@ -70,6 +79,11 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     _loadWorkout();
     _rebuildAll();
     _snapshot = List.from(_items);
+    // FASE 3 — necessario per assegnare la modalità predefinita ai
+    // nuovi esercizi/membri circuito e per il selettore modalità
+    // nel popup "Modifica parametri".
+    Future.microtask(
+        () => context.read<TrainingModeProvider>().loadModes());
   }
 
   void _loadWorkout() {
@@ -155,6 +169,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
             restSeconds:  we.restSeconds,
             notes:        we.notes,
             sortOrder:    order++,
+            trainingModeKey: we.trainingModeKey,
           ),
         );
       } else {
@@ -273,6 +288,12 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                     .map((e) => e.sortOrder)
                     .reduce((a, b) => a > b ? a : b) +
                 1;
+        // FASE 3 — Parte 7/15: i nuovi esercizi ricevono la modalità
+        // predefinita globale ATTUALE. Letta una sola volta prima
+        // del loop così resta stabile per tutti gli esercizi
+        // aggiunti in questa singola operazione.
+        final defaultModeKey = _asIntKey(
+            context.read<TrainingModeProvider>().defaultMode?.key);
         for (final key in keys) {
           try {
             final ex = allExercises.firstWhere((e) => e.key == key);
@@ -286,6 +307,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
               targetReps:   10,
               targetWeight: 0,
               sortOrder:    nextOrder++,
+              trainingModeKey: defaultModeKey,
             ));
           } catch (_) {}
         }
@@ -324,6 +346,10 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
           rounds:     rounds,
           sortOrder:  nextOrder,
         ));
+        // FASE 3 — stessa assegnazione automatica anche per i membri
+        // di un nuovo circuito.
+        final defaultModeKey = _asIntKey(
+            context.read<TrainingModeProvider>().defaultMode?.key);
         int exOrder = 0;
         for (final key in keys) {
           try {
@@ -339,6 +365,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
               targetWeight: 0,
               notes:        '__circuit_$circuitKey',
               sortOrder:    exOrder++,
+              trainingModeKey: defaultModeKey,
             ));
           } catch (_) {}
         }
@@ -379,6 +406,10 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                     .map((e) => e.sortOrder)
                     .reduce((a, b) => a > b ? a : b) +
                 1;
+        // FASE 3 — stessa assegnazione automatica per i nuovi
+        // membri aggiunti a un circuito esistente.
+        final defaultModeKey = _asIntKey(
+            context.read<TrainingModeProvider>().defaultMode?.key);
         for (final key in toAdd) {
           try {
             final ex = allExercises.firstWhere((e) => e.key == key);
@@ -393,6 +424,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
               targetWeight: 0,
               notes:        '__circuit_${circuit.key}',
               sortOrder:    nextOrder++,
+              trainingModeKey: defaultModeKey,
             ));
           } catch (_) {}
         }
@@ -486,7 +518,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
   Future<void> _editExerciseParams(HiveWorkoutExercise we) async {
     await _openSheet(_EditParamsSheet(
       exercise: we,
-      onConfirm: (sets, reps, weight, rest) async {
+      onConfirm: (sets, reps, weight, rest, trainingModeKey) async {
         await HiveDatabase.instance.updateWorkoutExercise(
           we.key,
           HiveWorkoutExercise(
@@ -500,6 +532,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
             restSeconds:  rest,
             notes:        we.notes,
             sortOrder:    we.sortOrder,
+            trainingModeKey: _asIntKey(trainingModeKey),
           ),
         );
         if (mounted) {
@@ -661,6 +694,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                                           restSeconds:  reordered[i].restSeconds,
                                           notes:        reordered[i].notes,
                                           sortOrder:    i,
+                                          trainingModeKey:
+                                              reordered[i].trainingModeKey,
                                         ),
                                       );
                                     }
@@ -1773,7 +1808,14 @@ class _RenameSheet extends StatelessWidget {
 
 class _EditParamsSheet extends StatefulWidget {
   final HiveWorkoutExercise exercise;
-  final void Function(int sets, int reps, double weight, int? rest) onConfirm;
+  // FASE 3 — firma estesa con trainingModeKey (dynamic: Hive key).
+  // NOTA: sets/reps/peso/rest restano i campi che determinano
+  // ancora la generazione delle serie nella sessione attiva
+  // (invariato in questa fase — la Fase 4 collegherà la modalità
+  // alla generazione effettiva della struttura in sessione). La
+  // modalità qui è solo un riferimento selezionabile e persistito.
+  final void Function(int sets, int reps, double weight, int? rest,
+      dynamic trainingModeKey) onConfirm;
   const _EditParamsSheet({required this.exercise, required this.onConfirm});
   @override
   State<_EditParamsSheet> createState() => _EditParamsSheetState();
@@ -1782,6 +1824,7 @@ class _EditParamsSheet extends StatefulWidget {
 class _EditParamsSheetState extends State<_EditParamsSheet> {
   late int    _sets, _reps, _rest;
   late double _weight;
+  dynamic     _selectedModeKey;
 
   @override
   void initState() {
@@ -1790,12 +1833,40 @@ class _EditParamsSheetState extends State<_EditParamsSheet> {
     _reps   = widget.exercise.targetReps;
     _weight = widget.exercise.targetWeight ?? 0;
     _rest   = widget.exercise.restSeconds  ?? 60;
+    _selectedModeKey = widget.exercise.trainingModeKey;
+  }
+
+  Future<void> _openModePicker() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => GestureDetector(
+        onTap: () => FocusScope.of(ctx).unfocus(),
+        child: Padding(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: TrainingModePickerSheet(
+                currentModeKey: _selectedModeKey,
+                onSelect: (m) => setState(() => _selectedModeKey = m.key),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final c      = context.mfc;
     final isDark = context.isDarkMode;
+    final currentMode =
+        context.watch<TrainingModeProvider>().getByKey(_selectedModeKey);
 
     return GlassSheetWrapper(
       title:    widget.exercise.exerciseName,
@@ -1803,6 +1874,60 @@ class _EditParamsSheetState extends State<_EditParamsSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // FASE 3 — selettore modalità (Parte 13): tocco apre il
+          // popup di sola selezione; la scelta resta locale finché
+          // non si preme "Salva parametri".
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: GestureDetector(
+              onTap: _openModePicker,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(
+                      sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 13),
+                    decoration: BoxDecoration(
+                      color: c.inputBg,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: _kIndigo.withOpacity(0.25), width: 0.8),
+                    ),
+                    child: Row(children: [
+                      Icon(Icons.repeat_rounded,
+                          color: _kIndigo.withOpacity(0.8), size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Modalità', style: TextStyle(
+                                color: c.textTertiary,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3)),
+                            const SizedBox(height: 2),
+                            Text(
+                              currentMode?.structureLabel ??
+                                  'Nessuna (legacy)',
+                              style: TextStyle(
+                                  color: c.textPrimary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right_rounded,
+                          color: c.iconSecondary, size: 18),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
           _ParamRow(label: 'Serie', value: _sets, min: 1, max: 20,
               onChanged: (v) => setState(() => _sets = v)),
           _ParamRow(label: 'Ripetizioni', value: _reps, min: 1, max: 100,
@@ -1861,7 +1986,8 @@ class _EditParamsSheetState extends State<_EditParamsSheet> {
             label: 'Salva parametri',
             color: _kTeal,
             onTap: () => widget.onConfirm(
-                _sets, _reps, _weight, _rest > 0 ? _rest : null),
+                _sets, _reps, _weight, _rest > 0 ? _rest : null,
+                _selectedModeKey),
           ),
         ],
       ),

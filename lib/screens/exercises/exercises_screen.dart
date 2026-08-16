@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/navigation/app_router.dart';
 import '../../core/theme/markfit_colors.dart';
 import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
 import '../../providers/exercise_provider.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
+import '../training_modes/training_modes_screen.dart';
 
 // ─── Accent tokens ────────────────────────────────────────────
 const _cyan   = MarkFitColors.cyan;
@@ -249,6 +251,23 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
               Text('Tutti gli esercizi disponibili', style: TextStyle(
                   color: c.textTertiary, fontSize: 11)),
             ])),
+            // Gestione modalità di allenamento
+            Tooltip(
+              message: 'Modalità di allenamento',
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  pushPage(context, const TrainingModesScreen());
+                },
+                child: Container(width: 36, height: 36,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: c.glassCardInset,
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(color: c.glassBorder, width: 0.8)),
+                  child: Icon(Icons.repeat_rounded,
+                      size: 17, color: c.iconPrimary))),
+            ),
             // Add button
             GestureDetector(
               onTap: _showAddSheet,
