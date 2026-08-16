@@ -17,6 +17,7 @@ import 'providers/profile_provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/sport_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/training_mode_provider.dart';
 import 'providers/workout_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/history/history_screen.dart';
@@ -82,6 +83,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => GoalProvider()),
         ChangeNotifierProvider(create: (_) => SportProvider()),
+        // FASE 2 — Sistema Modalità di Allenamento: nessun
+        // caricamento eager (stesso motivo di Exercise/Workout/
+        // Goal/SportProvider — il box Hive per-utente è disponibile
+        // solo dopo il login). Le schermate che lo usano (Fase 3+)
+        // chiamano loadModes() nel proprio initState.
+        ChangeNotifierProvider(create: (_) => TrainingModeProvider()),
         ChangeNotifierProvider(
             create: (_) => ProfileProvider()..loadProfile()),
       ],
