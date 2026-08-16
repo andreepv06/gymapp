@@ -8,6 +8,7 @@ import 'core/theme/markfit_colors.dart';
 import 'db/goal_database.dart';
 import 'db/hive_database.dart';
 import 'db/sport_database.dart';
+import 'db/training_mode_database.dart';
 import 'navigation/navigation_depth_notifier.dart';
 import 'providers/auth_provider.dart';
 import 'providers/exercise_provider.dart';
@@ -31,6 +32,11 @@ void main() async {
   await HiveDatabase.instance.init();
   await GoalDatabase.instance.init();
   await SportDatabase.instance.init();
+  // FASE 1 — Sistema Modalità di Allenamento: registra gli adapter
+  // Hive dedicati (TrainingMode/TrainingModeSet). Il box per-utente
+  // viene aperto/seminato in AuthProvider.checkLogin/_loginInternal,
+  // stesso pattern di GoalDatabase/SportDatabase.
+  await TrainingModeDatabase.instance.init();
   await NotificationService.instance.init();
   runApp(const MyApp());
 }

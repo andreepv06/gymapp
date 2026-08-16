@@ -116,6 +116,7 @@ class HiveWorkoutExerciseAdapter
       restSeconds: fields[7] as int?,
       notes: fields[8] as String?,
       sortOrder: fields[9] as int,
+      trainingModeKey: fields[10] as int?,
     );
   }
 
@@ -123,7 +124,7 @@ class HiveWorkoutExerciseAdapter
   void write(
       BinaryWriter writer, HiveWorkoutExercise obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.workoutKey)
       ..writeByte(1)
@@ -143,7 +144,9 @@ class HiveWorkoutExerciseAdapter
       ..writeByte(8)
       ..write(obj.notes)
       ..writeByte(9)
-      ..write(obj.sortOrder);
+      ..write(obj.sortOrder)
+      ..writeByte(10)
+      ..write(obj.trainingModeKey);
   }
 
   @override
@@ -224,6 +227,8 @@ class HiveSessionSetAdapter
       reps: fields[6] as int,
       completed: fields[7] as bool,
       restSeconds: fields[8] as int?,
+      trainingModeKey: fields[9] as int?,
+      executionStatus: fields[10] as String?,
     );
   }
 
@@ -231,7 +236,7 @@ class HiveSessionSetAdapter
   void write(
       BinaryWriter writer, HiveSessionSet obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.sessionKey)
       ..writeByte(1)
@@ -249,7 +254,11 @@ class HiveSessionSetAdapter
       ..writeByte(7)
       ..write(obj.completed)
       ..writeByte(8)
-      ..write(obj.restSeconds);
+      ..write(obj.restSeconds)
+      ..writeByte(9)
+      ..write(obj.trainingModeKey)
+      ..writeByte(10)
+      ..write(obj.executionStatus);
   }
 
   @override

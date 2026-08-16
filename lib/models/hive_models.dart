@@ -69,6 +69,17 @@ class HiveWorkoutExercise extends HiveObject {
   String? notes;
   @HiveField(9)
   late int sortOrder;
+  // ── FASE 1 Sistema Modalità di Allenamento ──────────────────
+  // Riferimento (chiave Hive di TrainingMode) alla modalità
+  // assegnata a QUESTA associazione esercizio↔scheda. Nullable e
+  // additivo: i record esistenti restano validi con valore null
+  // (letti come "modalità legacy", derivata da sets/targetReps
+  // nelle fasi successive). La modalità è una proprietà
+  // dell'associazione esercizio↔scheda, non dell'esercizio globale:
+  // lo stesso esercizio può avere modalità diverse in schede
+  // diverse.
+  @HiveField(10)
+  int? trainingModeKey;
 
   HiveWorkoutExercise({
     required this.workoutKey,
@@ -81,6 +92,7 @@ class HiveWorkoutExercise extends HiveObject {
     this.restSeconds,
     this.notes,
     this.sortOrder = 0,
+    this.trainingModeKey,
   });
 
   dynamic get id => key;
@@ -138,6 +150,20 @@ class HiveSessionSet extends HiveObject {
   late bool completed;
   @HiveField(8)
   int? restSeconds;
+  // ── FASE 1 Sistema Modalità di Allenamento ──────────────────
+  // Riferimento (chiave Hive di TrainingMode) alla modalità
+  // utilizzata al momento dell'esecuzione di questa sessione, per
+  // questo esercizio. Nullable e additivo: i record esistenti
+  // restano validi con valore null (sessioni "legacy", precedenti
+  // all'introduzione del sistema modalità).
+  @HiveField(9)
+  int? trainingModeKey;
+  // Stato di esecuzione rispetto alla modalità: 'standard' |
+  // 'partial' | 'custom'. Calcolato e persistito dalle fasi
+  // successive al termine della sessione; nullable per
+  // retrocompatibilità con i record esistenti.
+  @HiveField(10)
+  String? executionStatus;
 
   HiveSessionSet({
     required this.sessionKey,
@@ -149,6 +175,8 @@ class HiveSessionSet extends HiveObject {
     required this.reps,
     required this.completed,
     this.restSeconds,
+    this.trainingModeKey,
+    this.executionStatus,
   });
 }
 
@@ -186,4 +214,3 @@ class HiveCircuit extends HiveObject {
     this.sortOrder = 0,
   });
 }
-

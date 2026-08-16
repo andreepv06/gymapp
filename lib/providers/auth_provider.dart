@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../db/hive_database.dart';
 import '../db/goal_database.dart';
 import '../db/sport_database.dart';
+import '../db/training_mode_database.dart';
 
 class UserAccount {
   final String identifier;
@@ -126,10 +127,15 @@ class AuthProvider extends ChangeNotifier {
       if (_isLoggedIn && _currentIdentifier != null) {
         await HiveDatabase.instance
             .switchUser(_currentIdentifier!);
-        // NUOVO: sincronizza i DB indipendenti dei nuovi sistemi
+        // Sincronizza i DB indipendenti dei nuovi sistemi
         // con lo stesso utente già autenticato dal sistema Fitness.
         await GoalDatabase.instance.switchUser(_currentIdentifier!);
         await SportDatabase.instance.switchUser(_currentIdentifier!);
+        // FASE 1 — Sistema Modalità di Allenamento: apre/semina il
+        // box dedicato per l'utente corrente, stesso pattern di
+        // GoalDatabase/SportDatabase.
+        await TrainingModeDatabase.instance
+            .switchUser(_currentIdentifier!);
       }
     } catch (e) {
       debugPrint('[AUTH] checkLogin error: $e');
@@ -290,9 +296,11 @@ class AuthProvider extends ChangeNotifier {
     debugPrint(
         '[AUTH] _loginInternal: loggato come $identifier');
     await HiveDatabase.instance.switchUser(identifier);
-    // NUOVO: stessa sincronizzazione anche al login/registrazione.
+    // Stessa sincronizzazione anche al login/registrazione.
     await GoalDatabase.instance.switchUser(identifier);
     await SportDatabase.instance.switchUser(identifier);
+    // FASE 1 — Sistema Modalità di Allenamento.
+    await TrainingModeDatabase.instance.switchUser(identifier);
     notifyListeners();
   }
 
