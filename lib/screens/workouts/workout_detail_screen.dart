@@ -1806,14 +1806,107 @@ class _RenameSheet extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// _ModeStructurePreview — FIX FASE 3
+//
+// Rappresenta la struttura PREVISTA da una TrainingMode in sola
+// lettura (Parte 6/14/15 del fix): ogni serie della modalità,
+// nell'ordine definito, con la propria etichetta (reps fisse
+// oppure range "min-max" — TrainingModeSet.label già gestisce
+// entrambi i casi). Nessun controllo interattivo: la modifica
+// della struttura avviene esclusivamente tramite la Gestione
+// modalità, mai da qui.
+// ─────────────────────────────────────────────────────────────
+class _ModeStructurePreview extends StatelessWidget {
+  final TrainingMode  mode;
+  final MarkFitColors c;
+  const _ModeStructurePreview({required this.mode, required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    final ordered = mode.orderedSets;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: c.glassCardInset,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: c.glassBorder, width: 0.8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.lock_outline_rounded,
+                    size: 13, color: c.textTertiary),
+                const SizedBox(width: 6),
+                Text('Definito dalla modalità', style: TextStyle(
+                    color: c.textTertiary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3)),
+              ]),
+              const SizedBox(height: 10),
+              if (ordered.isEmpty)
+                Text('Nessuna serie definita', style: TextStyle(
+                    color: c.textTertiary,
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic))
+              else
+                ...ordered.map((s) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(children: [
+                        Container(
+                          width: 22, height: 22,
+                          decoration: BoxDecoration(
+                              color: _kIndigo.withOpacity(0.12),
+                              shape: BoxShape.circle),
+                          child: Center(child: Text('${s.order}',
+                              style: const TextStyle(
+                                  color: _kIndigo,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800))),
+                        ),
+                        const SizedBox(width: 10),
+                        Text('Serie ${s.order}', style: TextStyle(
+                            color: c.textSecondary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500)),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _kCyan.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: _kCyan.withOpacity(0.2), width: 0.7),
+                          ),
+                          child: Text('${s.label} reps', style: const TextStyle(
+                              color: _kCyan,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700)),
+                        ),
+                      ]),
+                    )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EditParamsSheet extends StatefulWidget {
   final HiveWorkoutExercise exercise;
   // FASE 3 — firma estesa con trainingModeKey (dynamic: Hive key).
-  // NOTA: sets/reps/peso/rest restano i campi che determinano
-  // ancora la generazione delle serie nella sessione attiva
-  // (invariato in questa fase — la Fase 4 collegherà la modalità
-  // alla generazione effettiva della struttura in sessione). La
-  // modalità qui è solo un riferimento selezionabile e persistito.
+  // NOTA: sets/reps sono ora SEMPRE calcolati da questo widget prima
+  // di essere passati al chiamante — derivati dalla modalità quando
+  // presente (FIX), altrimenti dagli stepper legacy. Il chiamante
+  // (workout_detail_screen._editExerciseParams) non cambia.
   final void Function(int sets, int reps, double weight, int? rest,
       dynamic trainingModeKey) onConfirm;
   const _EditParamsSheet({required this.exercise, required this.onConfirm});
@@ -1822,17 +1915,21 @@ class _EditParamsSheet extends StatefulWidget {
 }
 
 class _EditParamsSheetState extends State<_EditParamsSheet> {
-  late int    _sets, _reps, _rest;
+  // Usati SOLO quando l'esercizio non ha una modalità associata
+  // (dato legacy — Parte 17 del fix: piena compatibilità con le
+  // schede create prima della Fase 3).
+  late int    _legacySets, _legacyReps;
+  late int    _rest;
   late double _weight;
   dynamic     _selectedModeKey;
 
   @override
   void initState() {
     super.initState();
-    _sets   = widget.exercise.sets;
-    _reps   = widget.exercise.targetReps;
-    _weight = widget.exercise.targetWeight ?? 0;
-    _rest   = widget.exercise.restSeconds  ?? 60;
+    _legacySets = widget.exercise.sets;
+    _legacyReps = widget.exercise.targetReps;
+    _weight     = widget.exercise.targetWeight ?? 0;
+    _rest       = widget.exercise.restSeconds  ?? 60;
     _selectedModeKey = widget.exercise.trainingModeKey;
   }
 
@@ -1852,6 +1949,11 @@ class _EditParamsSheetState extends State<_EditParamsSheet> {
               physics: const ClampingScrollPhysics(),
               child: TrainingModePickerSheet(
                 currentModeKey: _selectedModeKey,
+                // FIX: selezionare una nuova modalità aggiorna subito
+                // lo stato locale → la struttura visualizzata sotto
+                // (letta SEMPRE dalla modalità corrente tramite
+                // Provider.getByKey nel build) cambia immediatamente,
+                // senza alcun intervento manuale sull'utente.
                 onSelect: (m) => setState(() => _selectedModeKey = m.key),
               ),
             ),
@@ -1859,6 +1961,41 @@ class _EditParamsSheetState extends State<_EditParamsSheet> {
         ),
       ),
     );
+  }
+
+  /// FIX FASE 3 — deriva (sets, reps legacy) dalla struttura della
+  /// modalità selezionata. `reps` è calcolato dalla prima serie
+  /// (valore fisso, oppure il minimo se la serie è a range — Parte 13
+  /// del fix: "il minimo può essere usato come valore iniziale/
+  /// predefinito"), e resta un dato DERIVATO di compatibilità per il
+  /// campo legacy HiveWorkoutExercise.targetReps (consumato oggi dalla
+  /// generazione della sessione attiva, che la Fase 4 sostituirà con
+  /// la copia integrale della struttura). La UI in sola lettura invece
+  /// mostra SEMPRE la struttura completa e corretta di ogni serie.
+  ({int sets, int reps}) _deriveLegacyFromMode(TrainingMode mode) {
+    final ordered = mode.orderedSets;
+    if (ordered.isEmpty) {
+      return (sets: _legacySets, reps: _legacyReps);
+    }
+    final first = ordered.first;
+    final reps = first.isRange
+        ? (first.minReps ?? _legacyReps)
+        : (first.fixedReps ?? _legacyReps);
+    return (sets: ordered.length, reps: reps);
+  }
+
+  void _save(BuildContext context) {
+    final mode = _selectedModeKey != null
+        ? context.read<TrainingModeProvider>().getByKey(_selectedModeKey)
+        : null;
+    if (mode != null) {
+      final derived = _deriveLegacyFromMode(mode);
+      widget.onConfirm(derived.sets, derived.reps, _weight,
+          _rest > 0 ? _rest : null, _selectedModeKey);
+    } else {
+      widget.onConfirm(_legacySets, _legacyReps, _weight,
+          _rest > 0 ? _rest : null, _selectedModeKey);
+    }
   }
 
   @override
@@ -1874,9 +2011,7 @@ class _EditParamsSheetState extends State<_EditParamsSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // FASE 3 — selettore modalità (Parte 13): tocco apre il
-          // popup di sola selezione; la scelta resta locale finché
-          // non si preme "Salva parametri".
+          // Selettore modalità — SEMPRE modificabile (Parte 15).
           Padding(
             padding: const EdgeInsets.only(bottom: 14),
             child: GestureDetector(
@@ -1928,10 +2063,23 @@ class _EditParamsSheetState extends State<_EditParamsSheet> {
               ),
             ),
           ),
-          _ParamRow(label: 'Serie', value: _sets, min: 1, max: 20,
-              onChanged: (v) => setState(() => _sets = v)),
-          _ParamRow(label: 'Ripetizioni', value: _reps, min: 1, max: 100,
-              onChanged: (v) => setState(() => _reps = v)),
+
+          // FIX FASE 3 — struttura: SOLA LETTURA derivata dalla
+          // modalità quando presente, altrimenti stepper legacy
+          // editabili per piena compatibilità con schede pre-Fase 3.
+          if (currentMode != null) ...[
+            _ModeStructurePreview(mode: currentMode, c: c),
+            const SizedBox(height: 14),
+          ] else ...[
+            _ParamRow(label: 'Serie', value: _legacySets, min: 1, max: 20,
+                onChanged: (v) => setState(() => _legacySets = v)),
+            _ParamRow(label: 'Ripetizioni', value: _legacyReps, min: 1,
+                max: 100,
+                onChanged: (v) => setState(() => _legacyReps = v)),
+          ],
+
+          // Recupero e peso: SEMPRE editabili — non fanno parte della
+          // struttura definita dalla modalità.
           _ParamRow(label: 'Recupero (sec)', value: _rest, min: 0,
               max: 600, step: 15,
               onChanged: (v) => setState(() => _rest = v)),
@@ -1985,9 +2133,7 @@ class _EditParamsSheetState extends State<_EditParamsSheet> {
           GlassPrimaryButton(
             label: 'Salva parametri',
             color: _kTeal,
-            onTap: () => widget.onConfirm(
-                _sets, _reps, _weight, _rest > 0 ? _rest : null,
-                _selectedModeKey),
+            onTap: () => _save(context),
           ),
         ],
       ),
