@@ -133,8 +133,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     ));
   }
 
+  // FIX: usa showWorkoutIconColorSheet — popup a layout fisso
+  // (anteprima + tab Icona/Colore + pulsanti sempre visibili),
+  // aperto direttamente e non annidato in _openSheet.
   Future<void> _showIconColorSheet(HiveWorkout workout) async {
-    await _openSheet(WorkoutIconColorSheet(
+    await showWorkoutIconColorSheet(
+      context,
       initialIconId:     workout.iconId,
       initialColorValue: workout.iconColorIndex,
       onSelect: (iconId, colorArgb) {
@@ -146,7 +150,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           Navigator.pop(context);
         }
       },
-    ));
+    );
   }
 
   Future<void> _confirmDelete(HiveWorkout workout) async {

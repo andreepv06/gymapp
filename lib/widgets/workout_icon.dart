@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/theme/markfit_colors.dart';
-import 'shared_sheets.dart';
 
 // ─────────────────────────────────────────────────────────────
 // PALETTE LEGACY — backward compat (indici 0–7 dai dati vecchi)
@@ -21,6 +21,13 @@ const List<Color> _kLegacyPalette = [
 
 // ─────────────────────────────────────────────────────────────
 // PALETTE ESTESA
+//
+// Ampliata rispetto alla versione precedente con toni pastello
+// chiari e toni scuri profondi, per offrire una selezione più
+// ricca (standard, vivaci, scuri, chiari) come richiesto.
+// L'ordine e i valori dei colori esistenti NON sono stati
+// alterati: sono stati solo aggiunti nuovi valori in coda,
+// quindi nessun mapping esistente viene rotto.
 // ─────────────────────────────────────────────────────────────
 const List<Color> kWorkoutPaletteExtended = [
   Color(0xFF00D4AA), Color(0xFF0FD9B4), Color(0xFF14B8A6), Color(0xFF10B981),
@@ -33,10 +40,18 @@ const List<Color> kWorkoutPaletteExtended = [
   Color(0xFFF97316), Color(0xFFFB923C), Color(0xFFF59E0B), Color(0xFFEAB308),
   Color(0xFFD97706), Color(0xFFB45309),
   Color(0xFF64748B), Color(0xFF475569), Color(0xFF334155), Color(0xFF1E293B),
+  // ── Toni pastello chiari (aggiunti) ──────────────────────
+  Color(0xFFFFD3E0), Color(0xFFD1F2EB), Color(0xFFFFF3B0), Color(0xFFD0E8FF),
+  // ── Toni scuri profondi (aggiunti) ───────────────────────
+  Color(0xFF4A0E0E), Color(0xFF0B3D2E), Color(0xFF1B1B3A), Color(0xFF3D2645),
 ];
 
 // ─────────────────────────────────────────────────────────────
-// LIBRERIA ICONE ESTESA (56 voci)
+// LIBRERIA ICONE ESTESA
+//
+// Ampliata con nuove icone tematiche fitness/sport (nessuna
+// nuova dipendenza: solo Icons.* già inclusi in Flutter).
+// Gli id e le icone esistenti non sono stati toccati.
 // ─────────────────────────────────────────────────────────────
 const List<(String, IconData)> kWorkoutIconLibrary = [
   ('dumbbell',      Icons.fitness_center_rounded),
@@ -94,10 +109,33 @@ const List<(String, IconData)> kWorkoutIconLibrary = [
   ('calendar',      Icons.calendar_today_rounded),
   ('person',        Icons.person_rounded),
   ('group',         Icons.group_rounded),
+  // ── Nuove icone aggiunte ──────────────────────────────────
+  ('handball',      Icons.sports_handball_rounded),
+  ('football',      Icons.sports_football_rounded),
+  ('rugby',         Icons.sports_rugby_rounded),
+  ('hockey',        Icons.sports_hockey_rounded),
+  ('cricket',       Icons.sports_cricket_rounded),
+  ('baseball',      Icons.sports_baseball_rounded),
+  ('snowboard',     Icons.snowboarding_rounded),
+  ('surf',          Icons.surfing_rounded),
+  ('skateboard',    Icons.skateboarding_rounded),
+  ('rollerskate',   Icons.roller_skating_rounded),
+  ('kayak',         Icons.kayaking_rounded),
+  ('ski',           Icons.downhill_skiing_rounded),
+  ('nutrition',     Icons.restaurant_rounded),
+  ('hydration',     Icons.local_drink_rounded),
+  ('recovery',      Icons.bedtime_rounded),
+  ('shower',        Icons.shower_rounded),
 ];
 
 // ─────────────────────────────────────────────────────────────
 // resolveWorkoutColor — PUNTO UNICO DI VERITÀ
+//
+// INVARIATO: gestisce sia i vecchi indici legacy (0-7) sia gli
+// ARGB pieni (> 0xFFFF) salvati dal popup. Questo è il motivo
+// per cui non esiste un bug di mapping tra selezione e salvataggio:
+// il popup salva sempre color.value (ARGB pieno), che ricade
+// sempre nel ramo `Color(value)`.
 // ─────────────────────────────────────────────────────────────
 Color resolveWorkoutColor(int? value) {
   if (value == null) return _kLegacyPalette.first;
@@ -219,21 +257,64 @@ class WorkoutAvatar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
+// showWorkoutIconColorSheet
+//
+// Punto unico di apertura del popup. Usa showModalBottomSheet
+// direttamente (invece di passare per i wrapper generici
+// _openSheet / showKeyboardSafeSheet usati altrove nell'app),
+// perché questo popup ha bisogno di un layout a ALTEZZA FISSA
+// con header/anteprima e footer/pulsanti ancorati e una sola
+// area centrale scrollabile — cosa incompatibile con l'essere
+// annidato in un SingleChildScrollView esterno.
+//
+// enableDrag: true (default) + isDismissible: true forniscono
+// nativamente lo swipe-down-to-dismiss richiesto: se l'utente
+// chiude trascinando verso il basso, `onSelect` NON viene mai
+// invocato, quindi nessuna modifica temporanea viene salvata.
+// ─────────────────────────────────────────────────────────────
+Future<void> showWorkoutIconColorSheet(
+  BuildContext context, {
+  String? initialIconId,
+  int? initialColorValue,
+  required void Function(String iconId, int colorArgb) onSelect,
+}) {
+  return showModalBottomSheet<void>(
+    context:            context,
+    isScrollControlled: true,
+    useSafeArea:        true,
+    backgroundColor:    Colors.transparent,
+    isDismissible:      true,
+    enableDrag:         true,
+    builder: (ctx) => WorkoutIconColorSheet(
+      initialIconId:     initialIconId,
+      initialColorValue: initialColorValue,
+      onSelect:          onSelect,
+    ),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // WorkoutIconColorSheet — componente condiviso
 //
-// FIX: aggiunto pulsante "Annulla" affiancato ad "Applica".
+// LAYOUT (richiesto):
+//   ┌ handle ─────────────────────────────┐
+//   │ ANTEPRIMA (fissa)                    │
+//   │ TAB Icona | Colore (fisso)           │
+//   ├───────────────────────────────────────┤
+//   │      AREA SCORRIBILE                  │
+//   │  (griglia icone OPPURE griglia colori)│
+//   ├───────────────────────────────────────┤
+//   │  ANNULLA           APPLICA (fissi)    │
+//   └───────────────────────────────────────┘
 //
-// Flusso corretto:
-//   Apri → modifica temporanea locale
-//   ↓
-//   Annulla / Swipe Down → chiude senza salvare (Navigator.pop)
-//   Applica              → chiama onSelect → salva in Hive
-//
-// Lo swipe-to-dismiss funziona nativamente via showModalBottomSheet
-// (isDismissible: true, enableDrag: true — default Flutter).
-// Con ClampingScrollPhysics, il drag verso il basso dal top
-// della scroll non viene assorbito e viene passato al modal
-// sheet dismiss handler.
+// STATO TEMPORANEO:
+//   _iconId / _color sono inizializzati dai valori correnti
+//   della scheda e modificati liberamente durante l'uso del
+//   popup. Il valore definitivo cambia SOLO quando l'utente
+//   preme "Applica" (viene chiamato widget.onSelect). Se preme
+//   "Annulla" o chiude con swipe-down, il popup si chiude e
+//   _iconId/_color vengono scartati senza alcuna chiamata a
+//   onSelect: nessun salvataggio parziale/accidentale.
 // ─────────────────────────────────────────────────────────────
 class WorkoutIconColorSheet extends StatefulWidget {
   final String? initialIconId;
@@ -252,11 +333,14 @@ class WorkoutIconColorSheet extends StatefulWidget {
       _WorkoutIconColorSheetState();
 }
 
+enum _IconColorTab { icon, color }
+
 class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
   late String   _iconId;
   late Color    _color;
   late HSVColor _hsv;
   bool          _showCustomPicker = false;
+  _IconColorTab _tab              = _IconColorTab.icon;
 
   @override
   void initState() {
@@ -274,43 +358,243 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
     });
   }
 
+  // Applica: qui e SOLO qui il valore temporaneo diventa
+  // definitivo, tramite la callback del chiamante.
+  void _apply() {
+    widget.onSelect(_iconId, _color.value);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final c = context.mfc;
+    final c       = context.mfc;
+    final isDark  = context.isDarkMode;
 
-    return GlassSheetWrapper(
-      title:       'Icona e colore',
-      accentColor: _color,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ── Anteprima ──────────────────────────────────
-          Center(
-            child: Column(children: [
-              WorkoutAvatar(
-                iconId:         _iconId,
-                iconColorIndex: _color.value,
-                size:           72,
-                iconSize:       36,
-                borderRadius:   18,
+    // Stessa filosofia di opacità/blur di GlassSheetWrapper (usata
+    // in tutto il resto dell'app): superficie OPACA (94-97%) +
+    // BackdropFilter per la texture glass, in modo che il popup
+    // non risulti mai trasparente al punto da rivelare la pagina
+    // sottostante.
+    final sheetBg = isDark
+        ? const Color(0xEF060B14)
+        : Colors.white.withOpacity(0.97);
+
+    final maxHeight = MediaQuery.of(context).size.height * 0.86;
+
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          decoration: BoxDecoration(
+            color:        sheetBg,
+            borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24)),
+            border: Border.all(
+                color: _color.withOpacity(0.3), width: 0.8),
+            boxShadow: c.showElevation
+                ? [BoxShadow(
+                    color:      c.elevationColor,
+                    blurRadius: 20,
+                    offset:     const Offset(0, -2))]
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              _buildHandle(),
+              const SizedBox(height: 16),
+              _buildPreviewHeader(c),
+              const SizedBox(height: 16),
+              _buildTabSelector(c),
+              const SizedBox(height: 8),
+              Expanded(
+                child: _tab == _IconColorTab.icon
+                    ? _buildIconGrid(c)
+                    : _buildColorContent(c),
               ),
-              const SizedBox(height: 6),
-              Text('Anteprima', style: TextStyle(
-                  color: c.textTertiary, fontSize: 11)),
+              _buildFooter(c),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Handle (drag indicator) ─────────────────────────────────
+
+  Widget _buildHandle() {
+    return Center(
+      child: Container(
+        width:  40,
+        height: 4,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [
+            _color.withOpacity(0.3),
+            _color.withOpacity(0.6),
+            _color.withOpacity(0.3),
+          ]),
+          borderRadius: BorderRadius.circular(2),
+          boxShadow: [
+            BoxShadow(color: _color.withOpacity(0.3), blurRadius: 6),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Anteprima sempre visibile ───────────────────────────────
+
+  Widget _buildPreviewHeader(MarkFitColors c) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(children: [
+        WorkoutAvatar(
+          iconId:         _iconId,
+          iconColorIndex: _color.value,
+          size:           64,
+          iconSize:       32,
+          borderRadius:   16,
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Icona e colore', style: TextStyle(
+                  color:      c.textPrimary,
+                  fontSize:   17,
+                  fontWeight: FontWeight.w800)),
+              const SizedBox(height: 3),
+              Text('Anteprima aggiornata in tempo reale', style: TextStyle(
+                  color: c.textTertiary, fontSize: 12)),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
+
+  // ── Tab selector Icona / Colore ─────────────────────────────
+
+  Widget _buildTabSelector(MarkFitColors c) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: c.glassBlur, sigmaY: c.glassBlur),
+          child: Container(
+            height: 42,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: c.glassCardInset,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: c.glassBorder, width: 0.8),
+            ),
+            child: Row(children: [
+              Expanded(child: _tabButton(
+                  c, _IconColorTab.icon, 'Icona',
+                  Icons.category_rounded)),
+              Expanded(child: _tabButton(
+                  c, _IconColorTab.color, 'Colore',
+                  Icons.palette_rounded)),
             ]),
           ),
-          const SizedBox(height: 20),
+        ),
+      ),
+    );
+  }
 
-          // ── Colore ─────────────────────────────────────
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text('Colore', style: TextStyle(
-                color:        c.textSecondary,
-                fontSize:     12,
-                fontWeight:   FontWeight.w600,
-                letterSpacing: 0.4)),
-          ),
-          const SizedBox(height: 10),
+  Widget _tabButton(
+      MarkFitColors c, _IconColorTab tab, String label, IconData icon) {
+    final sel = _tab == tab;
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _tab = tab);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: sel ? _color.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          border: sel
+              ? Border.all(color: _color.withOpacity(0.55), width: 1)
+              : null,
+          boxShadow: sel
+              ? [BoxShadow(color: _color.withOpacity(0.2), blurRadius: 6)]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: sel ? _color : c.textTertiary),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(
+                color:      sel ? _color : c.textTertiary,
+                fontSize:   13,
+                fontWeight: sel ? FontWeight.w700 : FontWeight.w500)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Tab "Icona" — griglia scrollabile ───────────────────────
+
+  Widget _buildIconGrid(MarkFitColors c) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      child: Wrap(
+        spacing:    10,
+        runSpacing: 10,
+        children: kWorkoutIconLibrary.map((icon) {
+          final sel = _iconId == icon.$1;
+          return GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() => _iconId = icon.$1);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width:  54,
+              height: 54,
+              decoration: BoxDecoration(
+                color: sel ? _color.withOpacity(0.2) : c.glassCardInset,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: sel ? _color.withOpacity(0.75) : c.glassBorder,
+                  width: sel ? 1.6 : 1,
+                ),
+                boxShadow: sel
+                    ? [BoxShadow(
+                        color:      _color.withOpacity(0.3),
+                        blurRadius: 10)]
+                    : null,
+              ),
+              child: Icon(icon.$2,
+                  color: sel ? _color : c.iconSecondary, size: 24),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ── Tab "Colore" — palette + custom scrollabile ─────────────
+
+  Widget _buildColorContent(MarkFitColors c) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Wrap(
             spacing:    10,
             runSpacing: 10,
@@ -321,14 +605,16 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
                   onTap: () => _pickPaletteColor(p),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
-                    width:  34,
-                    height: 34,
+                    width:  44,
+                    height: 44,
                     decoration: BoxDecoration(
                       color:  p,
                       shape:  BoxShape.circle,
                       border: sel
-                          ? Border.all(color: Colors.white, width: 2.5)
-                          : null,
+                          ? Border.all(color: Colors.white, width: 2.6)
+                          : Border.all(
+                              color: Colors.black.withOpacity(0.08),
+                              width: 0.6),
                       boxShadow: sel
                           ? [BoxShadow(
                               color:      p.withOpacity(0.6),
@@ -337,19 +623,20 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
                     ),
                     child: sel
                         ? const Icon(Icons.check_rounded,
-                            color: Colors.white, size: 16)
+                            color: Colors.white, size: 18)
                         : null,
                   ),
                 );
               }),
-              // Colore personalizzato (rainbow)
+              // Colore personalizzato (rainbow) — architettura
+              // preservata per eventuale estensione futura.
               GestureDetector(
                 onTap: () => setState(
                     () => _showCustomPicker = !_showCustomPicker),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  width:  34,
-                  height: 34,
+                  width:  44,
+                  height: 44,
                   decoration: BoxDecoration(
                     gradient: const SweepGradient(colors: [
                       Color(0xFFFF0000), Color(0xFFFF7F00),
@@ -359,7 +646,7 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
                     ]),
                     shape:  BoxShape.circle,
                     border: _showCustomPicker
-                        ? Border.all(color: Colors.white, width: 2.5)
+                        ? Border.all(color: Colors.white, width: 2.6)
                         : null,
                     boxShadow: _showCustomPicker
                         ? [BoxShadow(
@@ -372,14 +659,12 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
                         ? Icons.check_rounded
                         : Icons.colorize_rounded,
                     color: Colors.white,
-                    size:  16,
+                    size:  18,
                   ),
                 ),
               ),
             ],
           ),
-
-          // ── Custom picker inline ────────────────────────
           AnimatedCrossFade(
             firstChild:  const SizedBox.shrink(),
             secondChild: Padding(
@@ -397,95 +682,75 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
                 : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 250),
           ),
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
 
-          const SizedBox(height: 20),
+  // ── Footer sempre visibile: Annulla / Applica ───────────────
 
-          // ── Icone ──────────────────────────────────────
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text('Icona', style: TextStyle(
-                color:        c.textSecondary,
-                fontSize:     12,
-                fontWeight:   FontWeight.w600,
-                letterSpacing: 0.4)),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing:    8,
-            runSpacing: 8,
-            children: kWorkoutIconLibrary.map((icon) {
-              final sel = _iconId == icon.$1;
-              return GestureDetector(
-                onTap: () => setState(() => _iconId = icon.$1),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width:  48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: sel
-                        ? _color.withOpacity(0.2)
-                        : c.glassCardInset,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: sel
-                          ? _color.withOpacity(0.7)
-                          : c.glassBorder,
-                      width: sel ? 1.5 : 1,
-                    ),
-                    boxShadow: sel
-                        ? [BoxShadow(
-                            color:      _color.withOpacity(0.25),
-                            blurRadius: 8)]
-                        : null,
-                  ),
-                  child: Icon(icon.$2,
-                      color: sel ? _color : c.iconSecondary, size: 22),
+  Widget _buildFooter(MarkFitColors c) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: c.divider, width: 0.7)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  color:        c.glassCardInset,
+                  borderRadius: BorderRadius.circular(14),
+                  border:       Border.all(color: c.glassBorder),
                 ),
-              );
-            }).toList(),
-          ),
-
-          const SizedBox(height: 22),
-
-          // ── Pulsanti Annulla + Applica ──────────────────
-          // FIX: aggiunto "Annulla" affiancato ad "Applica".
-          // Annulla = Navigator.pop senza chiamare onSelect → nessun salvataggio.
-          // Applica = chiama onSelect → salva in Hive.
-          // Swipe-down = equivalente ad Annulla (modal bottom sheet
-          //              non chiama onSelect al dismiss nativo).
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color:        c.glassCardInset,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: c.glassBorder),
-                    ),
-                    child: Text(
-                      'Annulla',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color:      c.textSecondary,
-                        fontSize:   15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                child: Text(
+                  'Annulla',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color:      c.textSecondary,
+                    fontSize:   15,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: GlassPrimaryButton(
-                  label: 'Applica',
-                  color: _color,
-                  onTap: () => widget.onSelect(_iconId, _color.value),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: GestureDetector(
+              onTap: _apply,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [
+                    _color,
+                    Color.lerp(_color, Colors.black, 0.2) ?? _color,
+                  ]),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color:      _color.withOpacity(0.4),
+                      blurRadius: 14,
+                      offset:     const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'Applica',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color:      Colors.white,
+                    fontSize:   15,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -495,6 +760,7 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
 
 // ─────────────────────────────────────────────────────────────
 // _HsvPickerWidget — Color picker puro Flutter (no deps)
+// INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _HsvPickerWidget extends StatelessWidget {
   final HSVColor                hsv;

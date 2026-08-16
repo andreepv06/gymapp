@@ -168,25 +168,23 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
 
   // FIX: metodo per aprire direttamente l'editor icona/colore
   // dal tap sull'icona nella card di Allenamenti.
-  // Usa WorkoutIconColorSheet (stesso componente di WorkoutDetailScreen)
-  // → stessa lista icone, stessa logica di salvataggio ARGB.
+  // Usa showWorkoutIconColorSheet (nuovo popup a layout fisso:
+  // anteprima + tab Icona/Colore + pulsanti sempre visibili).
   Future<void> _showIconColorSheet(HiveWorkout workout) async {
-    await showKeyboardSafeSheet(
+    await showWorkoutIconColorSheet(
       context,
-      WorkoutIconColorSheet(
-        initialIconId:     workout.iconId,
-        initialColorValue: workout.iconColorIndex,
-        onSelect: (iconId, colorArgb) {
-          // Salvataggio identico a WorkoutDetailScreen._showIconColorSheet
-          workout.iconId         = iconId;
-          workout.iconColorIndex = colorArgb;
-          workout.save();
-          if (mounted) {
-            context.read<WorkoutProvider>().loadWorkouts();
-            Navigator.pop(context);
-          }
-        },
-      ),
+      initialIconId:     workout.iconId,
+      initialColorValue: workout.iconColorIndex,
+      onSelect: (iconId, colorArgb) {
+        // Salvataggio identico a WorkoutDetailScreen._showIconColorSheet
+        workout.iconId         = iconId;
+        workout.iconColorIndex = colorArgb;
+        workout.save();
+        if (mounted) {
+          context.read<WorkoutProvider>().loadWorkouts();
+          Navigator.pop(context);
+        }
+      },
     );
   }
 

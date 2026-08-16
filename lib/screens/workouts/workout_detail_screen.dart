@@ -429,14 +429,15 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     ));
   }
 
-  // FIX PRINCIPALE: usa WorkoutIconColorSheet condiviso
-  // Rimosso .clamp() che corrompeva i valori ARGB
-  // Salva come ARGB diretto (color.value), non come indice
+  // FIX PRINCIPALE: usa showWorkoutIconColorSheet — popup a layout
+  // fisso (anteprima + tab Icona/Colore + pulsanti sempre visibili)
+  // aperto direttamente (non annidato in _openSheet) per poter
+  // gestire un'altezza fissa con area centrale scrollabile.
   Future<void> _showIconColorSheet() async {
     if (_workout == null) return;
-    await _openSheet(WorkoutIconColorSheet(
+    await showWorkoutIconColorSheet(
+      context,
       initialIconId:     _workout!.iconId,
-      // FIX: NO .clamp() → passa il valore raw da Hive
       initialColorValue: _workout!.iconColorIndex,
       onSelect: (iconId, colorArgb) {
         // FIX: salva ARGB diretto, non indice
@@ -447,7 +448,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
         context.read<WorkoutProvider>().loadWorkouts();
         Navigator.pop(context);
       },
-    ));
+    );
   }
 
   Future<void> _removeExercise(dynamic key) async {
