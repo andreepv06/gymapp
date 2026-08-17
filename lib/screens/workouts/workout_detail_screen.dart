@@ -37,6 +37,32 @@ const _kMuscleGroups = [
 // che possa lanciare un'eccezione (Parte 63 — nessun crash).
 int? _asIntKey(dynamic k) => k is int ? k : null;
 
+// FIX FASE 4 — deriva (sets, reps) dalla struttura REALE della
+// modalità, per allineare i valori legacy salvati su
+// HiveWorkoutExercise al momento della creazione dell'esercizio
+// nella scheda. Prima di questo fix venivano scritti valori
+// hardcoded (3×10) indipendenti dalla modalità realmente
+// assegnata in quel momento, causando la discrepanza visiva nel
+// tab segnalata dal fix. `reps` è il valore fisso della prima
+// serie, oppure il suo minimo se è a range — stessa convenzione
+// già usata da _EditParamsSheetState._deriveLegacyFromMode.
+// Fallback sicuro se la modalità è assente o priva di serie
+// (Parte 63 — mai un crash).
+({int sets, int reps}) _deriveSetsRepsFromMode(
+  TrainingMode? mode, {
+  int fallbackSets = 3,
+  int fallbackReps = 8,
+}) {
+  if (mode == null) return (sets: fallbackSets, reps: fallbackReps);
+  final ordered = mode.orderedSets;
+  if (ordered.isEmpty) return (sets: fallbackSets, reps: fallbackReps);
+  final first = ordered.first;
+  final reps = first.isRange
+      ? (first.minReps ?? fallbackReps)
+      : (first.fixedReps ?? fallbackReps);
+  return (sets: ordered.length, reps: reps);
+}
+
 enum _ItemType { exercise, circuit }
 
 class _ListItem {
@@ -288,12 +314,17 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                     .map((e) => e.sortOrder)
                     .reduce((a, b) => a > b ? a : b) +
                 1;
-        // FASE 3 — Parte 7/15: i nuovi esercizi ricevono la modalità
-        // predefinita globale ATTUALE. Letta una sola volta prima
-        // del loop così resta stabile per tutti gli esercizi
-        // aggiunti in questa singola operazione.
-        final defaultModeKey = _asIntKey(
-            context.read<TrainingModeProvider>().defaultMode?.key);
+        // FIX FASE 4 — i nuovi esercizi ricevono sia il riferimento
+        // alla modalità predefinita ATTUALE sia sets/reps DERIVATI
+        // dalla struttura reale di quella modalità (non più un
+        // valore hardcoded 3×10 che disallineava il riepilogo nel
+        // tab dalla modalità effettivamente assegnata — Parte 15/16
+        // del fix). Letti una sola volta prima del loop così
+        // restano stabili per tutti gli esercizi aggiunti in questa
+        // singola operazione.
+        final defaultMode    = context.read<TrainingModeProvider>().defaultMode;
+        final defaultModeKey = _asIntKey(defaultMode?.key);
+        final derived        = _deriveSetsRepsFromMode(defaultMode);
         for (final key in keys) {
           try {
             final ex = allExercises.firstWhere((e) => e.key == key);
@@ -303,8 +334,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
               exerciseKey:  ex.key,
               exerciseName: ex.name,
               muscleGroup:  ex.muscleGroup,
-              sets:         3,
-              targetReps:   10,
+              sets:         derived.sets,
+              targetReps:   derived.reps,
               targetWeight: 0,
               sortOrder:    nextOrder++,
               trainingModeKey: defaultModeKey,
@@ -346,10 +377,12 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
           rounds:     rounds,
           sortOrder:  nextOrder,
         ));
-        // FASE 3 — stessa assegnazione automatica anche per i membri
-        // di un nuovo circuito.
-        final defaultModeKey = _asIntKey(
-            context.read<TrainingModeProvider>().defaultMode?.key);
+        // FIX FASE 4 — stessa derivazione automatica sets/reps
+        // anche per i membri di un nuovo circuito (vedi commento
+        // in _showAddExerciseSheet).
+        final defaultMode    = context.read<TrainingModeProvider>().defaultMode;
+        final defaultModeKey = _asIntKey(defaultMode?.key);
+        final derived        = _deriveSetsRepsFromMode(defaultMode);
         int exOrder = 0;
         for (final key in keys) {
           try {
@@ -360,8 +393,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
               exerciseKey:  ex.key,
               exerciseName: ex.name,
               muscleGroup:  ex.muscleGroup,
-              sets:         3,
-              targetReps:   10,
+              sets:         derived.sets,
+              targetReps:   derived.reps,
               targetWeight: 0,
               notes:        '__circuit_$circuitKey',
               sortOrder:    exOrder++,
@@ -406,10 +439,11 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                     .map((e) => e.sortOrder)
                     .reduce((a, b) => a > b ? a : b) +
                 1;
-        // FASE 3 — stessa assegnazione automatica per i nuovi
-        // membri aggiunti a un circuito esistente.
-        final defaultModeKey = _asIntKey(
-            context.read<TrainingModeProvider>().defaultMode?.key);
+        // FIX FASE 4 — stessa derivazione automatica sets/reps per
+        // i nuovi membri aggiunti a un circuito esistente.
+        final defaultMode    = context.read<TrainingModeProvider>().defaultMode;
+        final defaultModeKey = _asIntKey(defaultMode?.key);
+        final derived        = _deriveSetsRepsFromMode(defaultMode);
         for (final key in toAdd) {
           try {
             final ex = allExercises.firstWhere((e) => e.key == key);
@@ -419,8 +453,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
               exerciseKey:  ex.key,
               exerciseName: ex.name,
               muscleGroup:  ex.muscleGroup,
-              sets:         3,
-              targetReps:   10,
+              sets:         derived.sets,
+              targetReps:   derived.reps,
               targetWeight: 0,
               notes:        '__circuit_${circuit.key}',
               sortOrder:    nextOrder++,
@@ -1031,6 +1065,9 @@ class _ActionBtn extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────
 // _ExerciseCard — ADATTIVO
+// FIX FASE 4 — il riepilogo serie/reps ora ha come fonte primaria
+// la modalità associata (quando presente), non più i soli campi
+// legacy sets/targetReps.
 // ─────────────────────────────────────────────────────────────
 class _ExerciseCard extends StatelessWidget {
   final HiveWorkoutExercise exercise;
@@ -1042,6 +1079,20 @@ class _ExerciseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // FIX FASE 4 — la modalità associata (se presente) è la fonte
+    // autorevole del riepilogo mostrato in questa card (Parte 3/16
+    // del fix): i campi legacy sets/targetReps non hanno più
+    // priorità quando trainingModeKey è valorizzato. Il valore è
+    // sempre letto "live" dal database delle modalità tramite
+    // watch, quindi riflette immediatamente qualsiasi cambiamento
+    // salvato altrove (es. modifica modalità nell'editor, o
+    // eliminazione/modifica dalla Gestione modalità).
+    final mode = context.watch<TrainingModeProvider>()
+        .getByKey(exercise.trainingModeKey);
+    final structureLabel = mode != null
+        ? mode.structureLabel
+        : '${exercise.sets} x ${exercise.targetReps}';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: ClipRRect(
@@ -1092,7 +1143,7 @@ class _ExerciseCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 3),
                         Wrap(spacing: 6, children: [
-                          _Tag('${exercise.sets} x ${exercise.targetReps}', c),
+                          _Tag(structureLabel, c),
                           if ((exercise.targetWeight ?? 0) > 0)
                             _Tag('${exercise.targetWeight} kg', c),
                           if ((exercise.restSeconds ?? 0) > 0)
