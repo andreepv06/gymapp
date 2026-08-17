@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../db/hive_database.dart';
+import '../db/training_mode_database.dart';
 import '../models/hive_models.dart';
+import '../models/training_mode.dart';
 import '../services/notification_service.dart';
+import '../services/session_classification_service.dart';
 
 class ActiveSet {
   int setNumber;
@@ -55,6 +58,17 @@ class SessionExercise {
   final String? notes;
   String? sessionNote;
   final String? circuitId;
+  // ── FASE 4 Sistema Modalità di Allenamento ──────────────────
+  // Riferimento alla modalità utilizzata per QUESTO esercizio in
+  // QUESTA sessione, e istantanea IMMUTABILE della struttura
+  // prevista al momento dell'avvio (Parte 12 del piano: la
+  // sessione non deve mai cambiare se la modalità viene
+  // successivamente modificata/eliminata). Entrambi nullable per
+  // compatibilità con esercizi legacy senza modalità assegnata o
+  // aggiunti ad-hoc durante la sessione (che non hanno un contesto
+  // di modalità da cui ereditare).
+  final dynamic trainingModeKey;
+  final List<TrainingModeSet>? expectedStructure;
 
   SessionExercise({
     required this.exerciseKey,
@@ -64,6 +78,8 @@ class SessionExercise {
     this.notes,
     this.sessionNote,
     this.circuitId,
+    this.trainingModeKey,
+    this.expectedStructure,
   });
 
   dynamic get exerciseId => exerciseKey;
@@ -77,18 +93,47 @@ class SessionExercise {
         'notes': notes,
         'sessionNote': sessionNote,
         'circuitId': circuitId,
+        'trainingModeKey': trainingModeKey,
+        'expectedStructure': expectedStructure
+            ?.map((s) => {
+                  'order': s.order,
+                  'fixedReps': s.fixedReps,
+                  'minReps': s.minReps,
+                  'maxReps': s.maxReps,
+                })
+            .toList(),
       };
 
-  factory SessionExercise.fromJson(Map<String, dynamic> j) => SessionExercise(
-        exerciseKey: j['exerciseKey'],
-        exerciseName: j['exerciseName'] as String,
-        muscleGroup: j['muscleGroup'] as String,
-        restSeconds: j['restSeconds'] as int?,
-        notes: j['notes'] as String?,
-        sessionNote: j['sessionNote'] as String?,
-        circuitId: j['circuitId'] as String?,
-      );
+  factory SessionExercise.fromJson(Map<String, dynamic> j) {
+    final rawStructure = j['expectedStructure'] as List?;
+    return SessionExercise(
+      exerciseKey: j['exerciseKey'],
+      exerciseName: j['exerciseName'] as String,
+      muscleGroup: j['muscleGroup'] as String,
+      restSeconds: j['restSeconds'] as int?,
+      notes: j['notes'] as String?,
+      sessionNote: j['sessionNote'] as String?,
+      circuitId: j['circuitId'] as String?,
+      trainingModeKey: j['trainingModeKey'],
+      expectedStructure: rawStructure == null
+          ? null
+          : rawStructure.map((e) {
+              final m = Map<String, dynamic>.from(e as Map);
+              return TrainingModeSet(
+                order: m['order'] as int,
+                fixedReps: m['fixedReps'] as int?,
+                minReps: m['minReps'] as int?,
+                maxReps: m['maxReps'] as int?,
+              );
+            }).toList(),
+    );
+  }
 }
+
+// FASE 4 — helper locale per conversione sicura della chiave
+// dinamica di Hive in int? (mai un cast diretto che possa
+// lanciare un'eccezione — Parte 63, nessun crash).
+int? _sessionAsIntKey(dynamic k) => k is int ? k : null;
 
 class SessionProvider extends ChangeNotifier {
   dynamic currentSessionKey;
@@ -627,6 +672,37 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // FASE 4 — Sistema Modalità di Allenamento: risolve la struttura
+  // reale (elenco ordinato di TrainingModeSet) della modalità
+  // assegnata a un esercizio, se presente. Ritorna null in ogni
+  // caso non risolvibile (nessuna modalità, modalità non trovata,
+  // modalità senza serie definite): mai un'eccezione, mai un dato
+  // parziale incoerente — in quel caso il chiamante ricade sempre
+  // sul comportamento legacy invariato (Parte 63).
+  List<TrainingModeSet>? _resolveModeStructure(dynamic trainingModeKey) {
+    if (trainingModeKey == null) return null;
+    try {
+      final mode = TrainingModeDatabase.instance.getByKey(trainingModeKey);
+      if (mode == null) return null;
+      final ordered = mode.orderedSets;
+      return ordered.isEmpty ? null : ordered;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Reps iniziale per una singola serie della struttura: valore
+  // fisso se presente, altrimenti il minimo del range (Parte 13:
+  // "il minimo può essere usato come valore iniziale/predefinito
+  // nella sessione, ma la configurazione della modalità deve
+  // continuare a mostrare il range completo" — qui usiamo solo il
+  // valore iniziale per la sessione, la UI di scheda mostra sempre
+  // il range intero separatamente).
+  int _initialRepsForSet(TrainingModeSet s, int fallback) {
+    if (s.isRange) return s.minReps ?? fallback;
+    return s.fixedReps ?? fallback;
+  }
+
   Future<void> startSession(
     List<HiveWorkoutExercise> exercises,
     dynamic workoutKey,
@@ -692,6 +768,10 @@ class SessionProvider extends ChangeNotifier {
       if (!topItem.isCircuit) {
         final ex = topItem.data as HiveWorkoutExercise;
         final lastSets = allLastSets[ex.exerciseKey] ?? {};
+        // FASE 4 — la struttura reale della modalità (se presente)
+        // determina numero di serie e reps iniziali per posizione,
+        // invece del vecchio valore uniforme ex.sets/ex.targetReps.
+        final structure = _resolveModeStructure(ex.trainingModeKey);
         _sessionExercises.add(SessionExercise(
           exerciseKey: ex.exerciseKey,
           exerciseName: ex.exerciseName,
@@ -700,14 +780,20 @@ class SessionProvider extends ChangeNotifier {
           notes: ex.notes,
           sessionNote: savedNotes[ex.exerciseKey],
           circuitId: null,
+          trainingModeKey: ex.trainingModeKey,
+          expectedStructure: structure,
         ));
-        _exerciseSets[ex.exerciseKey] = List.generate(ex.sets, (i) {
+        final setCount = structure?.length ?? ex.sets;
+        _exerciseSets[ex.exerciseKey] = List.generate(setCount, (i) {
           final setNumber = i + 1;
           final last = lastSets[setNumber];
+          final reps = structure != null
+              ? _initialRepsForSet(structure[i], ex.targetReps)
+              : ex.targetReps;
           return ActiveSet(
             setNumber: setNumber,
             weight: 0,
-            reps: ex.targetReps,
+            reps: reps,
             lastWeight:
                 (last != null && last.completed && last.weight > 0)
                     ? last.weight
@@ -726,6 +812,7 @@ class SessionProvider extends ChangeNotifier {
           ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
         for (final ex in circuitExercises) {
           final lastSets = allLastSets[ex.exerciseKey] ?? {};
+          final structure = _resolveModeStructure(ex.trainingModeKey);
           _sessionExercises.add(SessionExercise(
             exerciseKey: ex.exerciseKey,
             exerciseName: ex.exerciseName,
@@ -734,16 +821,22 @@ class SessionProvider extends ChangeNotifier {
             notes: null,
             sessionNote: savedNotes[ex.exerciseKey],
             circuitId: cid,
+            trainingModeKey: ex.trainingModeKey,
+            expectedStructure: structure,
           ));
+          final setCount = structure?.length ?? ex.sets;
           for (int r = 0; r < rounds.length; r++) {
             rounds[r][ex.exerciseKey] =
-                List.generate(ex.sets, (i) {
+                List.generate(setCount, (i) {
               final setNumber = i + 1;
               final last = lastSets[setNumber];
+              final reps = structure != null
+                  ? _initialRepsForSet(structure[i], ex.targetReps)
+                  : ex.targetReps;
               return ActiveSet(
                 setNumber: setNumber,
                 weight: 0,
-                reps: ex.targetReps,
+                reps: reps,
                 lastWeight: (last != null &&
                         last.completed &&
                         last.weight > 0)
@@ -1060,6 +1153,32 @@ class SessionProvider extends ChangeNotifier {
     _restingSetIndex = null;
   }
 
+  // FASE 4 — classifica un esercizio (o un singolo round di un
+  // circuito) confrontando la struttura attesa immutabile
+  // (istantanea presa all'avvio sessione) con le serie
+  // effettivamente presenti al termine. Ritorna null se non esiste
+  // una struttura attesa (esercizio legacy senza modalità): in quel
+  // caso executionStatus resta null, comportamento invariato
+  // rispetto a prima di questa fase.
+  String? _classifyExercise(
+      List<TrainingModeSet>? expectedStructure, List<ActiveSet> actualSets) {
+    if (expectedStructure == null || expectedStructure.isEmpty) return null;
+    final actual = <ExecutedSetInput>[
+      for (var i = 0; i < actualSets.length; i++)
+        ExecutedSetInput(
+          order: i + 1,
+          reps: actualSets[i].reps,
+          weight: actualSets[i].weight,
+          completed: actualSets[i].completed,
+        ),
+    ];
+    final status = SessionClassificationService.classify(
+      expectedSets: expectedStructure,
+      actualSets: actual,
+    );
+    return status.id;
+  }
+
   Future<void> finishSession() async {
     if (currentSessionKey == null) return;
     final duration = _sessionStartTime != null
@@ -1072,6 +1191,8 @@ class SessionProvider extends ChangeNotifier {
     for (final ex
         in _sessionExercises.where((e) => !e.isInCircuit)) {
       final sets = _exerciseSets[ex.exerciseKey] ?? [];
+      final modeKey = _sessionAsIntKeyRef(ex.trainingModeKey);
+      final status = _classifyExercise(ex.expectedStructure, sets);
       for (final set in sets) {
         await HiveDatabase.instance.addSessionSet(HiveSessionSet(
           sessionKey: currentSessionKey,
@@ -1083,6 +1204,8 @@ class SessionProvider extends ChangeNotifier {
           reps: set.reps,
           completed: set.completed,
           restSeconds: set.restSeconds,
+          trainingModeKey: modeKey,
+          executionStatus: status,
         ));
       }
     }
@@ -1092,8 +1215,10 @@ class SessionProvider extends ChangeNotifier {
       final totalRounds = _circuitTotalRounds[circuitId] ?? 1;
       final rounds = _circuitRoundSets[circuitId];
       if (rounds == null) continue;
+      final modeKey = _sessionAsIntKeyRef(ex.trainingModeKey);
       for (int r = 0; r < totalRounds; r++) {
         final sets = rounds[r][ex.exerciseKey] ?? [];
+        final status = _classifyExercise(ex.expectedStructure, sets);
         for (final set in sets) {
           await HiveDatabase.instance.addSessionSet(HiveSessionSet(
             sessionKey: currentSessionKey,
@@ -1105,6 +1230,8 @@ class SessionProvider extends ChangeNotifier {
             reps: set.reps,
             completed: set.completed,
             restSeconds: set.restSeconds,
+            trainingModeKey: modeKey,
+            executionStatus: status,
           ));
         }
       }
@@ -1112,4 +1239,6 @@ class SessionProvider extends ChangeNotifier {
     await _clearPausedState();
     _resetSession();
   }
+
+  int? _sessionAsIntKeyRef(dynamic k) => _sessionAsIntKey(k);
 }

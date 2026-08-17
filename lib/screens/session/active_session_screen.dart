@@ -1061,6 +1061,15 @@ class _SessionExerciseCard extends StatefulWidget {
 class _SessionExerciseCardState extends State<_SessionExerciseCard> {
   bool _expanded = false;
 
+  // FASE 4 — etichetta struttura attesa (fisso o range) per la
+  // serie in posizione [index], se disponibile. Puramente
+  // informativa: non condiziona la modificabilità del valore.
+  String? _expectedLabelFor(int index) {
+    final structure = widget.exercise.expectedStructure;
+    if (structure == null || index >= structure.length) return null;
+    return structure[index].label;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c              = context.mfc;
@@ -1188,6 +1197,7 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
                           onToggle: () => widget.onToggle(e.key),
                           onUpdate: (w, r) =>
                               widget.onUpdate(e.key, w, r),
+                          expectedLabel: _expectedLabelFor(e.key),
                         )).toList(),
                   ),
                 ),
@@ -1645,6 +1655,14 @@ class _CircuitExerciseBlock extends StatelessWidget {
     required this.onRemove,
   });
 
+  // FASE 4 — etichetta struttura attesa per posizione, letta
+  // direttamente dall'istantanea immutabile su SessionExercise.
+  String? _expectedLabelFor(int index) {
+    final structure = exercise.expectedStructure;
+    if (structure == null || index >= structure.length) return null;
+    return structure[index].label;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
@@ -1715,6 +1733,7 @@ class _CircuitExerciseBlock extends StatelessWidget {
                     onToggle: () => onToggle(e.key),
                     onUpdate: (w, r) => onUpdate(e.key, w, r),
                     compact:  true,
+                    expectedLabel: _expectedLabelFor(e.key),
                   )),
               const SizedBox(height: 4),
               Row(
@@ -1746,11 +1765,18 @@ class _SetRow extends StatefulWidget {
   final VoidCallback               onToggle;
   final void Function(double, int) onUpdate;
   final bool                       compact;
+  // FASE 4 — etichetta della struttura attesa per questa posizione
+  // (es. "8" oppure "8-12"), puramente informativa. Non rende il
+  // campo non modificabile: l'utente può sempre discostarsene
+  // durante l'esecuzione (Parte 16 — la sessione registra ciò che è
+  // stato realmente eseguito, non ciò che era previsto).
+  final String?                    expectedLabel;
 
   const _SetRow({
     required this.index,   required this.set,
     required this.onToggle, required this.onUpdate,
     this.compact = false,
+    this.expectedLabel,
   });
 
   @override
@@ -1791,6 +1817,19 @@ class _SetRowState extends State<_SetRow> {
     }
   }
 
+  // FASE 4 — Parte 17: incremento/decremento rapido delle
+  // ripetizioni, indipendente per ogni serie. Aggiorna il
+  // controller per coerenza visiva immediata e propaga il nuovo
+  // valore tramite onUpdate, senza toccare focus/tastiera del
+  // campo peso adiacente.
+  void _stepReps(int delta) {
+    final current = int.tryParse(_repsCtrl.text) ?? widget.set.reps;
+    final next = (current + delta).clamp(0, 999);
+    setState(() => _repsCtrl.text = '$next');
+    final w = double.tryParse(_weightCtrl.text) ?? widget.set.weight;
+    widget.onUpdate(w, next);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c         = context.mfc;
@@ -1802,11 +1841,21 @@ class _SetRowState extends State<_SetRow> {
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
-          SizedBox(width: 24,
-            child: Text('${widget.index + 1}', style: TextStyle(
-                color:      rowColor.withOpacity(0.6),
-                fontSize:   12,
-                fontWeight: FontWeight.w700))),
+          SizedBox(width: 26,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('${widget.index + 1}', style: TextStyle(
+                    color:      rowColor.withOpacity(0.6),
+                    fontSize:   12,
+                    fontWeight: FontWeight.w700)),
+                if (widget.expectedLabel != null)
+                  Text(widget.expectedLabel!, style: TextStyle(
+                      color:    c.textTertiary.withOpacity(0.7),
+                      fontSize: 8,
+                      fontWeight: FontWeight.w500)),
+              ],
+            )),
           Expanded(child: Container(
             height: widget.compact ? 30 : 34,
             margin: const EdgeInsets.only(right: 6),
@@ -1853,8 +1902,17 @@ class _SetRowState extends State<_SetRow> {
               ],
             ),
           )),
+          GestureDetector(
+            onTap: () => _stepReps(-1),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: Icon(Icons.remove_circle_outline_rounded,
+                  size: widget.compact ? 15 : 17,
+                  color: c.iconSecondary),
+            ),
+          ),
           SizedBox(
-            width:  widget.compact ? 52 : 60,
+            width:  widget.compact ? 42 : 48,
             height: widget.compact ? 30 : 34,
             child: Container(
               decoration: BoxDecoration(
@@ -1891,6 +1949,15 @@ class _SetRowState extends State<_SetRow> {
                       widget.set.weight;
                   widget.onUpdate(w, r);
                 }),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => _stepReps(1),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: Icon(Icons.add_circle_outline_rounded,
+                  size: widget.compact ? 15 : 17,
+                  color: _teal),
             ),
           ),
           const SizedBox(width: 6),
