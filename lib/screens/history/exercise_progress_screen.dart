@@ -68,6 +68,14 @@ const Object _allScopeSentinel = Object();
 
 // ─── Data models ─────────────────────────────────────────────
 
+// FIX FASE 5 — SESSIONE ≠ DATA: ogni _ProgressPoint rappresenta
+// ORA una singola sessione reale (identificata dall'iterazione
+// sulla sessione stessa in _loadData, non da una chiave-data
+// yyyy-MM-dd). Due sessioni completate nello stesso giorno
+// producono quindi SEMPRE due _ProgressPoint distinti. `date`
+// contiene l'orario completo (non solo il giorno) per consentire
+// l'ordinamento cronologico esatto anche tra sessioni dello
+// stesso giorno.
 class _ProgressPoint {
   final DateTime date;
   final double   maxWeight;
@@ -119,7 +127,7 @@ class _ExerciseStat {
   final double               personalRecord;
   final int                  totalSessions;
   final double               totalVolume;
-  final List<_ProgressPoint> points;          // aggregato legacy ("Tutte")
+  final List<_ProgressPoint> points;          // aggregato legacy ("Tutte") — per sessione
   final Map<dynamic, List<_ModePoint>> byMode; // FASE 5 — per modalità
   const _ExerciseStat({
     required this.name, required this.muscleGroup,
@@ -193,15 +201,28 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
 
     final sessions = HiveDatabase.instance.getSessions();
 
-    // Aggregato legacy per giorno (per la vista "Tutte", invariato
-    // rispetto al comportamento pre-Fase5).
-    final byExerciseByDate = <String, Map<String, List<HiveSessionSet>>>{};
-    // FASE 5 — punti per esercizio+modalità, uno per sessione reale.
+    // FIX FASE 5 — SESSIONE ≠ DATA (bug fix):
+    //
+    // PRIMA: le serie valide venivano accumulate in una mappa
+    // keyed by "yyyy-MM-dd" (byExerciseByDate), quindi due
+    // sessioni completate nello stesso giorno finivano nello
+    // stesso bucket e producevano UN SOLO _ProgressPoint —
+    // esattamente il comportamento vietato (due sessioni distinte
+    // devono sempre produrre due punti dati distinti, anche se
+    // cadono nello stesso giorno).
+    //
+    // ORA: l'identità dell'aggregazione è la SESSIONE stessa
+    // (siamo già dentro `for (final session in sessions)`, quindi
+    // ogni iterazione è per costruzione una sessione distinta).
+    // legacyPointsByExercise accumula UN _ProgressPoint per ogni
+    // sessione reale che contiene almeno una serie valida
+    // (completata, peso > 0) per quell'esercizio — mai per data.
+    final legacyPointsByExercise = <String, List<_ProgressPoint>>{};
+    // FASE 5 — punti per esercizio+modalità, uno per sessione reale
+    // (già corretto: era già per-sessione, non per-data).
     final pointsByExercise = <String, List<_ModePoint>>{};
 
     for (final session in sessions) {
-      final dateStr = session.date.length >= 10
-          ? session.date.substring(0, 10) : session.date;
       final dt = DateTime.tryParse(session.date) ?? DateTime.now();
       final sets = HiveDatabase.instance.getSessionSets(session.key);
 
@@ -214,20 +235,33 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
         final exName = entry.key;
         final exSets = entry.value;
 
-        // Aggregato legacy (solo serie completate zavorrate)
+        // Aggregato legacy ("Tutte") — UN punto per QUESTA sessione
+        // (mai raggruppato con altre sessioni della stessa data),
+        // calcolato sulle sole serie completate con peso > 0
+        // (Parte 26, invariato rispetto a prima del fix).
         final weightedCompleted =
             exSets.where((s) => s.completed && s.weight > 0).toList();
         if (weightedCompleted.isNotEmpty) {
-          byExerciseByDate
-              .putIfAbsent(exName, () => {})
-              .putIfAbsent(dateStr, () => [])
-              .addAll(weightedCompleted);
+          final maxW = weightedCompleted.map((s) => s.weight).reduce(math.max);
+          final vol  = weightedCompleted.fold<double>(
+              0, (s, e) => s + e.weight * e.reps);
+          final maxR = weightedCompleted.map((s) => s.reps).reduce(math.max);
+          legacyPointsByExercise.putIfAbsent(exName, () => []).add(
+              _ProgressPoint(
+                date:        dt,
+                maxWeight:   maxW,
+                totalVolume: vol,
+                maxReps:     maxR,
+                setsCount:   weightedCompleted.length,
+              ));
         }
 
         // FASE 5 — punto per modalità: tutte le serie di questo
         // esercizio in questa sessione condividono lo stesso
         // trainingModeKey/executionStatus (assegnati in blocco da
-        // SessionProvider.finishSession — Fase 4).
+        // SessionProvider.finishSession — Fase 4). Già per-sessione
+        // per costruzione (un _ModePoint per ogni iterazione della
+        // sessione corrente), non necessita correzioni.
         final modeKey = exSets.first.trainingModeKey;
         final status  = exSets.first.executionStatus;
 
@@ -251,7 +285,13 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
       }
     }
 
+    // Ordinamento cronologico per DATA E ORA COMPLETE (Parte 8 del
+    // fix): garantisce l'ordine esatto anche tra più sessioni dello
+    // stesso giorno con orari diversi.
     for (final list in pointsByExercise.values) {
+      list.sort((a, b) => a.date.compareTo(b.date));
+    }
+    for (final list in legacyPointsByExercise.values) {
       list.sort((a, b) => a.date.compareTo(b.date));
     }
 
@@ -260,22 +300,16 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
     for (final entry in pointsByExercise.entries) {
       final name       = entry.key;
       final allPoints  = entry.value;
-      final legacyByDate = byExerciseByDate[name] ?? {};
+      final legacyPoints = legacyPointsByExercise[name] ?? [];
 
-      final legacyPoints = <_ProgressPoint>[];
+      // PR e volume totale: massimo/somma sono operazioni
+      // associative, quindi il risultato numerico è identico a
+      // prima del fix — cambia solo la granularità della lista
+      // `points` usata da grafico/lista sessioni/miglioramento.
       double pr = 0, totalVol = 0;
-
-      for (final dateStr in (legacyByDate.keys.toList()..sort())) {
-        final daySets = legacyByDate[dateStr]!;
-        final maxW = daySets.map((s) => s.weight).reduce(math.max);
-        final vol  = daySets.fold<double>(0, (s, e) => s + e.weight * e.reps);
-        final maxR = daySets.map((s) => s.reps).reduce(math.max);
-        if (maxW > pr) pr = maxW;
-        totalVol += vol;
-        legacyPoints.add(_ProgressPoint(
-          date:        DateTime.tryParse(dateStr) ?? DateTime.now(),
-          maxWeight:   maxW, totalVolume: vol,
-          maxReps:     maxR, setsCount: daySets.length));
+      for (final p in legacyPoints) {
+        if (p.maxWeight > pr) pr = p.maxWeight;
+        totalVol += p.totalVolume;
       }
 
       final byMode = <dynamic, List<_ModePoint>>{};
@@ -531,7 +565,8 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
     );
   }
 
-  // ── Aggregato "Tutte le modalità" — comportamento pre-Fase5 ─
+  // ── Aggregato "Tutte le modalità" — ORA per sessione, non per
+  // giorno (fix Fase 5). ────────────────────────────────────
 
   Widget _buildAggregateSection(
       BuildContext context, _ExerciseStat stat, MarkFitColors c) {
@@ -549,7 +584,7 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
           _ProgressChart(points: stat.points, mode: _chartMode, c: c),
           const SizedBox(height: 12),
         ] else
-          _NotEnoughDataCard(sessions: stat.totalSessions, c: c),
+          _NotEnoughDataCard(sessions: stat.points.length, c: c),
         const SizedBox(height: 4),
         _RecentSessions(points: stat.points, c: c),
       ],
@@ -1225,7 +1260,9 @@ class _RecentSessions extends StatelessWidget {
   String _fmtDate(DateTime d) {
     const m = ['','Gen','Feb','Mar','Apr','Mag','Giu',
         'Lug','Ago','Set','Ott','Nov','Dic'];
-    return '${d.day} ${m[d.month]} ${d.year}';
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mm = d.minute.toString().padLeft(2, '0');
+    return '${d.day} ${m[d.month]} ${d.year}  $hh:$mm';
   }
 
   String _fmtW(double w) =>
@@ -1756,7 +1793,9 @@ class _ModeSessionsList extends StatelessWidget {
   String _fmtDate(DateTime d) {
     const m = ['','Gen','Feb','Mar','Apr','Mag','Giu',
         'Lug','Ago','Set','Ott','Nov','Dic'];
-    return '${d.day} ${m[d.month]} ${d.year}';
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mm = d.minute.toString().padLeft(2, '0');
+    return '${d.day} ${m[d.month]} ${d.year}  $hh:$mm';
   }
 
   @override
