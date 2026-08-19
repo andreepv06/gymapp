@@ -13,6 +13,12 @@ import '../models/training_mode_adapter.dart';
 // Al primo accesso di un utente (box vuoto) semina un catalogo
 // ampio di modalità predefinite e ne marca una come predefinita
 // globale. Il seed NON viene mai rieseguito su un box già popolato.
+//
+// MODIFICA 3 (import/export): aggiunti metodi di supporto al
+// restore da backup (clearAllForImport, finalizeAfterImport,
+// reseedIfEmptyAfterImport), usati esclusivamente da BackupService.
+// Nessuna modifica alla logica di versionamento/soft-delete già
+// esistente.
 // ─────────────────────────────────────────────────────────────
 class TrainingModeDatabase {
   static final TrainingModeDatabase instance =
@@ -128,27 +134,45 @@ class TrainingModeDatabase {
     return true;
   }
 
-  // ── Seed catalogo predefinito ──────────────────────────────
+  // ── MODIFICA 3 — supporto import/export backup ─────────────
 
-  Future<void> _seedDefaults() async {
-    final now = DateTime.now().toIso8601String();
-    final defaults = _buildDefaultCatalog(now);
+  /// Svuota completamente il box (usato SOLO dal restore di un
+  /// backup COMPLETO, che sostituisce integralmente lo stato
+  /// dell'utente). Non deve mai essere chiamato per l'import
+  /// "struttura schede", che è additivo per definizione.
+  Future<void> clearAllForImport() async {
+    await _box.clear();
+  }
 
-    dynamic firstKey;
-    dynamic threeByEightKey;
-    for (final m in defaults) {
-      final k = await _box.add(m);
-      firstKey ??= k;
-      if (m.name == '3×8') threeByEightKey = k;
-    }
-
-    final defaultKey = threeByEightKey ?? firstKey;
-    if (defaultKey != null) {
-      final mode = _box.get(defaultKey);
-      if (mode != null) {
-        mode.isDefault = true;
-        await mode.save();
+  /// Dopo un import che ha popolato il box con le proprie modalità
+  /// (ciascuna con isDefault=false, per evitare stati intermedi
+  /// incoerenti durante l'inserimento), garantisce che esista
+  /// esattamente una modalità predefinita. Se il chiamante ha già
+  /// impostato esplicitamente un default (tramite setDefault) dopo
+  /// l'import, questo metodo si limita a rimuovere eventuali
+  /// duplicati residui; altrimenti promuove una modalità disponibile
+  /// a predefinita (fallback di sicurezza, mai lasciare il sistema
+  /// senza default valido).
+  Future<void> finalizeAfterImport() async {
+    final defaults = _box.values.where((m) => m.isDefault).toList();
+    if (defaults.isNotEmpty) {
+      for (var i = 1; i < defaults.length; i++) {
+        defaults[i].isDefault = false;
+        await defaults[i].save();
       }
+      return;
+    }
+    await _ensureDefaultExists();
+  }
+
+  /// Se dopo un import completo il box risulta vuoto (caso limite:
+  /// backup molto vecchio/legacy senza alcuna modalità esportata),
+  /// ripristina il catalogo predefinito standard, esattamente come
+  /// avviene al primo accesso di un nuovo utente. Nessun effetto se
+  /// il box contiene già almeno una modalità.
+  Future<void> reseedIfEmptyAfterImport() async {
+    if (_box.isEmpty) {
+      await _seedDefaults();
     }
   }
 
@@ -256,5 +280,27 @@ class TrainingModeDatabase {
     ));
 
     return list;
+  }
+
+  Future<void> _seedDefaults() async {
+    final now = DateTime.now().toIso8601String();
+    final defaults = _buildDefaultCatalog(now);
+
+    dynamic firstKey;
+    dynamic threeByEightKey;
+    for (final m in defaults) {
+      final k = await _box.add(m);
+      firstKey ??= k;
+      if (m.name == '3×8') threeByEightKey = k;
+    }
+
+    final defaultKey = threeByEightKey ?? firstKey;
+    if (defaultKey != null) {
+      final mode = _box.get(defaultKey);
+      if (mode != null) {
+        mode.isDefault = true;
+        await mode.save();
+      }
+    }
   }
 }

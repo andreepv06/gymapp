@@ -2,7 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-
 import '../../core/navigation/app_router.dart';
 import '../../core/theme/markfit_colors.dart';
 import '../../db/hive_database.dart';
@@ -13,7 +12,7 @@ import '../../providers/exercise_provider.dart';
 import '../../providers/goal_provider.dart';
 import '../../providers/sport_provider.dart';
 import '../../widgets/cosmic_background.dart';
-import '../../widgets/glass_widgets.dart';          // GlassHeaderPill / GlassHeaderPillBtn
+import '../../widgets/glass_widgets.dart';
 import '../../widgets/shared_sheets.dart';
 import '../../widgets/workout_icon.dart';
 import '../../main.dart';
@@ -23,34 +22,29 @@ import 'exercise_progress_screen.dart';
 // ─────────────────────────────────────────────────────────────
 // Design tokens (accent fissi — uguali in dark/light)
 // ─────────────────────────────────────────────────────────────
-
-const _cyan   = MarkFitColors.cyan;
-const _teal   = MarkFitColors.teal;
+const _cyan = MarkFitColors.cyan;
+const _teal = MarkFitColors.teal;
 const _tealDk = MarkFitColors.tealDk;
 const _indigo = MarkFitColors.indigo;
 const _orange = MarkFitColors.orange;
-const _red    = MarkFitColors.red;
-const _green  = MarkFitColors.green;
-const _blue   = MarkFitColors.blue;
+const _red = MarkFitColors.red;
+const _green = MarkFitColors.green;
+const _blue = MarkFitColors.blue;
 
 // ─────────────────────────────────────────────────────────────
 // Data models
 // ─────────────────────────────────────────────────────────────
-
 enum _EntryKind { gym, sport }
-
 class _HistoryEntry {
   final _EntryKind kind; final dynamic key; final String title;
   final DateTime date; final int? durationSeconds;
   final double? distanceKm; final HiveSession? gymSession;
   final HiveSportSession? sportSession; final SportType? sportType;
-
   _HistoryEntry.fromGym(HiveSession s)
       : kind = _EntryKind.gym, key = s.key, title = s.workoutName,
         date = DateTime.tryParse(s.date) ?? DateTime.now(),
         durationSeconds = s.durationSeconds, distanceKm = null,
         gymSession = s, sportSession = null, sportType = null;
-
   _HistoryEntry.fromSport(HiveSportSession s)
       : kind = _EntryKind.sport, key = s.key,
         title = SportTypeX.fromId(s.sportType).label,
@@ -59,31 +53,28 @@ class _HistoryEntry {
         gymSession = null, sportSession = s,
         sportType = SportTypeX.fromId(s.sportType);
 }
-
 enum _SportFilter { all, gym, running, cycling, swimming, walking, hiking }
-
 extension _SportFilterExt on _SportFilter {
   String get label {
     switch (this) {
-      case _SportFilter.all:      return 'Tutti';
-      case _SportFilter.gym:      return 'Palestra';
-      case _SportFilter.running:  return 'Corsa';
-      case _SportFilter.cycling:  return 'Ciclismo';
+      case _SportFilter.all: return 'Tutti';
+      case _SportFilter.gym: return 'Palestra';
+      case _SportFilter.running: return 'Corsa';
+      case _SportFilter.cycling: return 'Ciclismo';
       case _SportFilter.swimming: return 'Nuoto';
-      case _SportFilter.walking:  return 'Camminata';
-      case _SportFilter.hiking:   return 'Hiking';
+      case _SportFilter.walking: return 'Camminata';
+      case _SportFilter.hiking: return 'Hiking';
     }
   }
-
   bool matches(_HistoryEntry e) {
     switch (this) {
-      case _SportFilter.all:      return true;
-      case _SportFilter.gym:      return e.kind == _EntryKind.gym;
-      case _SportFilter.running:  return e.sportType == SportType.running;
-      case _SportFilter.cycling:  return e.sportType == SportType.cycling;
+      case _SportFilter.all: return true;
+      case _SportFilter.gym: return e.kind == _EntryKind.gym;
+      case _SportFilter.running: return e.sportType == SportType.running;
+      case _SportFilter.cycling: return e.sportType == SportType.cycling;
       case _SportFilter.swimming: return e.sportType == SportType.swimming;
-      case _SportFilter.walking:  return e.sportType == SportType.walking;
-      case _SportFilter.hiking:   return e.sportType == SportType.hiking;
+      case _SportFilter.walking: return e.sportType == SportType.walking;
+      case _SportFilter.hiking: return e.sportType == SportType.hiking;
     }
   }
 }
@@ -91,24 +82,29 @@ extension _SportFilterExt on _SportFilter {
 // ─────────────────────────────────────────────────────────────
 // HistoryScreen
 // ─────────────────────────────────────────────────────────────
-
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
-
 class _HistoryScreenState extends State<HistoryScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  List<HiveSession>              _sessions       = [];
-  DateTime                       _focusedMonth   = DateTime.now();
-  bool                           _loading        = true;
+  List<HiveSession> _sessions = [];
+  DateTime _focusedMonth = DateTime.now();
+  bool _loading = true;
   Map<String, List<HiveSession>> _sessionsByDate = {};
-  Map<int, HiveWorkout>          _workoutsCache  = {};
-  int                            _lastIndex      = -1;
-  String                         _calendarMode   = 'day';
-  _SportFilter                   _sportFilter    = _SportFilter.all;
+  Map<int, HiveWorkout> _workoutsCache = {};
+  int _lastIndex = -1;
+  // FIX MODIFICA 2A — aggiunto livello 'decade', ora coerente con
+  // Home (_GlassCalendarDialog): day → month → year → decade, senza
+  // saltare livelli (Parte 13/15).
+  String _calendarMode = 'day';
+  _SportFilter _sportFilter = _SportFilter.all;
+  // FIX MODIFICA 2A — la lista sessioni riflette esattamente il
+  // periodo messo a fuoco nel calendario (Parte 14), con un toggle
+  // per tornare a vedere tutto lo storico.
+  bool _showAllSessions = false;
 
   @override
   void initState() {
@@ -120,10 +116,8 @@ class _HistoryScreenState extends State<HistoryScreen>
       context.read<SportProvider>().loadSessions();
     });
   }
-
   @override
   void dispose() { _tabController.dispose(); super.dispose(); }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -131,30 +125,27 @@ class _HistoryScreenState extends State<HistoryScreen>
     if (idx == 2 && _lastIndex != 2) _loadData();
     _lastIndex = idx;
   }
-
   Future<void> _loadData() async {
     setState(() => _loading = true);
     final sessions = HiveDatabase.instance.getSessions();
-    final byDate   = <String, List<HiveSession>>{};
+    final byDate = <String, List<HiveSession>>{};
     for (final s in sessions) {
       byDate.putIfAbsent(s.date.substring(0, 10), () => []).add(s);
     }
     final workouts = HiveDatabase.instance.getWorkouts();
-    final wCache   = <int, HiveWorkout>{};
+    final wCache = <int, HiveWorkout>{};
     for (final w in workouts) { wCache[w.key as int] = w; }
     if (mounted) context.read<SportProvider>().loadSessions();
     setState(() {
-      _sessions       = sessions;
+      _sessions = sessions;
       _sessionsByDate = byDate;
-      _workoutsCache  = wCache;
-      _loading        = false;
+      _workoutsCache = wCache;
+      _loading = false;
     });
   }
-
   HiveWorkout? _getWorkout(int key) => _workoutsCache[key];
-
   List<_HistoryEntry> _allEntries(BuildContext context) {
-    final sport   = context.watch<SportProvider>().sessions;
+    final sport = context.watch<SportProvider>().sessions;
     final entries = <_HistoryEntry>[
       ..._sessions.map(_HistoryEntry.fromGym),
       ...sport.map(_HistoryEntry.fromSport),
@@ -162,16 +153,25 @@ class _HistoryScreenState extends State<HistoryScreen>
     entries.sort((a, b) => b.date.compareTo(a.date));
     return entries;
   }
-
-  List<_HistoryEntry> _filtered(List<_HistoryEntry> all) =>
-      all.where((e) => _sportFilter.matches(e)).toList();
-
+  List<_HistoryEntry> _filtered(List<_HistoryEntry> all) {
+    var result = all.where((e) => _sportFilter.matches(e));
+    // FIX MODIFICA 2A — se l'utente non ha chiesto esplicitamente
+    // "mostra tutte", la lista riflette il mese attualmente a fuoco
+    // nel calendario (Parte 14: "il layout deve riflettere ESATTAMENTE
+    // il periodo selezionato").
+    if (!_showAllSessions) {
+      result = result.where((e) =>
+          e.date.year == _focusedMonth.year &&
+          e.date.month == _focusedMonth.month);
+    }
+    return result.toList();
+  }
   int _computeStreak(List<DateTime> dates) {
     if (dates.isEmpty) return 0;
-    final now    = DateTime.now();
+    final now = DateTime.now();
     final wStart = now.subtract(Duration(days: now.weekday - 1));
-    int streak   = 0;
-    DateTime ws  = DateTime(wStart.year, wStart.month, wStart.day);
+    int streak = 0;
+    DateTime ws = DateTime(wStart.year, wStart.month, wStart.day);
     while (true) {
       final we = ws.add(const Duration(days: 6));
       if (!dates.any((d) =>
@@ -182,11 +182,10 @@ class _HistoryScreenState extends State<HistoryScreen>
     }
     return streak;
   }
-
   List<bool> _currentWeekDays(List<DateTime> dates) {
-    final now    = DateTime.now();
+    final now = DateTime.now();
     final wStart = now.subtract(Duration(days: now.weekday - 1));
-    final strs   = dates.map((d) =>
+    final strs = dates.map((d) =>
         '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}').toSet();
     return List.generate(7, (i) {
       final day = wStart.add(Duration(days: i));
@@ -194,7 +193,6 @@ class _HistoryScreenState extends State<HistoryScreen>
           '${day.year}-${day.month.toString().padLeft(2,'0')}-${day.day.toString().padLeft(2,'0')}');
     });
   }
-
   Future<void> _confirmDeleteSession(HiveSession s) async {
     final dt = DateTime.tryParse(s.date);
     final ts = dt != null
@@ -208,7 +206,7 @@ class _HistoryScreenState extends State<HistoryScreen>
           border: Border.all(color: _red.withOpacity(0.4)),
           boxShadow: [BoxShadow(color: _red.withOpacity(0.2), blurRadius: 12)]),
         child: const Icon(Icons.delete_outline_rounded, color: _red, size: 22)),
-      title:   'Elimina sessione',
+      title: 'Elimina sessione',
       message: 'Vuoi eliminare "${s.workoutName}" del $ts?\nL\'operazione è irreversibile.',
       actions: [
         GlassDialogAction(label: 'Annulla',
@@ -222,7 +220,6 @@ class _HistoryScreenState extends State<HistoryScreen>
       if (mounted) _showSnack('Sessione eliminata');
     }
   }
-
   Future<void> _confirmDeleteSportSession(HiveSportSession s) async {
     final ok = await showGlassDialog<bool>(
       context: context, accentColor: _red,
@@ -231,7 +228,7 @@ class _HistoryScreenState extends State<HistoryScreen>
           color: _red.withOpacity(0.12), shape: BoxShape.circle,
           border: Border.all(color: _red.withOpacity(0.4))),
         child: const Icon(Icons.delete_outline_rounded, color: _red, size: 22)),
-      title:   'Elimina sessione sport',
+      title: 'Elimina sessione sport',
       message: 'Vuoi eliminare questa sessione di ${SportTypeX.fromId(s.sportType).label}?',
       actions: [
         GlassDialogAction(label: 'Annulla',
@@ -244,7 +241,6 @@ class _HistoryScreenState extends State<HistoryScreen>
       if (mounted) _showSnack('Sessione eliminata');
     }
   }
-
   void _showSnack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg, style: const TextStyle(
@@ -254,7 +250,6 @@ class _HistoryScreenState extends State<HistoryScreen>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.all(16)));
   }
-
   void _showDayDetail(String dateStr, List<HiveSession> sessions) {
     if (sessions.isEmpty) return;
     showModalBottomSheet(
@@ -263,8 +258,8 @@ class _HistoryScreenState extends State<HistoryScreen>
       isScrollControlled: true,
       useSafeArea: true,
       builder: (ctx) => _GlassDayDetailSheet(
-        dateStr:       dateStr,
-        sessions:      sessions,
+        dateStr: dateStr,
+        sessions: sessions,
         workoutsCache: _workoutsCache,
         onDelete: (s) { Navigator.pop(ctx); _confirmDeleteSession(s); },
         onOpen: (s) {
@@ -273,52 +268,41 @@ class _HistoryScreenState extends State<HistoryScreen>
               sessionKey: s.key, workoutName: s.workoutName, date: s.date));
         }));
   }
-
   // ════════════════════════════════════════════════════════════
-  // BUILD — header inline identico ad AllenamentiScreen
+  // BUILD
   // ════════════════════════════════════════════════════════════
-
   @override
   Widget build(BuildContext context) {
-    final c         = context.mfc;
+    final c = context.mfc;
     final sysBottom = MediaQuery.of(context).viewPadding.bottom;
-
     return CosmicBackground(
       child: SafeArea(
         bottom: false,
         child: Column(children: [
-
-          // ── Header inline ──────────────────────────────────
-          // Stesso spacing di AllenamentiScreen:
-          //   fromLTRB(20, 24, 20, 0) + SizedBox(16)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
-                // Titolo 32px + sottotitolo — identico ad Allenamenti
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                     Text('Storico', style: TextStyle(
-                        color:        c.textPrimary,
-                        fontSize:     32,
-                        fontWeight:   FontWeight.w800,
+                        color: c.textPrimary,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
                         letterSpacing: -0.5)),
                     const SizedBox(height: 4),
                     Text('Attività e progressi', style: TextStyle(
-                        color:    c.textTertiary,
+                        color: c.textTertiary,
                         fontSize: 14)),
                   ])),
                 const SizedBox(width: 12),
-
-                // Pill azione: pulsante "Progressi esercizi"
                 GlassHeaderPill(children: [
                   GlassHeaderPillBtn(
-                    icon:    Icons.show_chart_rounded,
-                    color:   _teal,
+                    icon: Icons.show_chart_rounded,
+                    color: _teal,
                     tooltip: 'Progressi esercizi',
                     onTap: () => pushPage(context,
                         ChangeNotifierProvider.value(
@@ -328,11 +312,7 @@ class _HistoryScreenState extends State<HistoryScreen>
               ]),
           ),
           const SizedBox(height: 16),
-
-          // ── Glass TabBar ─────────────────────────────────────
           _GlassTabBar(controller: _tabController),
-
-          // ── Contenuto ────────────────────────────────────────
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -344,11 +324,9 @@ class _HistoryScreenState extends State<HistoryScreen>
       ),
     );
   }
-
   // ─────────────────────────────────────────────────────────────
   // Tab Allenamenti
   // ─────────────────────────────────────────────────────────────
-
   Widget _buildWorkoutsTab(BuildContext context, double sysBottom) {
     final c = context.mfc;
     if (_loading) {
@@ -356,14 +334,16 @@ class _HistoryScreenState extends State<HistoryScreen>
           color: _teal, strokeWidth: 2));
     }
     final allEntries = _allEntries(context);
-    final allDates   = allEntries.map((e) => e.date).toList();
-    final streak     = _computeStreak(allDates);
-    final weekDays   = _currentWeekDays(allDates);
-    final filtered   = _filtered(allEntries);
-
+    final allDates = allEntries.map((e) => e.date).toList();
+    final streak = _computeStreak(allDates);
+    final weekDays = _currentWeekDays(allDates);
+    final filtered = _filtered(allEntries);
+    const monthNamesFull = ['','Gennaio','Febbraio','Marzo','Aprile',
+        'Maggio','Giugno','Luglio','Agosto','Settembre',
+        'Ottobre','Novembre','Dicembre'];
     return RefreshIndicator(
-      onRefresh:       _loadData,
-      color:           _teal,
+      onRefresh: _loadData,
+      color: _teal,
       backgroundColor: c.glassCardStrong,
       child: ListView(
         physics: const BouncingScrollPhysics(),
@@ -375,15 +355,51 @@ class _HistoryScreenState extends State<HistoryScreen>
             const SizedBox(height: 12),
           ],
           _GlassCalendar(
-            focusedMonth:   _focusedMonth,
+            focusedMonth: _focusedMonth,
             sessionsByDate: _sessionsByDate,
-            calendarMode:   _calendarMode,
-            onModeChanged:  (m) => setState(() => _calendarMode = m),
-            onMonthChanged: (m) => setState(() => _focusedMonth = m),
-            onDayTapped:    _showDayDetail),
+            calendarMode: _calendarMode,
+            onModeChanged: (m) => setState(() => _calendarMode = m),
+            onMonthChanged: (m) => setState(() {
+              _focusedMonth = m;
+              // FIX MODIFICA 2A: navigare il calendario torna sempre
+              // alla vista filtrata sul periodo corrente, coerente
+              // con "il layout deve riflettere ESATTAMENTE il periodo
+              // selezionato" (Parte 14).
+              _showAllSessions = false;
+            }),
+            onDayTapped: _showDayDetail),
           const SizedBox(height: 12),
-
-          // Filter chips
+          // FIX MODIFICA 2A — riepilogo del filtro attivo + toggle
+          // per tornare a vedere l'intero storico, sempre visibile
+          // e chiaro all'utente.
+          Row(children: [
+            Expanded(
+              child: Text(
+                _showAllSessions
+                    ? 'Tutte le sessioni'
+                    : '${monthNamesFull[_focusedMonth.month]} ${_focusedMonth.year}',
+                style: TextStyle(
+                    color: c.textSecondary, fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+            ),
+            GestureDetector(
+              onTap: () => setState(() => _showAllSessions = !_showAllSessions),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _cyan.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(
+                      color: _cyan.withOpacity(0.3), width: 0.8)),
+                child: Text(
+                    _showAllSessions ? 'Solo mese selezionato' : 'Mostra tutte',
+                    style: TextStyle(
+                        color: _cyan, fontSize: 11,
+                        fontWeight: FontWeight.w700))),
+            ),
+          ]),
+          const SizedBox(height: 10),
           SizedBox(
             height: 34,
             child: ListView.separated(
@@ -391,7 +407,7 @@ class _HistoryScreenState extends State<HistoryScreen>
               itemCount: _SportFilter.values.length,
               separatorBuilder: (_, __) => const SizedBox(width: 6),
               itemBuilder: (_, i) {
-                final f   = _SportFilter.values[i];
+                final f = _SportFilter.values[i];
                 final sel = _sportFilter == f;
                 return GestureDetector(
                   onTap: () => setState(() => _sportFilter = f),
@@ -416,13 +432,12 @@ class _HistoryScreenState extends State<HistoryScreen>
                             ? FontWeight.w700 : FontWeight.w500))));
               })),
           const SizedBox(height: 12),
-
           if (filtered.isNotEmpty) ...[
             _SectionHeader(icon: Icons.history_rounded,
-                title: 'Sessioni recenti (${filtered.length})',
+                title: 'Sessioni (${filtered.length})',
                 color: _teal),
             const SizedBox(height: 8),
-            ...filtered.take(30).map((entry) {
+            ...filtered.take(60).map((entry) {
               if (entry.kind == _EntryKind.gym) {
                 final s = entry.gymSession!;
                 return Padding(
@@ -437,24 +452,22 @@ class _HistoryScreenState extends State<HistoryScreen>
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: _SportSessionTile(
-                    entry:    entry,
+                    entry: entry,
                     onDelete: () =>
                         _confirmDeleteSportSession(entry.sportSession!)));
               }
             }),
           ] else
-            _EmptyWorkouts(),
+            _EmptyWorkouts(showingFiltered: !_showAllSessions),
         ],
       ),
     );
   }
-
   // ─────────────────────────────────────────────────────────────
   // Tab Obiettivi
   // ─────────────────────────────────────────────────────────────
-
   Widget _buildGoalsTab(BuildContext context, double sysBottom) {
-    final gp    = context.watch<GoalProvider>();
+    final gp = context.watch<GoalProvider>();
     final goals = gp.goals;
     if (goals.isEmpty) {
       return Center(child: Padding(
@@ -466,7 +479,7 @@ class _HistoryScreenState extends State<HistoryScreen>
       padding: EdgeInsets.fromLTRB(16, 12, 16, 88 + sysBottom),
       itemCount: goals.length,
       itemBuilder: (_, i) {
-        final g         = goals[i];
+        final g = goals[i];
         final totalDone = gp.completionsForGoal(g.key)
             .where((c) => c.completed).length;
         return Padding(
@@ -475,15 +488,12 @@ class _HistoryScreenState extends State<HistoryScreen>
       });
   }
 }
-
 // ─────────────────────────────────────────────────────────────
-// _GlassTabBar
+// _GlassTabBar — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _GlassTabBar extends StatelessWidget {
   final TabController controller;
   const _GlassTabBar({required this.controller});
-
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
@@ -503,16 +513,16 @@ class _GlassTabBar extends StatelessWidget {
                   ? [BoxShadow(color: c.elevationColor, blurRadius: 6)]
                   : null),
             child: TabBar(
-              controller:           controller,
+              controller: controller,
               indicator: BoxDecoration(
                 color: _teal.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: _teal.withOpacity(0.5), width: 1),
                 boxShadow: [BoxShadow(
                     color: _teal.withOpacity(0.15), blurRadius: 6)]),
-              indicatorSize:        TabBarIndicatorSize.tab,
-              dividerColor:         Colors.transparent,
-              labelColor:           _teal,
+              indicatorSize: TabBarIndicatorSize.tab,
+              dividerColor: Colors.transparent,
+              labelColor: _teal,
               unselectedLabelColor: c.textTertiary,
               labelStyle: const TextStyle(
                   fontSize: 12, fontWeight: FontWeight.w700),
@@ -525,21 +535,18 @@ class _GlassTabBar extends StatelessWidget {
               ])))));
   }
 }
-
 // ─────────────────────────────────────────────────────────────
-// _GlassStatsBar
+// _GlassStatsBar — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _GlassStatsBar extends StatelessWidget {
   final int totalSessions, streak;
   final List<bool> weekDays;
   const _GlassStatsBar({
     required this.totalSessions, required this.streak,
     required this.weekDays});
-
   @override
   Widget build(BuildContext context) {
-    final c  = context.mfc;
+    final c = context.mfc;
     const dl = ['L','M','M','G','V','S','D'];
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
@@ -610,38 +617,44 @@ class _GlassStatsBar extends StatelessWidget {
     );
   }
 }
-
 // ─────────────────────────────────────────────────────────────
-// _GlassCalendar
+// _GlassCalendar — FIX MODIFICA 2A: aggiunto livello 'decade'
 // ─────────────────────────────────────────────────────────────
-
 class _GlassCalendar extends StatelessWidget {
-  final DateTime                             focusedMonth;
-  final Map<String, List<HiveSession>>       sessionsByDate;
-  final String                               calendarMode;
-  final void Function(String)                onModeChanged;
-  final void Function(DateTime)              onMonthChanged;
+  final DateTime focusedMonth;
+  final Map<String, List<HiveSession>> sessionsByDate;
+  final String calendarMode;
+  final void Function(String) onModeChanged;
+  final void Function(DateTime) onMonthChanged;
   final void Function(String, List<HiveSession>) onDayTapped;
-
   const _GlassCalendar({
     required this.focusedMonth, required this.sessionsByDate,
     required this.calendarMode, required this.onModeChanged,
     required this.onMonthChanged, required this.onDayTapped});
-
   static const _mShort = ['','Gen','Feb','Mar','Apr','Mag','Giu',
       'Lug','Ago','Set','Ott','Nov','Dic'];
-  static const _mFull  = ['','Gennaio','Febbraio','Marzo','Aprile',
+  static const _mFull = ['','Gennaio','Febbraio','Marzo','Aprile',
       'Maggio','Giugno','Luglio','Agosto','Settembre',
       'Ottobre','Novembre','Dicembre'];
-
   String get _titleText {
     if (calendarMode == 'day')
       return '${_mFull[focusedMonth.month]} ${focusedMonth.year}';
     if (calendarMode == 'month') return '${focusedMonth.year}';
-    final dec = (focusedMonth.year ~/ 10) * 10;
-    return '$dec – ${dec + 9}';
+    if (calendarMode == 'year') {
+      final dec = (focusedMonth.year ~/ 10) * 10;
+      return '$dec – ${dec + 9}';
+    }
+    final cent = (focusedMonth.year ~/ 100) * 100;
+    return '$cent – ${cent + 99}';
   }
-
+  // FIX MODIFICA 2A — ciclo COMPLETO dei 4 livelli, senza saltare
+  // da anno direttamente a giorno (Parte 13/15): day → month → year
+  // → decade → (tap su decade non fa nulla, coerente con Home).
+  void _drillUp() {
+    if (calendarMode == 'day') onModeChanged('month');
+    else if (calendarMode == 'month') onModeChanged('year');
+    else if (calendarMode == 'year') onModeChanged('decade');
+  }
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
@@ -671,13 +684,14 @@ class _GlassCalendar extends StatelessWidget {
                     ? _buildDayView(context, c)
                     : calendarMode == 'month'
                         ? _buildMonthView(context, c)
-                        : _buildYearView(context, c))),
+                        : calendarMode == 'year'
+                            ? _buildYearView(context, c)
+                            : _buildDecadeView(context, c))),
           ]),
         ),
       ),
     );
   }
-
   Widget _buildHeader(BuildContext context, MarkFitColors c) {
     return Row(children: [
       _CalBtn(icon: Icons.chevron_left_rounded, c: c, onTap: () {
@@ -685,41 +699,42 @@ class _GlassCalendar extends StatelessWidget {
           onMonthChanged(DateTime(focusedMonth.year, focusedMonth.month - 1));
         else if (calendarMode == 'month')
           onMonthChanged(DateTime(focusedMonth.year - 1, focusedMonth.month));
-        else
+        else if (calendarMode == 'year')
           onMonthChanged(DateTime(focusedMonth.year - 10, focusedMonth.month));
+        else
+          onMonthChanged(DateTime(focusedMonth.year - 100, focusedMonth.month));
       }),
       Expanded(child: GestureDetector(
-        onTap: () {
-          if (calendarMode == 'day')        onModeChanged('month');
-          else if (calendarMode == 'month') onModeChanged('year');
-          else                              onModeChanged('day');
-        },
+        onTap: _drillUp,
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           Text(_titleText, style: TextStyle(
               color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
-          const SizedBox(width: 4),
-          Icon(Icons.unfold_more_rounded,
-              size: 16, color: _cyan.withOpacity(0.6)),
+          if (calendarMode != 'decade') ...[
+            const SizedBox(width: 4),
+            Icon(Icons.unfold_more_rounded,
+                size: 16, color: _cyan.withOpacity(0.6)),
+          ],
         ]))),
       _CalBtn(icon: Icons.chevron_right_rounded, c: c, onTap: () {
         if (calendarMode == 'day')
           onMonthChanged(DateTime(focusedMonth.year, focusedMonth.month + 1));
         else if (calendarMode == 'month')
           onMonthChanged(DateTime(focusedMonth.year + 1, focusedMonth.month));
-        else
+        else if (calendarMode == 'year')
           onMonthChanged(DateTime(focusedMonth.year + 10, focusedMonth.month));
+        else
+          onMonthChanged(DateTime(focusedMonth.year + 100, focusedMonth.month));
       }),
     ]);
   }
-
   Widget _buildDayView(BuildContext context, MarkFitColors c) {
-    final first     = DateTime(focusedMonth.year, focusedMonth.month, 1);
+    final first = DateTime(focusedMonth.year, focusedMonth.month, 1);
     final daysCount = DateTime(focusedMonth.year, focusedMonth.month + 1, 0).day;
-    final offset    = (first.weekday - 1) % 7;
+    final offset = (first.weekday - 1) % 7;
     return LayoutBuilder(builder: (ctx, constraints) {
-      final cellSize   = constraints.maxWidth / 7;
+      final cellSize = constraints.maxWidth / 7;
       final circleSize = (cellSize * 0.72).clamp(28.0, 52.0);
-      final fontSize   = (circleSize * 0.38).clamp(10.0, 18.0);
+      final fontSize = (circleSize * 0.38).clamp(10.0, 18.0);
       return Column(children: [
         Row(children: ['L','M','M','G','V','S','D'].map((d) =>
           SizedBox(width: cellSize, height: cellSize * 0.45,
@@ -736,27 +751,26 @@ class _GlassCalendar extends StatelessWidget {
           itemCount: offset + daysCount,
           itemBuilder: (_, idx) {
             if (idx < offset) return const SizedBox.shrink();
-            final day      = idx - offset + 1;
-            final date     = DateTime(focusedMonth.year, focusedMonth.month, day);
-            final dateStr  =
+            final day = idx - offset + 1;
+            final date = DateTime(focusedMonth.year, focusedMonth.month, day);
+            final dateStr =
                 '${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
             final sessions = sessionsByDate[dateStr] ?? [];
-            final isToday  = date.year == DateTime.now().year &&
+            final isToday = date.year == DateTime.now().year &&
                 date.month == DateTime.now().month &&
-                date.day   == DateTime.now().day;
+                date.day == DateTime.now().day;
             return _GlassDayCell(
-              day:         day, hasSessions: sessions.isNotEmpty,
-              isToday:     isToday, sessions: sessions,
-              circleSize:  circleSize, fontSize: fontSize, c: c,
+              day: day, hasSessions: sessions.isNotEmpty,
+              isToday: isToday, sessions: sessions,
+              circleSize: circleSize, fontSize: fontSize, c: c,
               onTap: sessions.isNotEmpty
                   ? () => onDayTapped(dateStr, sessions) : null);
           }),
       ]);
     });
   }
-
   Widget _buildMonthView(BuildContext context, MarkFitColors c) {
-    final now     = DateTime.now();
+    final now = DateTime.now();
     final byMonth = <int, int>{};
     for (final e in sessionsByDate.entries) {
       final dt = DateTime.tryParse(e.key);
@@ -786,10 +800,9 @@ class _GlassCalendar extends StatelessWidget {
               isSelected: isSel, isCurrent: isCur, c: c));
       });
   }
-
   Widget _buildYearView(BuildContext context, MarkFitColors c) {
-    final dec    = (focusedMonth.year ~/ 10) * 10;
-    final now    = DateTime.now();
+    final dec = (focusedMonth.year ~/ 10) * 10;
+    final now = DateTime.now();
     final byYear = <int, int>{};
     for (final e in sessionsByDate.entries) {
       final dt = DateTime.tryParse(e.key);
@@ -803,7 +816,7 @@ class _GlassCalendar extends StatelessWidget {
           mainAxisSpacing: 8, crossAxisSpacing: 8),
       itemCount: 12,
       itemBuilder: (_, i) {
-        final year  = dec - 1 + i;
+        final year = dec - 1 + i;
         final isCur = year == now.year;
         final isSel = year == focusedMonth.year;
         final isOut = i == 0 || i == 11;
@@ -819,8 +832,36 @@ class _GlassCalendar extends StatelessWidget {
               isOutOfRange: isOut, c: c));
       });
   }
+  // FIX MODIFICA 2A — nuovo livello 'decade' (intervallo di anni),
+  // mancante rispetto a Home. Tap su un decennio scende al livello
+  // 'year' con quel decennio a fuoco — stessa gerarchia di Home.
+  Widget _buildDecadeView(BuildContext context, MarkFitColors c) {
+    final cent = (focusedMonth.year ~/ 100) * 100;
+    final now = DateTime.now();
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3, childAspectRatio: 1.6,
+          mainAxisSpacing: 8, crossAxisSpacing: 8),
+      itemCount: 12,
+      itemBuilder: (_, i) {
+        final decStart = cent - 10 + (i * 10);
+        final isCur = now.year >= decStart && now.year < decStart + 10;
+        final isSel = focusedMonth.year >= decStart &&
+            focusedMonth.year < decStart + 10;
+        final isOut = i == 0 || i == 11;
+        return GestureDetector(
+          onTap: () {
+            onMonthChanged(DateTime(decStart, focusedMonth.month));
+            onModeChanged('year');
+          },
+          child: _CalCell(label: '$decStart–${decStart + 9}',
+              isSelected: isSel, isCurrent: isCur,
+              isOutOfRange: isOut, c: c));
+      });
+  }
 }
-
 class _CalBtn extends StatelessWidget {
   final IconData icon; final VoidCallback onTap; final MarkFitColors c;
   const _CalBtn({required this.icon, required this.onTap, required this.c});
@@ -834,7 +875,6 @@ class _CalBtn extends StatelessWidget {
         border: Border.all(color: c.glassBorder, width: 0.8)),
       child: Icon(icon, color: c.iconPrimary, size: 18)));
 }
-
 class _CalCell extends StatelessWidget {
   final String label; final String? subLabel;
   final bool isSelected, isCurrent, isOutOfRange;
@@ -842,18 +882,17 @@ class _CalCell extends StatelessWidget {
   const _CalCell({required this.label, this.subLabel,
       this.isSelected = false, this.isCurrent = false,
       this.isOutOfRange = false, required this.c});
-
   @override
   Widget build(BuildContext context) => AnimatedContainer(
     duration: const Duration(milliseconds: 140),
     decoration: BoxDecoration(
       color: isSelected ? _teal.withOpacity(0.2)
-          : isCurrent   ? _cyan.withOpacity(0.08)
+          : isCurrent ? _cyan.withOpacity(0.08)
           : c.glassCardInset.withOpacity(isOutOfRange ? 0.4 : 1.0),
       borderRadius: BorderRadius.circular(10),
       border: Border.all(
         color: isSelected ? _teal.withOpacity(0.6)
-            : isCurrent   ? _cyan.withOpacity(0.3)
+            : isCurrent ? _cyan.withOpacity(0.3)
             : c.glassBorder.withOpacity(isOutOfRange ? 0.5 : 1.0),
         width: isSelected ? 1.3 : 1),
       boxShadow: isSelected
@@ -872,11 +911,9 @@ class _CalCell extends StatelessWidget {
             fontSize: 9, color: _teal, fontWeight: FontWeight.w600)),
     ]));
 }
-
 // ─────────────────────────────────────────────────────────────
-// _GlassDayCell
+// _GlassDayCell — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _GlassDayCell extends StatefulWidget {
   final int day; final bool hasSessions, isToday;
   final List<HiveSession> sessions; final VoidCallback? onTap;
@@ -888,19 +925,17 @@ class _GlassDayCell extends StatefulWidget {
   @override
   State<_GlassDayCell> createState() => _GlassDayCellState();
 }
-
 class _GlassDayCellState extends State<_GlassDayCell> {
-  bool          _hovered = false;
+  bool _hovered = false;
   OverlayEntry? _overlay;
-
   void _showPreview(BuildContext ctx) {
     if (!widget.hasSessions) return;
-    final box    = ctx.findRenderObject() as RenderBox;
+    final box = ctx.findRenderObject() as RenderBox;
     final offset = box.localToGlobal(Offset.zero);
     final c = widget.c;
     _overlay = OverlayEntry(builder: (_) => Positioned(
       left: (offset.dx - 60).clamp(8.0, double.infinity),
-      top:  offset.dy + box.size.height + 4,
+      top: offset.dy + box.size.height + 4,
       child: Material(
         elevation: 6, borderRadius: BorderRadius.circular(12),
         child: Container(
@@ -925,12 +960,9 @@ class _GlassDayCellState extends State<_GlassDayCell> {
               ]))).toList())))));
     Overlay.of(ctx).insert(_overlay!);
   }
-
   void _hidePreview() { _overlay?.remove(); _overlay = null; }
-
   @override
   void dispose() { _hidePreview(); super.dispose(); }
-
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
@@ -943,13 +975,13 @@ class _GlassDayCellState extends State<_GlassDayCell> {
       cursor: widget.hasSessions
           ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) { setState(() => _hovered = true); _showPreview(context); },
-      onExit:  (_) { setState(() => _hovered = false); _hidePreview(); },
+      onExit: (_) { setState(() => _hovered = false); _hidePreview(); },
       child: GestureDetector(
         onTap: widget.onTap,
         child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            width:  _hovered ? hoverSize : widget.circleSize,
+            width: _hovered ? hoverSize : widget.circleSize,
             height: _hovered ? hoverSize : widget.circleSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -970,41 +1002,35 @@ class _GlassDayCellState extends State<_GlassDayCell> {
                 color: widget.hasSessions ? Colors.white : _cyan)))))));
   }
 }
-
 // ─────────────────────────────────────────────────────────────
-// Session tiles
+// Session tiles — invariati
 // ─────────────────────────────────────────────────────────────
-
 class _GymSessionTile extends StatelessWidget {
   final HiveSession session; final HiveWorkout? workout;
   final VoidCallback onTap, onDelete;
   const _GymSessionTile({required this.session, required this.workout,
       required this.onTap, required this.onDelete});
-
   String _fmtDate(String iso) {
     final dt = DateTime.parse(iso);
-    const m  = ['','Gen','Feb','Mar','Apr','Mag','Giu',
+    const m = ['','Gen','Feb','Mar','Apr','Mag','Giu',
         'Lug','Ago','Set','Ott','Nov','Dic'];
     return '${dt.day} ${m[dt.month]} ${dt.year}  '
         '${dt.hour.toString().padLeft(2,'0')}:'
         '${dt.minute.toString().padLeft(2,'0')}';
   }
-
   String _fmtDur(int? s) {
     if (s == null) return '';
     final m = s ~/ 60;
     return m == 0 ? '${s}s' : '${m}min';
   }
-
   @override
   Widget build(BuildContext context) {
-    final c    = context.mfc;
+    final c = context.mfc;
     final sets = HiveDatabase.instance.getSessionSets(session.key);
-    final top  = sets.where((s) => s.completed)
+    final top = sets.where((s) => s.completed)
         .fold<Map<String, HiveSessionSet>>(
             {}, (map, s) => map..putIfAbsent(s.exerciseName, () => s))
         .values.take(2).toList();
-
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
@@ -1074,33 +1100,29 @@ class _GymSessionTile extends StatelessWidget {
             ])))));
   }
 }
-
 class _SportSessionTile extends StatelessWidget {
   final _HistoryEntry entry; final VoidCallback onDelete;
   const _SportSessionTile({required this.entry, required this.onDelete});
-
   IconData get _icon {
     switch (entry.sportType) {
-      case SportType.running:  return Icons.directions_run_rounded;
-      case SportType.cycling:  return Icons.directions_bike_rounded;
+      case SportType.running: return Icons.directions_run_rounded;
+      case SportType.cycling: return Icons.directions_bike_rounded;
       case SportType.swimming: return Icons.pool_rounded;
-      case SportType.walking:  return Icons.directions_walk_rounded;
-      case SportType.hiking:   return Icons.terrain_rounded;
-      default:                 return Icons.sports_rounded;
+      case SportType.walking: return Icons.directions_walk_rounded;
+      case SportType.hiking: return Icons.terrain_rounded;
+      default: return Icons.sports_rounded;
     }
   }
-
   Color get _color {
     switch (entry.sportType) {
-      case SportType.running:  return _orange;
-      case SportType.cycling:  return _green;
+      case SportType.running: return _orange;
+      case SportType.cycling: return _green;
       case SportType.swimming: return _blue;
-      case SportType.walking:  return _teal;
-      case SportType.hiking:   return _indigo;
-      default:                 return _cyan;
+      case SportType.walking: return _teal;
+      case SportType.hiking: return _indigo;
+      default: return _cyan;
     }
   }
-
   String _fmtDate(DateTime dt) {
     const m = ['','Gen','Feb','Mar','Apr','Mag','Giu',
         'Lug','Ago','Set','Ott','Nov','Dic'];
@@ -1108,17 +1130,15 @@ class _SportSessionTile extends StatelessWidget {
         '${dt.hour.toString().padLeft(2,'0')}:'
         '${dt.minute.toString().padLeft(2,'0')}';
   }
-
   String _fmtDur(int? s) {
     if (s == null) return '';
     final m = s ~/ 60;
     return m == 0 ? '${s}s' : '${m}min';
   }
-
   @override
   Widget build(BuildContext context) {
     final cl = _color;
-    final c  = context.mfc;
+    final c = context.mfc;
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
@@ -1192,11 +1212,9 @@ class _SportSessionTile extends StatelessWidget {
           ]))));
   }
 }
-
 // ─────────────────────────────────────────────────────────────
-// _GlassDayDetailSheet
+// _GlassDayDetailSheet — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _GlassDayDetailSheet extends StatefulWidget {
   final String dateStr; final List<HiveSession> sessions;
   final Map<int, HiveWorkout> workoutsCache;
@@ -1208,33 +1226,30 @@ class _GlassDayDetailSheet extends StatefulWidget {
   @override
   State<_GlassDayDetailSheet> createState() => _GlassDayDetailSheetState();
 }
-
 class _GlassDayDetailSheetState extends State<_GlassDayDetailSheet> {
   final Set<dynamic> _expanded = {};
-
   String _fmtLabel(String s) {
     final dt = DateTime.parse(s);
-    const m  = ['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+    const m = ['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
         'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
     return '${dt.day} ${m[dt.month]} ${dt.year}';
   }
-
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
     return GlassSheetWrapper(
-      title:       _fmtLabel(widget.dateStr),
-      subtitle:    '${widget.sessions.length} session${widget.sessions.length == 1 ? 'e' : 'i'}',
+      title: _fmtLabel(widget.dateStr),
+      subtitle: '${widget.sessions.length} session${widget.sessions.length == 1 ? 'e' : 'i'}',
       accentColor: _teal,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         ...widget.sessions.map((s) {
-          final dt      = DateTime.tryParse(s.date);
+          final dt = DateTime.tryParse(s.date);
           final timeStr = dt != null
               ? '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}'
               : '';
-          final isExp   = _expanded.contains(s.key);
-          final sets    = HiveDatabase.instance.getSessionSets(s.key);
-          final topMap  = <String, HiveSessionSet>{};
+          final isExp = _expanded.contains(s.key);
+          final sets = HiveDatabase.instance.getSessionSets(s.key);
+          final topMap = <String, HiveSessionSet>{};
           for (final ss in sets.where((ss) => ss.completed)) {
             topMap.putIfAbsent(ss.exerciseName, () => ss);
           }
@@ -1277,7 +1292,7 @@ class _GlassDayDetailSheetState extends State<_GlassDayDetailSheet> {
                         GestureDetector(
                           onTap: () => setState(() {
                             if (isExp) _expanded.remove(s.key);
-                            else       _expanded.add(s.key);
+                            else _expanded.add(s.key);
                           }),
                           child: Container(padding: const EdgeInsets.all(5),
                             decoration: BoxDecoration(
@@ -1340,22 +1355,19 @@ class _GlassDayDetailSheetState extends State<_GlassDayDetailSheet> {
               border: Border.all(color: context.mfc.glassBorder)),
             child: Text('Chiudi', textAlign: TextAlign.center,
                 style: TextStyle(
-                    color:      context.mfc.textPrimary,
-                    fontSize:   14,
+                    color: context.mfc.textPrimary,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600)))),
       ]),
     );
   }
 }
-
 // ─────────────────────────────────────────────────────────────
-// _GoalHistoryCard
+// _GoalHistoryCard — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _GoalHistoryCard extends StatelessWidget {
   final HiveGoal goal; final int totalDone;
   const _GoalHistoryCard({required this.goal, required this.totalDone});
-
   static const _catColors = <String, Color>{
     'Studio': Color(0xFF6366F1), 'Sport': Color(0xFF00D4AA),
     'Salute': Color(0xFF22C55E), 'Lavoro': Color(0xFF3B82F6),
@@ -1366,11 +1378,10 @@ class _GoalHistoryCard extends StatelessWidget {
     'Altro': Color(0xFF9CA3AF),
   };
   Color get _catColor => _catColors[goal.category] ?? const Color(0xFF9CA3AF);
-
   @override
   Widget build(BuildContext context) {
     final cl = _catColor;
-    final c  = context.mfc;
+    final c = context.mfc;
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
@@ -1381,9 +1392,9 @@ class _GoalHistoryCard extends StatelessWidget {
             color: c.glassCard,
             borderRadius: BorderRadius.circular(16),
             border: Border(
-              left:   BorderSide(color: cl.withOpacity(0.6), width: 3),
-              top:    BorderSide(color: cl.withOpacity(0.12), width: 0.7),
-              right:  BorderSide(color: cl.withOpacity(0.12), width: 0.7),
+              left: BorderSide(color: cl.withOpacity(0.6), width: 3),
+              top: BorderSide(color: cl.withOpacity(0.12), width: 0.7),
+              right: BorderSide(color: cl.withOpacity(0.12), width: 0.7),
               bottom: BorderSide(color: cl.withOpacity(0.12), width: 0.7)),
             boxShadow: c.showElevation
                 ? [BoxShadow(color: c.elevationColor, blurRadius: 8,
@@ -1442,16 +1453,13 @@ class _GoalHistoryCard extends StatelessWidget {
           ]))));
   }
 }
-
 // ─────────────────────────────────────────────────────────────
-// _SectionHeader
+// _SectionHeader — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _SectionHeader extends StatelessWidget {
   final IconData icon; final String title; final Color color;
   const _SectionHeader({required this.icon, required this.title,
       required this.color});
-
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
@@ -1468,12 +1476,12 @@ class _SectionHeader extends StatelessWidget {
     ]);
   }
 }
-
 // ─────────────────────────────────────────────────────────────
-// Empty states
+// Empty states — _EmptyWorkouts esteso con parametro showingFiltered
 // ─────────────────────────────────────────────────────────────
-
 class _EmptyWorkouts extends StatelessWidget {
+  final bool showingFiltered;
+  _EmptyWorkouts({this.showingFiltered = false});
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
@@ -1485,15 +1493,21 @@ class _EmptyWorkouts extends StatelessWidget {
             color: _teal.withOpacity(0.08), shape: BoxShape.circle),
           child: const Icon(Icons.history_rounded, color: _teal, size: 26)),
         const SizedBox(height: 14),
-        Text('Nessuna sessione ancora', style: TextStyle(
-            color: c.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+        Text(
+            showingFiltered
+                ? 'Nessuna sessione in questo mese'
+                : 'Nessuna sessione ancora',
+            style: TextStyle(
+                color: c.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
-        Text('Completa il tuo primo allenamento!',
+        Text(
+            showingFiltered
+                ? 'Prova a cambiare mese o mostra tutte le sessioni'
+                : 'Completa il tuo primo allenamento!',
             style: TextStyle(color: c.textTertiary, fontSize: 13)),
       ])));
   }
 }
-
 class _EmptyGoals extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

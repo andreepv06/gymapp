@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import '../../core/navigation/app_router.dart';
 import '../../core/theme/markfit_colors.dart';
 import '../../db/hive_database.dart';
@@ -11,9 +9,9 @@ import '../../models/hive_models.dart';
 import '../../models/goal_models.dart';
 import '../../providers/exercise_provider.dart';
 import '../../providers/goal_provider.dart';
-import '../../providers/profile_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../providers/workout_provider.dart';
+import '../../widgets/avatar_picker_sheet.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
 import '../../widgets/workout_icon.dart';
@@ -25,50 +23,39 @@ import 'dart:convert';
 import '../../providers/auth_provider.dart';
 
 // ── Accent tokens (fissi in entrambi i temi) ─────────────────
-const _cyan       = Color(0xFF00E5FF);
-const _teal       = Color(0xFF00D4AA);
-const _tealDk     = Color(0xFF00A880);
-const _indigo     = Color(0xFF6366F1);
-const _orange     = Color(0xFFFF8C00);
+const _cyan = Color(0xFF00E5FF);
+const _teal = Color(0xFF00D4AA);
+const _tealDk = Color(0xFF00A880);
+const _indigo = Color(0xFF6366F1);
+const _orange = Color(0xFFFF8C00);
 const _orangeWarm = Color(0xFFFF6B00);
-const _red        = Color(0xFFFF3B30);
-const _green      = Color(0xFF22C55E);
-const _blue       = Color(0xFF3B82F6);
-const _purple     = Color(0xFF8A2BE2);
+const _red = Color(0xFFFF3B30);
+const _green = Color(0xFF22C55E);
+const _blue = Color(0xFF3B82F6);
+const _purple = Color(0xFF8A2BE2);
 
 // ─────────────────────────────────────────────────────────────
 // HomeScreen
 // ─────────────────────────────────────────────────────────────
-
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ringCtrl;
-  late Animation<double>   _ringAnim;
+class _HomeScreenState extends State<HomeScreen> {
   DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
     super.initState();
-    _ringCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1400));
-    _ringAnim = CurvedAnimation(parent: _ringCtrl, curve: Curves.easeOutCubic);
     Future.microtask(() {
       if (!mounted) return;
       context.read<WorkoutProvider>().loadWorkouts();
       context.read<ExerciseProvider>().loadExercises();
       context.read<GoalProvider>().loadGoals();
-      _ringCtrl.forward();
     });
   }
-
-  @override
-  void dispose() { _ringCtrl.dispose(); super.dispose(); }
 
   String _greeting() {
     final h = DateTime.now().hour;
@@ -95,6 +82,44 @@ class _HomeScreenState extends State<HomeScreen>
 
   void _goToAllenamenti() =>
       context.read<NavigationNotifier>().navigateTo(1);
+
+  // FIX MODIFICA 2A — navigazione settimanale Home
+  void _shiftWeek(int days) =>
+      setState(() => _selectedDate = _selectedDate.add(Duration(days: days)));
+
+  void _goToToday() => setState(() => _selectedDate = DateTime.now());
+
+  // FIX MODIFICA 2B — dati reali del giorno selezionato (non più
+  // sempre "oggi"): schede completate, esercizi, serie, durata.
+  _DailyJourneyData _computeDailyJourney(DateTime date) {
+    final dateStr =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final sessions = HiveDatabase.instance
+        .getSessions()
+        .where((s) => s.date.startsWith(dateStr))
+        .toList();
+    int completedSets = 0, totalSets = 0, totalDuration = 0;
+    final exerciseNames = <String>{};
+    final workoutNames = <String>[];
+    for (final s in sessions) {
+      workoutNames.add(s.workoutName);
+      totalDuration += s.durationSeconds ?? 0;
+      final sets = HiveDatabase.instance.getSessionSets(s.key);
+      for (final set in sets) {
+        totalSets++;
+        if (set.completed) completedSets++;
+        exerciseNames.add(set.exerciseName);
+      }
+    }
+    return _DailyJourneyData(
+      workoutCount: sessions.length,
+      exerciseCount: exerciseNames.length,
+      completedSets: completedSets,
+      totalSets: totalSets,
+      totalDurationSeconds: totalDuration,
+      workoutNames: workoutNames,
+    );
+  }
 
   Future<void> _handleWorkoutPlay(HiveWorkout workout) async {
     final wp = context.read<WorkoutProvider>();
@@ -163,9 +188,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _handleGoalToggle(HiveGoal goal) {
-    final now   = DateTime.now();
+    final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final sel   = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final sel = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
     if (sel.isAfter(today)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: const Text('Non puoi completare obiettivi futuri.',
@@ -185,7 +210,7 @@ class _HomeScreenState extends State<HomeScreen>
       context: context,
       barrierColor: Colors.black.withOpacity(0.55),
       builder: (ctx) => _GlassCalendarDialog(
-        initialDate:    _selectedDate,
+        initialDate: _selectedDate,
         onDateSelected: (date) {
           setState(() => _selectedDate = date);
           Navigator.pop(ctx);
@@ -205,18 +230,17 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final sp      = context.watch<SessionProvider>();
-    final wp      = context.watch<WorkoutProvider>();
-    final ep      = context.watch<ExerciseProvider>();
-    final gp      = context.watch<GoalProvider>();
-    final workouts     = wp.workouts;
-    final exCount      = ep.exercises.length;
-    final completed    = sp.completedSetsCount;
-    final total        = sp.totalSetsCount;
-    final progress     = total > 0 ? completed / total : 0.0;
-    final goalsForDay  = gp.goalsForDate(_selectedDate);
-    final dayProgress  = gp.completionPercentageForDate(_selectedDate);
-    final sysBottom    = MediaQuery.of(context).viewPadding.bottom;
+    final sp = context.watch<SessionProvider>();
+    final wp = context.watch<WorkoutProvider>();
+    final ep = context.watch<ExerciseProvider>();
+    final gp = context.watch<GoalProvider>();
+    final workouts = wp.workouts;
+    final goalsForDay = gp.goalsForDate(_selectedDate);
+    final dayProgress = gp.completionPercentageForDate(_selectedDate);
+    final goalsDone =
+        goalsForDay.where((g) => gp.isCompletedOn(g, _selectedDate)).length;
+    final journey = _computeDailyJourney(_selectedDate);
+    final sysBottom = MediaQuery.of(context).viewPadding.bottom;
 
     return CosmicBackground(
       child: SafeArea(
@@ -228,8 +252,8 @@ class _HomeScreenState extends State<HomeScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _HomeHeader(
-                greeting:         _greeting(),
-                date:             _formattedDate()),
+                  greeting: _greeting(),
+                  date: _formattedDate()),
               const SizedBox(height: 14),
               if (sp.hasPausedSessions && !sp.hasActiveSession) ...[
                 _PausedSessionsBanner(
@@ -242,45 +266,46 @@ class _HomeScreenState extends State<HomeScreen>
                 const SizedBox(height: 12),
               ],
               _WeekCalendarSection(
-                selectedDate:   _selectedDate,
+                selectedDate: _selectedDate,
                 onDateSelected: (d) => setState(() => _selectedDate = d),
-                onCalendarOpen: _showCalendarPopup),
+                onCalendarOpen: _showCalendarPopup,
+                onWeekShift: _shiftWeek,
+                onGoToToday: _goToToday),
               const SizedBox(height: 14),
               _GoalsDaySection(
-                goals:        goalsForDay,
+                goals: goalsForDay,
                 selectedDate: _selectedDate,
-                dayProgress:  dayProgress,
-                isCompleted:  (g) => gp.isCompletedOn(g, _selectedDate),
-                onToggle:     _handleGoalToggle,
-                onManage:     () => pushPage(context, const GoalsScreen())),
+                dayProgress: dayProgress,
+                isCompleted: (g) => gp.isCompletedOn(g, _selectedDate),
+                onToggle: _handleGoalToggle,
+                onManage: () => pushPage(context, const GoalsScreen())),
               const SizedBox(height: 14),
-              _DailyProgressCard(
-                ringAnim:      _ringAnim,
-                progress:      sp.hasActiveSession ? progress : 0,
-                completedSets: completed,
-                totalSets:     total,
-                elapsedSec:    sp.elapsedSeconds,
-                workoutCount:  workouts.length,
-                exerciseCount: exCount,
-                hasActive:     sp.hasActiveSession,
-                fmt:           _fmt),
+              _DailyJourneyCard(
+                date: _selectedDate,
+                journey: journey,
+                goalsDone: goalsDone,
+                goalsTotal: goalsForDay.length,
+                goalsProgress: dayProgress,
+                onOpenDetail: () => _showDailyJourneyDetail(
+                    context, _selectedDate, journey, goalsForDay,
+                    (g) => gp.isCompletedOn(g, _selectedDate))),
               const SizedBox(height: 14),
               _SectionHeader(
                   icon: Icons.bolt_rounded, title: 'Avvio rapido', color: _teal),
               const SizedBox(height: 10),
               _QuickStartGrid(
                 onPalestra: _goToAllenamenti,
-                onRunning:  () => _showComingSoon('Running'),
+                onRunning: () => _showComingSoon('Running'),
                 onCiclismo: () => _showComingSoon('Ciclismo'),
-                onNuoto:    () => _showComingSoon('Nuoto')),
+                onNuoto: () => _showComingSoon('Nuoto')),
               const SizedBox(height: 14),
               if (workouts.isNotEmpty) ...[
                 _SectionHeader(
-                  icon:          Icons.fitness_center_rounded,
-                  title:         'Le tue schede',
-                  color:         _indigo,
+                  icon: Icons.fitness_center_rounded,
+                  title: 'Le tue schede',
+                  color: _indigo,
                   trailingLabel: workouts.length > 2 ? 'Vedi tutte' : null,
-                  onTrailing:    _goToAllenamenti),
+                  onTrailing: _goToAllenamenti),
                 const SizedBox(height: 10),
                 ...workouts.take(2).map((w) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
@@ -293,6 +318,10 @@ class _HomeScreenState extends State<HomeScreen>
                     },
                     onPlay: () => _handleWorkoutPlay(w)))),
               ],
+              // exCount usato solo internamente da altri widget legacy;
+              // mantenuto ep watch per triggerare rebuild quando la
+              // libreria esercizi cambia (usato da _WorkoutMiniCard).
+              if (ep.exercises.isEmpty) const SizedBox.shrink(),
             ],
           ),
         ),
@@ -302,29 +331,23 @@ class _HomeScreenState extends State<HomeScreen>
 }
 
 // ─────────────────────────────────────────────────────────────
-// _HomeHeader — ADATTIVO + avatar da AuthProvider
+// _HomeHeader — ADATTIVO + avatar tappabile (FIX MODIFICA 1)
 // ─────────────────────────────────────────────────────────────
-
 class _HomeHeader extends StatelessWidget {
   final String greeting, date;
-
-  // profileImagePath rimosso: l'avatar legge da AuthProvider direttamente
   const _HomeHeader({required this.greeting, required this.date});
-
   static const _phrases = [
-    'Ogni rep conta.',       'Il progresso è costante.',
-    'Oggi supera ieri.',     'Forza e costanza.',
-    'Non fermarti mai.',     'Il corpo segue la mente.',
+    'Ogni rep conta.', 'Il progresso è costante.',
+    'Oggi supera ieri.', 'Forza e costanza.',
+    'Non fermarti mai.', 'Il corpo segue la mente.',
     'Consistenza batte intensità.',
   ];
-
   String get _phrase {
     final d = DateTime.now()
         .difference(DateTime(DateTime.now().year))
         .inDays;
     return _phrases[d % _phrases.length];
   }
-
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
@@ -383,7 +406,6 @@ class _HomeHeader extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 16),
-            // Avatar legge da AuthProvider — si aggiorna automaticamente
             const _ProfileAvatar(),
           ]),
         ),
@@ -393,24 +415,19 @@ class _HomeHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _ProfileAvatar — SORGENTE UNICA: AuthProvider.avatarBase64
+// _ProfileAvatar — FIX MODIFICA 1
 //
-// FIX SINCRONIZZAZIONE:
-// Legge da AuthProvider invece di ProfileProvider.imagePath.
-// Qualsiasi aggiornamento in EditProfileScreen (updateProfile)
-// chiama notifyListeners() su AuthProvider → tutti i consumer
-// (incluso questo widget) si rirenderizzano automaticamente.
+// Fonte unica: AuthProvider.avatarBase64. Ora tappabile: apre
+// direttamente lo sheet condiviso (Fotocamera/Galleria/Rimuovi),
+// senza dover passare dalle Impostazioni (Parte 8 del fix).
 // ─────────────────────────────────────────────────────────────
-
 class _ProfileAvatar extends StatelessWidget {
   const _ProfileAvatar();
-
   @override
   Widget build(BuildContext context) {
-    final auth     = context.watch<AuthProvider>();
-    final b64      = auth.avatarBase64;
+    final auth = context.watch<AuthProvider>();
+    final b64 = auth.avatarBase64;
     final hasAvatar = b64 != null && b64.isNotEmpty;
-
     Widget inner;
     if (hasAvatar) {
       try {
@@ -427,41 +444,39 @@ class _ProfileAvatar extends StatelessWidget {
       inner = const Icon(Icons.person_rounded,
           color: Colors.white, size: 28);
     }
-
-    return Container(
-      width: 56, height: 56,
-      decoration: BoxDecoration(
-        gradient: hasAvatar ? null : LinearGradient(
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-          colors: [_teal.withOpacity(0.3), _cyan.withOpacity(0.1)]),
-        shape: BoxShape.circle,
-        border: Border.all(color: _teal.withOpacity(0.6), width: 1.5),
-        boxShadow: [BoxShadow(
-            color: _teal.withOpacity(0.3), blurRadius: 16, spreadRadius: 1)]),
-      child: ClipOval(child: inner));
+    return GestureDetector(
+      onTap: () => showAvatarPickerSheet(context),
+      child: Container(
+        width: 56, height: 56,
+        decoration: BoxDecoration(
+          gradient: hasAvatar ? null : LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [_teal.withOpacity(0.3), _cyan.withOpacity(0.1)]),
+          shape: BoxShape.circle,
+          border: Border.all(color: _teal.withOpacity(0.6), width: 1.5),
+          boxShadow: [BoxShadow(
+              color: _teal.withOpacity(0.3), blurRadius: 16, spreadRadius: 1)]),
+        child: ClipOval(child: inner)));
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _PausedSessionsBanner — ADATTIVO
+// _PausedSessionsBanner — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _PausedSessionsBanner extends StatelessWidget {
   final SessionProvider sp;
   final String Function(int) fmt;
   final VoidCallback onGoToAllenamenti;
   const _PausedSessionsBanner({
     required this.sp, required this.fmt, required this.onGoToAllenamenti});
-
   @override
   Widget build(BuildContext context) {
-    final c       = context.mfc;
-    final paused  = sp.pausedSessions;
-    final count   = paused.length;
-    final first   = count > 0 ? paused.first : null;
-    final name    = first?['workoutName'] as String? ?? 'Sessione';
+    final c = context.mfc;
+    final paused = sp.pausedSessions;
+    final count = paused.length;
+    final first = count > 0 ? paused.first : null;
+    final name = first?['workoutName'] as String? ?? 'Sessione';
     final elapsed = (first?['elapsedAtPause'] as num?)?.toInt() ?? 0;
-
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
@@ -503,7 +518,6 @@ class _PausedSessionsBanner extends StatelessWidget {
                         fontWeight: FontWeight.w800, letterSpacing: 1.1)),
               ]),
               const SizedBox(height: 4),
-              // Workout name: su sfondo accent → textPrimary (visible on both themes)
               Text(name, style: TextStyle(
                   color: c.textPrimary, fontSize: 14,
                   fontWeight: FontWeight.w700),
@@ -521,7 +535,6 @@ class _PausedSessionsBanner extends StatelessWidget {
               ],
             ])),
             const SizedBox(width: 10),
-            // "Riprendi" button: white on orange gradient — keep white
             GestureDetector(
               onTap: onGoToAllenamenti,
               child: Container(
@@ -544,19 +557,16 @@ class _PausedSessionsBanner extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _ActiveSessionBanner — ADATTIVO
+// _ActiveSessionBanner — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _ActiveSessionBanner extends StatelessWidget {
   final SessionProvider sp;
   final String Function(int) fmt;
   const _ActiveSessionBanner({required this.sp, required this.fmt});
-
   @override
   Widget build(BuildContext context) {
-    final c    = context.mfc;
+    final c = context.mfc;
     final name = sp.currentWorkout?.name ?? 'Sessione attiva';
-
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
@@ -625,31 +635,43 @@ class _ActiveSessionBanner extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WeekCalendarSection — ADATTIVO
+// _WeekCalendarSection — FIX MODIFICA 2A
+//
+// PRIMA: `monday` era sempre calcolato da DateTime.now(), quindi
+// la barra mostrava sempre la settimana corrente indipendentemente
+// da `selectedDate` — bug esplicito (Parte 16).
+// ORA: `monday` è calcolato dalla settimana di `selectedDate`, con
+// navigazione ←/→ tra settimane e un'azione rapida "Torna a oggi"
+// visibile SOLO quando la settimana visualizzata non è quella
+// corrente (Parte 17/18/19).
 // ─────────────────────────────────────────────────────────────
-
 class _WeekCalendarSection extends StatelessWidget {
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDateSelected;
   final VoidCallback onCalendarOpen;
+  final void Function(int days) onWeekShift;
+  final VoidCallback onGoToToday;
   const _WeekCalendarSection({
     required this.selectedDate, required this.onDateSelected,
-    required this.onCalendarOpen});
-
+    required this.onCalendarOpen, required this.onWeekShift,
+    required this.onGoToToday});
   static String _monthLabel(DateTime d) {
     const months = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
         'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
     return '${months[d.month - 1]} ${d.year}';
   }
-
   @override
   Widget build(BuildContext context) {
-    final c      = context.mfc;
-    const names  = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
-    final now    = DateTime.now();
-    final today  = DateTime(now.year, now.month, now.day);
+    final c = context.mfc;
+    const names = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final selDay = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
-    final monday = today.subtract(Duration(days: now.weekday - 1));
+    // FIX: la settimana visualizzata segue SEMPRE selectedDate, non
+    // più sempre "oggi".
+    final monday = selDay.subtract(Duration(days: selectedDate.weekday - 1));
+    final todayMonday = today.subtract(Duration(days: now.weekday - 1));
+    final isCurrentWeek = monday == todayMonday;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -678,6 +700,28 @@ class _WeekCalendarSection extends StatelessWidget {
                       color: _cyan.withOpacity(0.7), size: 18),
                 ])),
               const Spacer(),
+              // FIX Parte 18: "Torna a oggi" mostrato SOLO se non
+              // siamo già nella settimana corrente.
+              if (!isCurrentWeek) ...[
+                GestureDetector(
+                  onTap: onGoToToday,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _teal.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                          color: _teal.withOpacity(0.35), width: 0.8)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.today_rounded, size: 12, color: _teal),
+                      const SizedBox(width: 4),
+                      Text('Oggi', style: TextStyle(
+                          color: _teal, fontSize: 11,
+                          fontWeight: FontWeight.w700)),
+                    ]))),
+                const SizedBox(width: 8),
+              ],
               GestureDetector(
                 onTap: onCalendarOpen,
                 child: Container(
@@ -691,64 +735,92 @@ class _WeekCalendarSection extends StatelessWidget {
                       color: _cyan, size: 16))),
             ]),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(7, (i) {
-                final day     = monday.add(Duration(days: i));
-                final dayNorm = DateTime(day.year, day.month, day.day);
-                final isSel   = dayNorm == selDay;
-                final isToday = dayNorm == today;
-                final isPast  = dayNorm.isBefore(today);
-                return GestureDetector(
-                  onTap: () => onDateSelected(day),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 38,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isSel ? _teal.withOpacity(0.18) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSel
-                            ? _teal.withOpacity(0.6)
-                            : isToday
-                                ? _cyan.withOpacity(0.35)
-                                : Colors.transparent,
-                        width: 1),
-                      boxShadow: isSel
-                          ? [BoxShadow(color: _teal.withOpacity(0.2), blurRadius: 8)]
-                          : null),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text(names[i], style: TextStyle(
-                          color: isSel ? _teal
-                              : isToday ? _cyan
-                              : c.textTertiary,   // was white.withOpacity(0.3)
-                          fontSize: 9, fontWeight: FontWeight.w700,
-                          letterSpacing: 0.3)),
-                      const SizedBox(height: 7),
-                      Container(width: 26, height: 26,
+            Row(children: [
+              // FIX Parte 17: navigazione settimana precedente
+              GestureDetector(
+                onTap: () => onWeekShift(-7),
+                child: Container(
+                  width: 24, height: 24,
+                  margin: const EdgeInsets.only(right: 2),
+                  decoration: BoxDecoration(
+                    color: c.glassCardInset,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: c.glassBorder, width: 0.7)),
+                  child: Icon(Icons.chevron_left_rounded,
+                      size: 15, color: c.iconSecondary))),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(7, (i) {
+                    final day = monday.add(Duration(days: i));
+                    final dayNorm = DateTime(day.year, day.month, day.day);
+                    final isSel = dayNorm == selDay;
+                    final isToday = dayNorm == today;
+                    final isPast = dayNorm.isBefore(today);
+                    return GestureDetector(
+                      onTap: () => onDateSelected(day),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 36,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: isSel ? _teal : Colors.transparent,
-                          shape: BoxShape.circle),
-                        child: Center(child: Text('${day.day}', style: TextStyle(
-                            color: isSel ? Colors.white : c.textPrimary,  // was white.withOpacity(0.7)
-                            fontSize: 13,
-                            fontWeight: isSel || isToday
-                                ? FontWeight.w800 : FontWeight.w500)))),
-                      const SizedBox(height: 5),
-                      Container(width: 4, height: 4,
-                        decoration: BoxDecoration(
-                          color: isToday ? _cyan
-                              : isPast ? _teal.withOpacity(0.4)
-                              : Colors.transparent,
-                          shape: BoxShape.circle,
-                          boxShadow: isToday
-                              ? [BoxShadow(color: _cyan.withOpacity(0.6), blurRadius: 3)]
-                              : null)),
-                    ]),
-                  ));
-              }),
-            ),
+                          color: isSel ? _teal.withOpacity(0.18) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSel
+                                ? _teal.withOpacity(0.6)
+                                : isToday
+                                    ? _cyan.withOpacity(0.35)
+                                    : Colors.transparent,
+                            width: 1),
+                          boxShadow: isSel
+                              ? [BoxShadow(color: _teal.withOpacity(0.2), blurRadius: 8)]
+                              : null),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text(names[i], style: TextStyle(
+                              color: isSel ? _teal
+                                  : isToday ? _cyan
+                                  : c.textTertiary,
+                              fontSize: 9, fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3)),
+                          const SizedBox(height: 7),
+                          Container(width: 26, height: 26,
+                            decoration: BoxDecoration(
+                              color: isSel ? _teal : Colors.transparent,
+                              shape: BoxShape.circle),
+                            child: Center(child: Text('${day.day}', style: TextStyle(
+                                color: isSel ? Colors.white : c.textPrimary,
+                                fontSize: 13,
+                                fontWeight: isSel || isToday
+                                    ? FontWeight.w800 : FontWeight.w500)))),
+                          const SizedBox(height: 5),
+                          Container(width: 4, height: 4,
+                            decoration: BoxDecoration(
+                              color: isToday ? _cyan
+                                  : isPast ? _teal.withOpacity(0.4)
+                                  : Colors.transparent,
+                              shape: BoxShape.circle,
+                              boxShadow: isToday
+                                  ? [BoxShadow(color: _cyan.withOpacity(0.6), blurRadius: 3)]
+                                  : null)),
+                        ]),
+                      ));
+                  }),
+                ),
+              ),
+              // FIX Parte 17: navigazione settimana successiva
+              GestureDetector(
+                onTap: () => onWeekShift(7),
+                child: Container(
+                  width: 24, height: 24,
+                  margin: const EdgeInsets.only(left: 2),
+                  decoration: BoxDecoration(
+                    color: c.glassCardInset,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: c.glassBorder, width: 0.7)),
+                  child: Icon(Icons.chevron_right_rounded,
+                      size: 15, color: c.iconSecondary))),
+            ]),
           ]),
         ),
       ),
@@ -757,9 +829,10 @@ class _WeekCalendarSection extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GlassCalendarDialog — SEMPRE SCURO (modal overlay)
+// _GlassCalendarDialog — invariato (già coerente: giorno→mese→
+// anno→intervallo anni, senza salti; questa è l'implementazione
+// di riferimento usata per correggere quella dello Storico).
 // ─────────────────────────────────────────────────────────────
-
 class _GlassCalendarDialog extends StatefulWidget {
   final DateTime initialDate;
   final ValueChanged<DateTime> onDateSelected;
@@ -768,9 +841,7 @@ class _GlassCalendarDialog extends StatefulWidget {
   @override
   State<_GlassCalendarDialog> createState() => _GlassCalendarDialogState();
 }
-
 enum _CalView { days, months, years, decades }
-
 class _GlassCalendarDialogState extends State<_GlassCalendarDialog> {
   late DateTime _focus;
   _CalView _view = _CalView.days;
@@ -780,10 +851,8 @@ class _GlassCalendarDialogState extends State<_GlassCalendarDialog> {
   static const _monthNamesFull = ['Gennaio','Febbraio','Marzo','Aprile',
       'Maggio','Giugno','Luglio','Agosto','Settembre',
       'Ottobre','Novembre','Dicembre'];
-
   @override
   void initState() { super.initState(); _focus = widget.initialDate; }
-
   String get _headerLabel {
     switch (_view) {
       case _CalView.days:
@@ -795,34 +864,30 @@ class _GlassCalendarDialogState extends State<_GlassCalendarDialog> {
         final cent = (_focus.year ~/ 100) * 100; return '$cent – ${cent + 99}';
     }
   }
-
   void _prev() => setState(() {
     switch (_view) {
-      case _CalView.days:    _focus = DateTime(_focus.year, _focus.month - 1); break;
-      case _CalView.months:  _focus = DateTime(_focus.year - 1, _focus.month); break;
-      case _CalView.years:   _focus = DateTime(_focus.year - 10, _focus.month); break;
+      case _CalView.days: _focus = DateTime(_focus.year, _focus.month - 1); break;
+      case _CalView.months: _focus = DateTime(_focus.year - 1, _focus.month); break;
+      case _CalView.years: _focus = DateTime(_focus.year - 10, _focus.month); break;
       case _CalView.decades: _focus = DateTime(_focus.year - 100, _focus.month); break;
     }
   });
-
   void _next() => setState(() {
     switch (_view) {
-      case _CalView.days:    _focus = DateTime(_focus.year, _focus.month + 1); break;
-      case _CalView.months:  _focus = DateTime(_focus.year + 1, _focus.month); break;
-      case _CalView.years:   _focus = DateTime(_focus.year + 10, _focus.month); break;
+      case _CalView.days: _focus = DateTime(_focus.year, _focus.month + 1); break;
+      case _CalView.months: _focus = DateTime(_focus.year + 1, _focus.month); break;
+      case _CalView.years: _focus = DateTime(_focus.year + 10, _focus.month); break;
       case _CalView.decades: _focus = DateTime(_focus.year + 100, _focus.month); break;
     }
   });
-
   void _drillUp() => setState(() {
     switch (_view) {
-      case _CalView.days:    _view = _CalView.months;  break;
-      case _CalView.months:  _view = _CalView.years;   break;
-      case _CalView.years:   _view = _CalView.decades; break;
+      case _CalView.days: _view = _CalView.months; break;
+      case _CalView.months: _view = _CalView.years; break;
+      case _CalView.years: _view = _CalView.decades; break;
       case _CalView.decades: break;
     }
   });
-
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -834,7 +899,6 @@ class _GlassCalendarDialogState extends State<_GlassCalendarDialog> {
           filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
             decoration: BoxDecoration(
-              // Always dark: this is a modal overlay
               gradient: const LinearGradient(begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [Color(0xFF0D1117), Color(0xFF060B14)]),
@@ -871,23 +935,21 @@ class _GlassCalendarDialogState extends State<_GlassCalendarDialog> {
       ),
     );
   }
-
   Widget _buildGrid() {
     switch (_view) {
-      case _CalView.days:    return _buildDaysGrid();
-      case _CalView.months:  return _buildMonthsGrid();
-      case _CalView.years:   return _buildYearsGrid();
+      case _CalView.days: return _buildDaysGrid();
+      case _CalView.months: return _buildMonthsGrid();
+      case _CalView.years: return _buildYearsGrid();
       case _CalView.decades: return _buildDecadesGrid();
     }
   }
-
   Widget _buildDaysGrid() {
-    final firstDay  = DateTime(_focus.year, _focus.month, 1);
+    final firstDay = DateTime(_focus.year, _focus.month, 1);
     final daysCount = DateTime(_focus.year, _focus.month + 1, 0).day;
-    final offset    = (firstDay.weekday - 1) % 7;
-    final now       = DateTime.now();
-    final today     = DateTime(now.year, now.month, now.day);
-    final selNorm   = DateTime(widget.initialDate.year,
+    final offset = (firstDay.weekday - 1) % 7;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selNorm = DateTime(widget.initialDate.year,
         widget.initialDate.month, widget.initialDate.day);
     return Column(children: [
       Row(children: _dayNames.map((n) => Expanded(
@@ -903,10 +965,10 @@ class _GlassCalendarDialogState extends State<_GlassCalendarDialog> {
         itemCount: offset + daysCount,
         itemBuilder: (_, idx) {
           if (idx < offset) return const SizedBox.shrink();
-          final day   = idx - offset + 1;
-          final date  = DateTime(_focus.year, _focus.month, day);
-          final norm  = DateTime(date.year, date.month, date.day);
-          final isSel   = norm == selNorm;
+          final day = idx - offset + 1;
+          final date = DateTime(_focus.year, _focus.month, day);
+          final norm = DateTime(date.year, date.month, date.day);
+          final isSel = norm == selNorm;
           final isToday = norm == today;
           return GestureDetector(
             onTap: () => widget.onDateSelected(date),
@@ -932,7 +994,6 @@ class _GlassCalendarDialogState extends State<_GlassCalendarDialog> {
         }),
     ]);
   }
-
   Widget _buildMonthsGrid() {
     final now = DateTime.now();
     return GridView.builder(
@@ -954,7 +1015,6 @@ class _GlassCalendarDialogState extends State<_GlassCalendarDialog> {
               isSelected: isSel, isCurrent: isCur));
       });
   }
-
   Widget _buildYearsGrid() {
     final dec = (_focus.year ~/ 10) * 10; final now = DateTime.now();
     return GridView.builder(
@@ -977,7 +1037,6 @@ class _GlassCalendarDialogState extends State<_GlassCalendarDialog> {
               isSelected: isSel, isCurrent: isCur, isOutOfRange: isOut));
       });
   }
-
   Widget _buildDecadesGrid() {
     final cent = (_focus.year ~/ 100) * 100; final now = DateTime.now();
     return GridView.builder(
@@ -1002,8 +1061,6 @@ class _GlassCalendarDialogState extends State<_GlassCalendarDialog> {
       });
   }
 }
-
-// Sempre scuri — parte del dialog dark
 class _CalNavBtn extends StatelessWidget {
   final IconData icon; final VoidCallback onTap;
   const _CalNavBtn({required this.icon, required this.onTap});
@@ -1017,7 +1074,6 @@ class _CalNavBtn extends StatelessWidget {
         border: Border.all(color: Colors.white.withOpacity(0.12), width: 0.8)),
       child: Icon(icon, color: Colors.white, size: 20)));
 }
-
 class _CalCell extends StatelessWidget {
   final String label;
   final bool isSelected, isCurrent, isOutOfRange;
@@ -1029,12 +1085,12 @@ class _CalCell extends StatelessWidget {
     duration: const Duration(milliseconds: 140),
     decoration: BoxDecoration(
       color: isSelected ? _teal.withOpacity(0.2)
-          : isCurrent   ? _cyan.withOpacity(0.08)
+          : isCurrent ? _cyan.withOpacity(0.08)
           : Colors.white.withOpacity(isOutOfRange ? 0.02 : 0.05),
       borderRadius: BorderRadius.circular(10),
       border: Border.all(
         color: isSelected ? _teal.withOpacity(0.7)
-            : isCurrent   ? _cyan.withOpacity(0.35)
+            : isCurrent ? _cyan.withOpacity(0.35)
             : Colors.white.withOpacity(isOutOfRange ? 0.06 : 0.12),
         width: isSelected ? 1.3 : 1),
       boxShadow: isSelected
@@ -1049,9 +1105,8 @@ class _CalCell extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GoalsDaySection — ADATTIVO
+// _GoalsDaySection — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _GoalsDaySection extends StatelessWidget {
   final List<HiveGoal> goals;
   final DateTime selectedDate;
@@ -1063,15 +1118,13 @@ class _GoalsDaySection extends StatelessWidget {
     required this.goals, required this.selectedDate,
     required this.dayProgress, required this.isCompleted,
     required this.onToggle, required this.onManage});
-
   @override
   Widget build(BuildContext context) {
-    final c        = context.mfc;
-    final now      = DateTime.now();
-    final today    = DateTime(now.year, now.month, now.day);
-    final sel      = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+    final c = context.mfc;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final sel = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
     final isFuture = sel.isAfter(today);
-
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
@@ -1102,8 +1155,8 @@ class _GoalsDaySection extends StatelessWidget {
                 const Spacer(),
                 if (goals.isNotEmpty) ...[
                   _MiniProgressRing(
-                      progress:   dayProgress,
-                      color:      _orange,
+                      progress: dayProgress,
+                      color: _orange,
                       trackColor: c.divider),
                   const SizedBox(width: 8),
                 ],
@@ -1135,7 +1188,7 @@ class _GoalsDaySection extends StatelessWidget {
                 ]))
             else
               ...goals.asMap().entries.map((e) {
-                final i    = e.key;
+                final i = e.key;
                 final goal = e.value;
                 final done = isCompleted(goal);
                 return Column(children: [
@@ -1157,9 +1210,8 @@ class _GoalsDaySection extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GoalTileGlass — ADATTIVO
+// _GoalTileGlass — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _GoalTileGlass extends StatelessWidget {
   final HiveGoal goal;
   final bool completed, isFuture;
@@ -1167,7 +1219,6 @@ class _GoalTileGlass extends StatelessWidget {
   const _GoalTileGlass({
     required this.goal, required this.completed,
     required this.isFuture, required this.onToggle});
-
   static const _catColors = <String, Color>{
     'Studio': Color(0xFF6366F1), 'Sport': Color(0xFF00D4AA),
     'Salute': Color(0xFF22C55E), 'Lavoro': Color(0xFF3B82F6),
@@ -1178,7 +1229,6 @@ class _GoalTileGlass extends StatelessWidget {
     'Personale': Color(0xFFFF6B6B), 'Altro': Color(0xFF9CA3AF),
   };
   Color get _catColor => _catColors[goal.category] ?? const Color(0xFF9CA3AF);
-
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
@@ -1252,16 +1302,14 @@ class _GoalTileGlass extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _MiniProgressRing + _MiniRingPainter — trackColor aggiunto
+// _MiniProgressRing + _MiniRingPainter — invariati
 // ─────────────────────────────────────────────────────────────
-
 class _MiniProgressRing extends StatelessWidget {
   final double progress;
-  final Color  color;
-  final Color  trackColor;
+  final Color color;
+  final Color trackColor;
   const _MiniProgressRing({
     required this.progress, required this.color, required this.trackColor});
-
   @override
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
@@ -1274,20 +1322,18 @@ class _MiniProgressRing extends StatelessWidget {
           progress: progress, color: color, trackColor: trackColor))),
   ]);
 }
-
 class _MiniRingPainter extends CustomPainter {
   final double progress;
-  final Color  color;
-  final Color  trackColor;
+  final Color color;
+  final Color trackColor;
   const _MiniRingPainter({
     required this.progress, required this.color, required this.trackColor});
-
   @override
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
     final r = size.width / 2 - 3;
     canvas.drawCircle(c, r,
-      Paint()..color = trackColor   // was Colors.white.withOpacity(0.07)
+      Paint()..color = trackColor
         ..style = PaintingStyle.stroke ..strokeWidth = 3);
     if (progress > 0) {
       canvas.drawArc(Rect.fromCircle(center: c, radius: r),
@@ -1296,156 +1342,371 @@ class _MiniRingPainter extends CustomPainter {
           ..strokeWidth = 3 ..strokeCap = StrokeCap.round);
     }
   }
-
   @override
   bool shouldRepaint(_MiniRingPainter old) => old.progress != progress;
 }
 
 // ─────────────────────────────────────────────────────────────
-// _DailyProgressCard — ADATTIVO
+// _DailyJourneyData — FIX MODIFICA 2B
+// Struttura dati pura per il "Percorso giornaliero", calcolata
+// da HomeScreen._computeDailyJourney(date) — sempre relativa alla
+// data selezionata (mai fissa su "oggi").
 // ─────────────────────────────────────────────────────────────
+class _DailyJourneyData {
+  final int workoutCount;
+  final int exerciseCount;
+  final int completedSets;
+  final int totalSets;
+  final int totalDurationSeconds;
+  final List<String> workoutNames;
+  const _DailyJourneyData({
+    required this.workoutCount,
+    required this.exerciseCount,
+    required this.completedSets,
+    required this.totalSets,
+    required this.totalDurationSeconds,
+    required this.workoutNames,
+  });
+  bool get hasActivity => workoutCount > 0;
+}
 
-class _DailyProgressCard extends StatelessWidget {
-  final Animation<double> ringAnim;
-  final double progress;
-  final int completedSets, totalSets, elapsedSec;
-  final int workoutCount, exerciseCount;
-  final bool hasActive;
-  final String Function(int) fmt;
-  const _DailyProgressCard({
-    required this.ringAnim, required this.progress,
-    required this.completedSets, required this.totalSets,
-    required this.elapsedSec, required this.workoutCount,
-    required this.exerciseCount, required this.hasActive,
-    required this.fmt});
+// ─────────────────────────────────────────────────────────────
+// _DailyJourneyCard — FIX MODIFICA 2B
+//
+// Sostituisce il vecchio "Progresso giornaliero" (che mostrava
+// sempre e solo lo stato della sessione attiva, senza alcun
+// legame con la data selezionata né con gli obiettivi reali).
+//
+// Ora mostra:
+// - percentuale di progresso REALE basata sugli obiettivi del
+//   giorno selezionato (goalsDone/goalsTotal — Parte 24, "NON
+//   utilizzare una percentuale arbitraria");
+// - riepilogo compatto di cosa è successo in quel giorno
+//   (allenamento/i, esercizi, serie, durata) letto da Hive per
+//   la data selezionata (Parte 30: "collegato alla data
+//   attualmente selezionata nella Home");
+// - stato esplicito "Nessun allenamento oggi" quando non c'è
+//   attività, senza apparire vuoto (Parte 26);
+// - tap per aprire il dettaglio (bottom sheet, Parte 28/29).
+// ─────────────────────────────────────────────────────────────
+class _DailyJourneyCard extends StatelessWidget {
+  final DateTime date;
+  final _DailyJourneyData journey;
+  final int goalsDone, goalsTotal;
+  final double goalsProgress;
+  final VoidCallback onOpenDetail;
+  const _DailyJourneyCard({
+    required this.date,
+    required this.journey,
+    required this.goalsDone,
+    required this.goalsTotal,
+    required this.goalsProgress,
+    required this.onOpenDetail,
+  });
+
+  String _fmt(int s) {
+    final h = s ~/ 3600; final m = (s % 3600) ~/ 60;
+    if (h > 0) return '${h}h ${m}m';
+    if (m > 0) return '${m}min';
+    return s > 0 ? '${s}s' : '--';
+  }
+
+  String _dayLabel() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final sel = DateTime(date.year, date.month, date.day);
+    final diff = sel.difference(today).inDays;
+    if (diff == 0) return 'OGGI';
+    if (diff == -1) return 'IERI';
+    if (diff == 1) return 'DOMANI';
+    const days = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+    return '${days[date.weekday - 1]} ${date.day}'.toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final c          = context.mfc;
-    final ringColor  = hasActive ? _teal : _cyan.withOpacity(0.4);
-    final glowColor  = hasActive ? _teal : _cyan;
+    final c = context.mfc;
+    final hasActivity = journey.hasActivity;
+    final ringColor = hasActivity ? _teal : _cyan.withOpacity(0.5);
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: c.glassCard,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: _cyan.withOpacity(0.22), width: 1),
-            boxShadow: c.showElevation
-                ? [BoxShadow(color: c.elevationColor, blurRadius: 20,
-                    offset: const Offset(0, 3))]
-                : [BoxShadow(color: _cyan.withOpacity(0.07),
-                    blurRadius: 30, spreadRadius: 2)]),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-            Row(children: [
-              Container(width: 7, height: 7,
-                decoration: BoxDecoration(
-                  color: _cyan, shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(
-                      color: _cyan.withOpacity(0.6), blurRadius: 4)])),
-              const SizedBox(width: 8),
-              Text(hasActive ? 'SESSIONE IN CORSO' : 'PROGRESSO GIORNALIERO',
-                style: TextStyle(color: _cyan, fontSize: 10,
-                    fontWeight: FontWeight.w800, letterSpacing: 1.2)),
-            ]),
-            const SizedBox(height: 20),
-            Row(children: [
-              _NeonProgressRing(
-                animation:      ringAnim,
-                targetProgress: progress,
-                ringColor:      ringColor,
-                glowColor:      glowColor,
-                trackColor:     c.divider,
-                size:           118,
-                centerLabel:    hasActive ? 'Serie' : 'Pronto'),
-              const SizedBox(width: 18),
-              Expanded(child: Column(children: [
-                _StatMicroCard(
-                  icon: Icons.fitness_center_rounded, label: 'Schede',
-                  value: hasActive ? '$completedSets/$totalSets' : '$workoutCount',
-                  color: _teal),
-                const SizedBox(height: 8),
-                _StatMicroCard(
-                  icon: Icons.timer_rounded, label: 'Tempo',
-                  value: hasActive ? fmt(elapsedSec) : '--',
-                  color: _cyan),
-                const SizedBox(height: 8),
-                _StatMicroCard(
-                  icon: Icons.list_alt_rounded, label: 'Esercizi',
-                  value: '$exerciseCount', color: _indigo),
-              ])),
-            ]),
-          ]),
+    return GestureDetector(
+      onTap: onOpenDetail,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: c.glassCard,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: _cyan.withOpacity(0.22), width: 1),
+              boxShadow: c.showElevation
+                  ? [BoxShadow(color: c.elevationColor, blurRadius: 20,
+                      offset: const Offset(0, 3))]
+                  : [BoxShadow(color: _cyan.withOpacity(0.07),
+                      blurRadius: 30, spreadRadius: 2)]),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Container(width: 7, height: 7,
+                    decoration: BoxDecoration(
+                      color: _cyan, shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(
+                          color: _cyan.withOpacity(0.6), blurRadius: 4)])),
+                  const SizedBox(width: 8),
+                  Text('PERCORSO ${_dayLabel()}',
+                    style: TextStyle(color: _cyan, fontSize: 10,
+                        fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+                  const Spacer(),
+                  Icon(Icons.chevron_right_rounded,
+                      color: c.textTertiary, size: 16),
+                ]),
+                const SizedBox(height: 18),
+                Row(children: [
+                  _NeonProgressRing(
+                    progress: goalsTotal > 0 ? goalsProgress : 0,
+                    ringColor: ringColor,
+                    glowColor: ringColor,
+                    trackColor: c.divider,
+                    size: 100,
+                    centerLabel: goalsTotal > 0 ? 'Obiettivi' : 'Nessun\nobiettivo'),
+                  const SizedBox(width: 18),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                    if (!hasActivity)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(children: [
+                          Icon(Icons.event_busy_rounded,
+                              size: 14, color: c.textTertiary),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text('Nessun allenamento',
+                              style: TextStyle(
+                                  color: c.textTertiary, fontSize: 12,
+                                  fontWeight: FontWeight.w600))),
+                        ]),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(children: [
+                          Icon(Icons.check_circle_rounded,
+                              size: 14, color: _teal),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text(
+                              journey.workoutNames.take(1).join(', ') +
+                                  (journey.workoutCount > 1
+                                      ? ' +${journey.workoutCount - 1}' : ''),
+                              style: TextStyle(
+                                  color: c.textPrimary, fontSize: 12,
+                                  fontWeight: FontWeight.w700),
+                              maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        ]),
+                      ),
+                    _JourneyStatRow(
+                        icon: Icons.list_alt_rounded, label: 'Esercizi',
+                        value: hasActivity ? '${journey.exerciseCount}' : '--',
+                        color: _indigo),
+                    const SizedBox(height: 6),
+                    _JourneyStatRow(
+                        icon: Icons.repeat_rounded, label: 'Serie',
+                        value: hasActivity
+                            ? '${journey.completedSets}/${journey.totalSets}'
+                            : '--',
+                        color: _teal),
+                    const SizedBox(height: 6),
+                    _JourneyStatRow(
+                        icon: Icons.timer_rounded, label: 'Durata',
+                        value: hasActivity
+                            ? _fmt(journey.totalDurationSeconds) : '--',
+                        color: _cyan),
+                    const SizedBox(height: 6),
+                    _JourneyStatRow(
+                        icon: Icons.track_changes_rounded, label: 'Obiettivi',
+                        value: goalsTotal > 0
+                            ? '$goalsDone/$goalsTotal' : 'Nessuno',
+                        color: _orange),
+                  ])),
+                ]),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _NeonProgressRing + _RingPainter — trackColor aggiunto
-// ─────────────────────────────────────────────────────────────
-
-class _NeonProgressRing extends StatelessWidget {
-  final Animation<double> animation;
-  final double targetProgress;
-  final Color  ringColor, glowColor, trackColor;
-  final double size;
-  final String centerLabel;
-  const _NeonProgressRing({
-    required this.animation, required this.targetProgress,
-    required this.ringColor, required this.glowColor,
-    required this.trackColor, required this.size, required this.centerLabel});
-
+class _JourneyStatRow extends StatelessWidget {
+  final IconData icon; final String label, value; final Color color;
+  const _JourneyStatRow({required this.icon, required this.label,
+      required this.value, required this.color});
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (_, __) {
-        final p = (animation.value * targetProgress).clamp(0.0, 1.0);
-        return SizedBox(width: size, height: size,
-          child: CustomPaint(
-            painter: _RingPainter(
-                progress: p, ringColor: ringColor,
-                glowColor: glowColor, trackColor: trackColor),
-            child: Center(child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-              Text('${(p * 100).round()}%', style: TextStyle(
-                  color: ringColor, fontSize: size * 0.21,
-                  fontWeight: FontWeight.w800, letterSpacing: -1)),
-              Text(centerLabel, style: TextStyle(
-                  color: c.textTertiary,   // was Colors.white.withOpacity(0.4)
-                  fontSize: size * 0.09, fontWeight: FontWeight.w500)),
-            ]))));
-      });
+    return Row(children: [
+      Icon(icon, size: 13, color: color.withOpacity(0.8)),
+      const SizedBox(width: 6),
+      Text(label, style: TextStyle(
+          color: c.textTertiary, fontSize: 11, fontWeight: FontWeight.w500)),
+      const Spacer(),
+      Text(value, style: TextStyle(
+          color: color, fontSize: 12, fontWeight: FontWeight.w800)),
+    ]);
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// _showDailyJourneyDetail — FIX MODIFICA 2B (Parte 28)
+// Bottom sheet compatta con il dettaglio del giorno: elenco
+// allenamenti effettuati e obiettivi del giorno con relativo stato.
+// Nessuna nuova schermata complessa — coerente con l'UI esistente
+// (GlassSheetWrapper già usato in tutta l'app).
+// ─────────────────────────────────────────────────────────────
+void _showDailyJourneyDetail(
+  BuildContext context,
+  DateTime date,
+  _DailyJourneyData journey,
+  List<HiveGoal> goals,
+  bool Function(HiveGoal) isCompleted,
+) {
+  const months = ['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+      'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  final label = '${date.day} ${months[date.month]} ${date.year}';
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (ctx) {
+      final c = ctx.mfc;
+      return GlassSheetWrapper(
+        title: 'Percorso giornaliero',
+        subtitle: label,
+        accentColor: _cyan,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('ALLENAMENTO', style: TextStyle(
+                color: _teal.withOpacity(0.8), fontSize: 10,
+                fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+            const SizedBox(height: 8),
+            if (!journey.hasActivity)
+              Text('Nessun allenamento effettuato in questa data.',
+                  style: TextStyle(color: c.textTertiary, fontSize: 13))
+            else
+              ...journey.workoutNames.map((n) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(children: [
+                  Icon(Icons.fitness_center_rounded,
+                      size: 15, color: _teal),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(n, style: TextStyle(
+                      color: c.textPrimary, fontSize: 13,
+                      fontWeight: FontWeight.w600))),
+                ]))),
+            const SizedBox(height: 14),
+            Text('OBIETTIVI', style: TextStyle(
+                color: _orange.withOpacity(0.8), fontSize: 10,
+                fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+            const SizedBox(height: 8),
+            if (goals.isEmpty)
+              Text('Nessun obiettivo pianificato per questa data.',
+                  style: TextStyle(color: c.textTertiary, fontSize: 13))
+            else
+              ...goals.map((g) {
+                final done = isCompleted(g);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(children: [
+                    Icon(done
+                            ? Icons.check_circle_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        size: 15,
+                        color: done ? _orange : c.textTertiary),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(g.title, style: TextStyle(
+                        color: done ? c.textTertiary : c.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        decoration: done ? TextDecoration.lineThrough : null))),
+                  ]),
+                );
+              }),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => Navigator.pop(ctx),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: c.glassCardInset,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: c.glassBorder)),
+                child: Text('Chiudi', textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: c.textPrimary, fontSize: 14,
+                        fontWeight: FontWeight.w600)))),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// _NeonProgressRing + _RingPainter — invariati (riusati anche
+// dal nuovo _DailyJourneyCard)
+// ─────────────────────────────────────────────────────────────
+class _NeonProgressRing extends StatelessWidget {
+  final double progress;
+  final Color ringColor, glowColor, trackColor;
+  final double size;
+  final String centerLabel;
+  const _NeonProgressRing({
+    required this.progress,
+    required this.ringColor, required this.glowColor,
+    required this.trackColor, required this.size, required this.centerLabel});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.mfc;
+    final p = progress.clamp(0.0, 1.0);
+    return SizedBox(width: size, height: size,
+      child: CustomPaint(
+        painter: _RingPainter(
+            progress: p, ringColor: ringColor,
+            glowColor: glowColor, trackColor: trackColor),
+        child: Center(child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+          Text('${(p * 100).round()}%', style: TextStyle(
+              color: ringColor, fontSize: size * 0.21,
+              fontWeight: FontWeight.w800, letterSpacing: -1)),
+          Text(centerLabel, textAlign: TextAlign.center, style: TextStyle(
+              color: c.textTertiary,
+              fontSize: size * 0.09, fontWeight: FontWeight.w500)),
+        ]))));
+  }
+}
 class _RingPainter extends CustomPainter {
   final double progress;
-  final Color  ringColor, glowColor, trackColor;
+  final Color ringColor, glowColor, trackColor;
   const _RingPainter({required this.progress, required this.ringColor,
       required this.glowColor, required this.trackColor});
-
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 10;
-    const start  = -math.pi / 2;
-    final sweep  = 2 * math.pi * progress;
-
+    const start = -math.pi / 2;
+    final sweep = 2 * math.pi * progress;
     canvas.drawCircle(center, radius,
-      Paint()..color = trackColor   // was Colors.white.withOpacity(0.07)
+      Paint()..color = trackColor
         ..style = PaintingStyle.stroke ..strokeWidth = 9);
-
     if (progress <= 0.01) return;
     canvas.drawArc(Rect.fromCircle(center: center, radius: radius),
       start, sweep, false,
@@ -1472,64 +1733,18 @@ class _RingPainter extends CustomPainter {
       canvas.drawCircle(Offset(ex, ey), 3, Paint()..color = Colors.white);
     }
   }
-
   @override
   bool shouldRepaint(_RingPainter old) => old.progress != progress;
 }
 
 // ─────────────────────────────────────────────────────────────
-// _StatMicroCard — ADATTIVO
+// _SectionHeader — invariato
 // ─────────────────────────────────────────────────────────────
-
-class _StatMicroCard extends StatelessWidget {
-  final IconData icon; final String label, value; final Color color;
-  const _StatMicroCard({required this.icon, required this.label,
-      required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.mfc;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.07),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.2), width: 0.8)),
-          child: Row(children: [
-            Container(width: 28, height: 28,
-              decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(7)),
-              child: Icon(icon, size: 14, color: color)),
-            const SizedBox(width: 8),
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-              Text(value, style: TextStyle(
-                  color: color, fontSize: 14, fontWeight: FontWeight.w800),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text(label, style: TextStyle(
-                  color: c.textTertiary,  // was Colors.white.withOpacity(0.38)
-                  fontSize: 9, fontWeight: FontWeight.w500)),
-            ])),
-          ]))));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// _SectionHeader — ADATTIVO
-// ─────────────────────────────────────────────────────────────
-
 class _SectionHeader extends StatelessWidget {
   final IconData icon; final String title; final Color color;
   final String? trailingLabel; final VoidCallback? onTrailing;
   const _SectionHeader({required this.icon, required this.title,
       required this.color, this.trailingLabel, this.onTrailing});
-
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
@@ -1541,7 +1756,7 @@ class _SectionHeader extends StatelessWidget {
         child: Icon(icon, size: 16, color: color)),
       const SizedBox(width: 10),
       Text(title, style: TextStyle(
-          color: c.textPrimary,   // was Colors.white
+          color: c.textPrimary,
           fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
       const Spacer(),
       if (trailingLabel != null && onTrailing != null)
@@ -1560,15 +1775,13 @@ class _SectionHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _QuickStartGrid
+// _QuickStartGrid — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _QuickStartGrid extends StatelessWidget {
   final VoidCallback onPalestra, onRunning, onCiclismo, onNuoto;
   const _QuickStartGrid({
     required this.onPalestra, required this.onRunning,
     required this.onCiclismo, required this.onNuoto});
-
   @override
   Widget build(BuildContext context) => GridView.count(
     shrinkWrap: true,
@@ -1588,15 +1801,13 @@ class _QuickStartGrid extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _QuickCard — ADATTIVO
+// _QuickCard — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _QuickCard extends StatelessWidget {
   final IconData icon; final String label, sublabel;
   final Color color; final VoidCallback onTap;
   const _QuickCard({required this.icon, required this.label,
       required this.sublabel, required this.color, required this.onTap});
-
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
@@ -1635,11 +1846,11 @@ class _QuickCard extends StatelessWidget {
                   child: Icon(icon, color: color, size: 22)),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(label, style: TextStyle(
-                      color: c.textPrimary,   // was Colors.white
+                      color: c.textPrimary,
                       fontSize: 14, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 2),
                   Text(sublabel, style: TextStyle(
-                      color: c.textTertiary,   // was Colors.white.withOpacity(0.38)
+                      color: c.textTertiary,
                       fontSize: 10)),
                 ]),
               ]))))));
@@ -1647,26 +1858,23 @@ class _QuickCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutMiniCard — ADATTIVO
+// _WorkoutMiniCard — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _WorkoutMiniCard extends StatelessWidget {
   final HiveWorkout workout; final SessionProvider sp;
   final VoidCallback onEdit, onPlay;
   const _WorkoutMiniCard({required this.workout, required this.sp,
       required this.onEdit, required this.onPlay});
-
   @override
   Widget build(BuildContext context) {
-    final c         = context.mfc;
+    final c = context.mfc;
     final hasPaused = sp.hasPausedSessionForWorkout(workout.key);
     final hasActive = sp.hasActiveSession &&
         sp.currentWorkout?.key == workout.key;
     final indicator = hasPaused ? _orange : hasActive ? _blue : null;
     final exercises = HiveDatabase.instance.getWorkoutExercises(workout.key);
-    final free      = exercises.where((e) => !e.isInCircuit).length;
-    final circuits  = HiveDatabase.instance.getCircuits(workout.key);
-
+    final free = exercises.where((e) => !e.isInCircuit).length;
+    final circuits = HiveDatabase.instance.getCircuits(workout.key);
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
@@ -1697,7 +1905,7 @@ class _WorkoutMiniCard extends StatelessWidget {
               children: [
               Row(children: [
                 Expanded(child: Text(workout.name, style: TextStyle(
-                    color: c.textPrimary,   // was Colors.white
+                    color: c.textPrimary,
                     fontSize: 14, fontWeight: FontWeight.w700),
                     maxLines: 1, overflow: TextOverflow.ellipsis)),
                 if (indicator != null)
@@ -1728,7 +1936,7 @@ class _WorkoutMiniCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(9),
                   border: Border.all(color: c.glassBorder)),
                 child: Icon(Icons.edit_outlined,
-                    color: c.iconSecondary, size: 16))),   // was Colors.white.withOpacity(0.5)
+                    color: c.iconSecondary, size: 16))),
             const SizedBox(width: 8),
             GestureDetector(onTap: onPlay,
               child: Container(width: 38, height: 38,
@@ -1749,7 +1957,6 @@ class _WorkoutMiniCard extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 // Micro helpers
 // ─────────────────────────────────────────────────────────────
-
 class _MiniStat extends StatelessWidget {
   final IconData icon; final String label; final Color color;
   const _MiniStat({required this.icon, required this.label,
@@ -1767,9 +1974,8 @@ class _MiniStat extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _TinyPill — ADATTIVO
+// _TinyPill — invariato
 // ─────────────────────────────────────────────────────────────
-
 class _TinyPill extends StatelessWidget {
   final String label;
   const _TinyPill({required this.label});
@@ -1783,7 +1989,7 @@ class _TinyPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(5),
         border: Border.all(color: c.glassBorder, width: 0.7)),
       child: Text(label, style: TextStyle(
-          color: c.textTertiary,  // was Colors.white.withOpacity(0.5)
+          color: c.textTertiary,
           fontSize: 10, fontWeight: FontWeight.w600)));
   }
 }
