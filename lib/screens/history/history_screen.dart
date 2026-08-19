@@ -91,20 +91,30 @@ class _HistoryScreenState extends State<HistoryScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<HiveSession> _sessions = [];
-  DateTime _focusedMonth = DateTime.now();
   bool _loading = true;
   Map<String, List<HiveSession>> _sessionsByDate = {};
   Map<int, HiveWorkout> _workoutsCache = {};
   int _lastIndex = -1;
-  // FIX MODIFICA 2A — aggiunto livello 'decade', ora coerente con
-  // Home (_GlassCalendarDialog): day → month → year → decade, senza
-  // saltare livelli (Parte 13/15).
-  String _calendarMode = 'day';
-  _SportFilter _sportFilter = _SportFilter.all;
-  // FIX MODIFICA 2A — la lista sessioni riflette esattamente il
-  // periodo messo a fuoco nel calendario (Parte 14), con un toggle
-  // per tornare a vedere tutto lo storico.
+
+  // FIX NAVIGAZIONE CALENDARIO — STATO UNICO
+  //
+  // PRIMA: esisteva solo `_focusedMonth` (sempre giorno=1) usato sia
+  // per il calendario sia per filtrare lo Storico — nessuno stato
+  // duplicato, ma NESSUN concetto di "giorno selezionato": un giorno
+  // senza sessioni non era selezionabile in alcun modo (onTap: null),
+  // violando la Parte 5 del fix (disponibilità dati ≠ selezionabilità).
+  //
+  // ORA: `_selectedDate` è l'UNICA fonte di verità (giorno esatto).
+  // `_focusedMonth` diventa un getter derivato (mai uno stato
+  // indipendente) — coerente con la Parte 7: "verifica che non
+  // esistano più variabili che rappresentano inconsapevolmente lo
+  // stesso concetto".
+  DateTime _selectedDate = DateTime.now();
+  String _calendarMode = 'day'; // 'day' | 'month' | 'year' | 'decade'
   bool _showAllSessions = false;
+
+  DateTime get _focusedMonth =>
+      DateTime(_selectedDate.year, _selectedDate.month);
 
   @override
   void initState() {
@@ -155,10 +165,6 @@ class _HistoryScreenState extends State<HistoryScreen>
   }
   List<_HistoryEntry> _filtered(List<_HistoryEntry> all) {
     var result = all.where((e) => _sportFilter.matches(e));
-    // FIX MODIFICA 2A — se l'utente non ha chiesto esplicitamente
-    // "mostra tutte", la lista riflette il mese attualmente a fuoco
-    // nel calendario (Parte 14: "il layout deve riflettere ESATTAMENTE
-    // il periodo selezionato").
     if (!_showAllSessions) {
       result = result.where((e) =>
           e.date.year == _focusedMonth.year &&
@@ -166,6 +172,8 @@ class _HistoryScreenState extends State<HistoryScreen>
     }
     return result.toList();
   }
+  _SportFilter _sportFilter = _SportFilter.all;
+
   int _computeStreak(List<DateTime> dates) {
     if (dates.isEmpty) return 0;
     final now = DateTime.now();
@@ -268,6 +276,47 @@ class _HistoryScreenState extends State<HistoryScreen>
               sessionKey: s.key, workoutName: s.workoutName, date: s.date));
         }));
   }
+
+  // FIX — navigazione mese/anno/decennio: preserva il giorno del
+  // mese, clampato al numero di giorni validi del mese di
+  // destinazione (evita il bug classico di DateTime che, ad
+  // esempio, trasforma "31 marzo - 1 mese" in "3 aprile" invece di
+  // "28/29 febbraio").
+  void _navigateTo(DateTime targetMonth) {
+    final daysInTarget =
+        DateTime(targetMonth.year, targetMonth.month + 1, 0).day;
+    final clampedDay = _selectedDate.day.clamp(1, daysInTarget);
+    setState(() {
+      _selectedDate =
+          DateTime(targetMonth.year, targetMonth.month, clampedDay);
+      _showAllSessions = false;
+    });
+  }
+
+  // FIX — un giorno è SEMPRE selezionabile, indipendentemente dalla
+  // presenza di sessioni (Parte 5). Il popup di dettaglio si apre
+  // solo se esistono sessioni per quel giorno; la selezione (e quindi
+  // l'aggiornamento del blocco Storico, che filtra per mese di
+  // `_selectedDate`) avviene comunque sempre.
+  void _selectDay(DateTime day) {
+    setState(() {
+      _selectedDate = day;
+      _showAllSessions = false;
+    });
+    final dateStr =
+        '${day.year}-${day.month.toString().padLeft(2,'0')}-${day.day.toString().padLeft(2,'0')}';
+    final sessions = _sessionsByDate[dateStr] ?? [];
+    if (sessions.isNotEmpty) _showDayDetail(dateStr, sessions);
+  }
+
+  void _goToToday() {
+    setState(() {
+      _selectedDate = DateTime.now();
+      _calendarMode = 'day';
+      _showAllSessions = false;
+    });
+  }
+
   // ════════════════════════════════════════════════════════════
   // BUILD
   // ════════════════════════════════════════════════════════════
@@ -355,23 +404,14 @@ class _HistoryScreenState extends State<HistoryScreen>
             const SizedBox(height: 12),
           ],
           _GlassCalendar(
-            focusedMonth: _focusedMonth,
+            selectedDate: _selectedDate,
             sessionsByDate: _sessionsByDate,
             calendarMode: _calendarMode,
             onModeChanged: (m) => setState(() => _calendarMode = m),
-            onMonthChanged: (m) => setState(() {
-              _focusedMonth = m;
-              // FIX MODIFICA 2A: navigare il calendario torna sempre
-              // alla vista filtrata sul periodo corrente, coerente
-              // con "il layout deve riflettere ESATTAMENTE il periodo
-              // selezionato" (Parte 14).
-              _showAllSessions = false;
-            }),
-            onDayTapped: _showDayDetail),
+            onNavigate: _navigateTo,
+            onDaySelected: _selectDay,
+            onGoToToday: _goToToday),
           const SizedBox(height: 12),
-          // FIX MODIFICA 2A — riepilogo del filtro attivo + toggle
-          // per tornare a vedere l'intero storico, sempre visibile
-          // e chiaro all'utente.
           Row(children: [
             Expanded(
               child: Text(
@@ -617,20 +657,45 @@ class _GlassStatsBar extends StatelessWidget {
     );
   }
 }
-// ─────────────────────────────────────────────────────────────
-// _GlassCalendar — FIX MODIFICA 2A: aggiunto livello 'decade'
-// ─────────────────────────────────────────────────────────────
+
+// ═════════════════════════════════════════════════════════════
+// _GlassCalendar — RISCRITTO per il fix navigazione
+//
+// Gerarchia identica a quella della Home (_GlassCalendarDialog):
+// day → month → year → decade, MAI un salto di livello.
+// Novità rispetto alla versione precedente:
+//  - "selectedDate" (giorno esatto) sostituisce "focusedMonth"
+//    come unica fonte di verità passata dal genitore;
+//  - ogni giorno è SEMPRE selezionabile, anche senza sessioni
+//    (onDaySelected non è mai null);
+//  - "ha sessioni" (riempimento teal) e "è selezionato" (anello/
+//    bordo) sono resi visivamente indipendenti (Parte 4/5);
+//  - pulsante "Oggi" per tornare rapidamente al mese/giorno
+//    corrente, visibile solo quando non ci si è già (Home usa lo
+//    stesso pattern in _WeekCalendarSection);
+//  - le celle mese/anno/decennio non riempiono più lo sfondo con
+//    token di tema ambigui per lo stato "normale": il testo è
+//    disegnato direttamente (stesso approccio già usato con
+//    successo altrove nell'app), eliminando il problema di
+//    contrasto "quasi bianco" segnalato.
+// ═════════════════════════════════════════════════════════════
 class _GlassCalendar extends StatelessWidget {
-  final DateTime focusedMonth;
+  final DateTime selectedDate;
   final Map<String, List<HiveSession>> sessionsByDate;
   final String calendarMode;
   final void Function(String) onModeChanged;
-  final void Function(DateTime) onMonthChanged;
-  final void Function(String, List<HiveSession>) onDayTapped;
+  final void Function(DateTime) onNavigate; // cambia mese/anno/decennio a fuoco
+  final void Function(DateTime) onDaySelected; // seleziona un giorno esatto
+  final VoidCallback onGoToToday;
   const _GlassCalendar({
-    required this.focusedMonth, required this.sessionsByDate,
+    required this.selectedDate, required this.sessionsByDate,
     required this.calendarMode, required this.onModeChanged,
-    required this.onMonthChanged, required this.onDayTapped});
+    required this.onNavigate, required this.onDaySelected,
+    required this.onGoToToday});
+
+  DateTime get _focusedMonth =>
+      DateTime(selectedDate.year, selectedDate.month);
+
   static const _mShort = ['','Gen','Feb','Mar','Apr','Mag','Giu',
       'Lug','Ago','Set','Ott','Nov','Dic'];
   static const _mFull = ['','Gennaio','Febbraio','Marzo','Aprile',
@@ -638,23 +703,28 @@ class _GlassCalendar extends StatelessWidget {
       'Ottobre','Novembre','Dicembre'];
   String get _titleText {
     if (calendarMode == 'day')
-      return '${_mFull[focusedMonth.month]} ${focusedMonth.year}';
-    if (calendarMode == 'month') return '${focusedMonth.year}';
+      return '${_mFull[_focusedMonth.month]} ${_focusedMonth.year}';
+    if (calendarMode == 'month') return '${_focusedMonth.year}';
     if (calendarMode == 'year') {
-      final dec = (focusedMonth.year ~/ 10) * 10;
+      final dec = (_focusedMonth.year ~/ 10) * 10;
       return '$dec – ${dec + 9}';
     }
-    final cent = (focusedMonth.year ~/ 100) * 100;
+    final cent = (_focusedMonth.year ~/ 100) * 100;
     return '$cent – ${cent + 99}';
   }
-  // FIX MODIFICA 2A — ciclo COMPLETO dei 4 livelli, senza saltare
-  // da anno direttamente a giorno (Parte 13/15): day → month → year
-  // → decade → (tap su decade non fa nulla, coerente con Home).
+  // Ciclo completo dei 4 livelli, un solo passo alla volta — mai un
+  // salto (Parte 1/13 del fix).
   void _drillUp() {
     if (calendarMode == 'day') onModeChanged('month');
     else if (calendarMode == 'month') onModeChanged('year');
     else if (calendarMode == 'year') onModeChanged('decade');
   }
+
+  bool get _isCurrentMonth {
+    final now = DateTime.now();
+    return _focusedMonth.year == now.year && _focusedMonth.month == now.month;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
@@ -679,7 +749,7 @@ class _GlassCalendar extends StatelessWidget {
               duration: const Duration(milliseconds: 200),
               child: KeyedSubtree(
                 key: ValueKey(
-                    '${calendarMode}_${focusedMonth.year}_${focusedMonth.month}'),
+                    '${calendarMode}_${_focusedMonth.year}_${_focusedMonth.month}'),
                 child: calendarMode == 'day'
                     ? _buildDayView(context, c)
                     : calendarMode == 'month'
@@ -696,13 +766,13 @@ class _GlassCalendar extends StatelessWidget {
     return Row(children: [
       _CalBtn(icon: Icons.chevron_left_rounded, c: c, onTap: () {
         if (calendarMode == 'day')
-          onMonthChanged(DateTime(focusedMonth.year, focusedMonth.month - 1));
+          onNavigate(DateTime(_focusedMonth.year, _focusedMonth.month - 1));
         else if (calendarMode == 'month')
-          onMonthChanged(DateTime(focusedMonth.year - 1, focusedMonth.month));
+          onNavigate(DateTime(_focusedMonth.year - 1, _focusedMonth.month));
         else if (calendarMode == 'year')
-          onMonthChanged(DateTime(focusedMonth.year - 10, focusedMonth.month));
+          onNavigate(DateTime(_focusedMonth.year - 10, _focusedMonth.month));
         else
-          onMonthChanged(DateTime(focusedMonth.year - 100, focusedMonth.month));
+          onNavigate(DateTime(_focusedMonth.year - 100, _focusedMonth.month));
       }),
       Expanded(child: GestureDetector(
         onTap: _drillUp,
@@ -715,22 +785,47 @@ class _GlassCalendar extends StatelessWidget {
                 size: 16, color: _cyan.withOpacity(0.6)),
           ],
         ]))),
+      // FIX — pulsante rapido "Oggi", visibile solo quando non si è
+      // già sul mese corrente (Parte 18 del prompt precedente,
+      // Parte 10 del test attuale: "torna alla data/mese corrente").
+      if (!_isCurrentMonth) ...[
+        const SizedBox(width: 6),
+        GestureDetector(
+          onTap: onGoToToday,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            decoration: BoxDecoration(
+              color: _teal.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: _teal.withOpacity(0.35), width: 0.8)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.today_rounded, size: 12, color: _teal),
+              const SizedBox(width: 4),
+              Text('Oggi', style: TextStyle(
+                  color: _teal, fontSize: 11, fontWeight: FontWeight.w700)),
+            ]))),
+        const SizedBox(width: 6),
+      ] else
+        const SizedBox(width: 6),
       _CalBtn(icon: Icons.chevron_right_rounded, c: c, onTap: () {
         if (calendarMode == 'day')
-          onMonthChanged(DateTime(focusedMonth.year, focusedMonth.month + 1));
+          onNavigate(DateTime(_focusedMonth.year, _focusedMonth.month + 1));
         else if (calendarMode == 'month')
-          onMonthChanged(DateTime(focusedMonth.year + 1, focusedMonth.month));
+          onNavigate(DateTime(_focusedMonth.year + 1, _focusedMonth.month));
         else if (calendarMode == 'year')
-          onMonthChanged(DateTime(focusedMonth.year + 10, focusedMonth.month));
+          onNavigate(DateTime(_focusedMonth.year + 10, _focusedMonth.month));
         else
-          onMonthChanged(DateTime(focusedMonth.year + 100, focusedMonth.month));
+          onNavigate(DateTime(_focusedMonth.year + 100, _focusedMonth.month));
       }),
     ]);
   }
   Widget _buildDayView(BuildContext context, MarkFitColors c) {
-    final first = DateTime(focusedMonth.year, focusedMonth.month, 1);
-    final daysCount = DateTime(focusedMonth.year, focusedMonth.month + 1, 0).day;
+    final first = DateTime(_focusedMonth.year, _focusedMonth.month, 1);
+    final daysCount = DateTime(_focusedMonth.year, _focusedMonth.month + 1, 0).day;
     final offset = (first.weekday - 1) % 7;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selNorm = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
     return LayoutBuilder(builder: (ctx, constraints) {
       final cellSize = constraints.maxWidth / 7;
       final circleSize = (cellSize * 0.72).clamp(28.0, 52.0);
@@ -740,7 +835,7 @@ class _GlassCalendar extends StatelessWidget {
           SizedBox(width: cellSize, height: cellSize * 0.45,
             child: Center(child: Text(d, style: TextStyle(
                 fontSize: fontSize * 0.82, fontWeight: FontWeight.w700,
-                color: _cyan.withOpacity(0.55)))))).toList()),
+                color: _cyan.withOpacity(0.7)))))).toList()),
         const SizedBox(height: 4),
         GridView.builder(
           shrinkWrap: true,
@@ -752,19 +847,22 @@ class _GlassCalendar extends StatelessWidget {
           itemBuilder: (_, idx) {
             if (idx < offset) return const SizedBox.shrink();
             final day = idx - offset + 1;
-            final date = DateTime(focusedMonth.year, focusedMonth.month, day);
+            final date = DateTime(_focusedMonth.year, _focusedMonth.month, day);
             final dateStr =
                 '${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
             final sessions = sessionsByDate[dateStr] ?? [];
-            final isToday = date.year == DateTime.now().year &&
-                date.month == DateTime.now().month &&
-                date.day == DateTime.now().day;
+            final norm = DateTime(date.year, date.month, date.day);
+            final isToday = norm == today;
+            final isSelected = norm == selNorm;
             return _GlassDayCell(
               day: day, hasSessions: sessions.isNotEmpty,
-              isToday: isToday, sessions: sessions,
+              isToday: isToday, isSelected: isSelected,
               circleSize: circleSize, fontSize: fontSize, c: c,
-              onTap: sessions.isNotEmpty
-                  ? () => onDayTapped(dateStr, sessions) : null);
+              // FIX — SEMPRE assegnato: un giorno senza sessioni
+              // resta selezionabile (Parte 5), semplicemente non
+              // apre alcun popup (gestito dal chiamante in
+              // onDaySelected).
+              onTap: () => onDaySelected(date));
           }),
       ]);
     });
@@ -774,7 +872,7 @@ class _GlassCalendar extends StatelessWidget {
     final byMonth = <int, int>{};
     for (final e in sessionsByDate.entries) {
       final dt = DateTime.tryParse(e.key);
-      if (dt != null && dt.year == focusedMonth.year) {
+      if (dt != null && dt.year == _focusedMonth.year) {
         byMonth[dt.month] = (byMonth[dt.month] ?? 0) + e.value.length;
       }
     }
@@ -787,12 +885,12 @@ class _GlassCalendar extends StatelessWidget {
       itemCount: 12,
       itemBuilder: (_, i) {
         final month = i + 1;
-        final isCur = focusedMonth.year == now.year && month == now.month;
-        final isSel = month == focusedMonth.month;
+        final isCur = _focusedMonth.year == now.year && month == now.month;
+        final isSel = month == _focusedMonth.month;
         final count = byMonth[month] ?? 0;
         return GestureDetector(
           onTap: () {
-            onMonthChanged(DateTime(focusedMonth.year, month));
+            onNavigate(DateTime(_focusedMonth.year, month));
             onModeChanged('day');
           },
           child: _CalCell(label: _mShort[month],
@@ -801,7 +899,7 @@ class _GlassCalendar extends StatelessWidget {
       });
   }
   Widget _buildYearView(BuildContext context, MarkFitColors c) {
-    final dec = (focusedMonth.year ~/ 10) * 10;
+    final dec = (_focusedMonth.year ~/ 10) * 10;
     final now = DateTime.now();
     final byYear = <int, int>{};
     for (final e in sessionsByDate.entries) {
@@ -818,12 +916,12 @@ class _GlassCalendar extends StatelessWidget {
       itemBuilder: (_, i) {
         final year = dec - 1 + i;
         final isCur = year == now.year;
-        final isSel = year == focusedMonth.year;
+        final isSel = year == _focusedMonth.year;
         final isOut = i == 0 || i == 11;
         final count = byYear[year] ?? 0;
         return GestureDetector(
           onTap: () {
-            onMonthChanged(DateTime(year, focusedMonth.month));
+            onNavigate(DateTime(year, _focusedMonth.month));
             onModeChanged('month');
           },
           child: _CalCell(label: '$year',
@@ -832,11 +930,8 @@ class _GlassCalendar extends StatelessWidget {
               isOutOfRange: isOut, c: c));
       });
   }
-  // FIX MODIFICA 2A — nuovo livello 'decade' (intervallo di anni),
-  // mancante rispetto a Home. Tap su un decennio scende al livello
-  // 'year' con quel decennio a fuoco — stessa gerarchia di Home.
   Widget _buildDecadeView(BuildContext context, MarkFitColors c) {
-    final cent = (focusedMonth.year ~/ 100) * 100;
+    final cent = (_focusedMonth.year ~/ 100) * 100;
     final now = DateTime.now();
     return GridView.builder(
       shrinkWrap: true,
@@ -848,12 +943,12 @@ class _GlassCalendar extends StatelessWidget {
       itemBuilder: (_, i) {
         final decStart = cent - 10 + (i * 10);
         final isCur = now.year >= decStart && now.year < decStart + 10;
-        final isSel = focusedMonth.year >= decStart &&
-            focusedMonth.year < decStart + 10;
+        final isSel = _focusedMonth.year >= decStart &&
+            _focusedMonth.year < decStart + 10;
         final isOut = i == 0 || i == 11;
         return GestureDetector(
           onTap: () {
-            onMonthChanged(DateTime(decStart, focusedMonth.month));
+            onNavigate(DateTime(decStart, _focusedMonth.month));
             onModeChanged('year');
           },
           child: _CalCell(label: '$decStart–${decStart + 9}',
@@ -875,6 +970,25 @@ class _CalBtn extends StatelessWidget {
         border: Border.all(color: c.glassBorder, width: 0.8)),
       child: Icon(icon, color: c.iconPrimary, size: 18)));
 }
+
+// ─────────────────────────────────────────────────────────────
+// _CalCell — RISCRITTA per il fix contrasto (Parte 4/5)
+//
+// PRIMA: lo stato "normale" riempiva sfondo (`c.glassCardInset`) e
+// bordo (`c.glassBorder`) con token di tema il cui contrasto reale
+// contro `c.glassCard` (sfondo del contenitore calendario) era
+// evidentemente troppo basso in tema chiaro, producendo l'effetto
+// "griglia quasi bianca" segnalato.
+//
+// ORA: lo stato "normale" NON ha riempimento (testo diretto sullo
+// sfondo del calendario, stesso approccio già usato con successo
+// altrove nell'app per il testo dei giorni), garantendo contrasto
+// indipendentemente dai valori esatti dei token di tema. Selezione
+// e "oggi" restano evidenziati con colori accent noti (teal/cyan),
+// sempre leggibili in entrambi i temi. L'assenza di dati (nessuna
+// sessione → subLabel assente) non altera in alcun modo la
+// leggibilità o la selezionabilità della cella.
+// ─────────────────────────────────────────────────────────────
 class _CalCell extends StatelessWidget {
   final String label; final String? subLabel;
   final bool isSelected, isCurrent, isOutOfRange;
@@ -883,123 +997,140 @@ class _CalCell extends StatelessWidget {
       this.isSelected = false, this.isCurrent = false,
       this.isOutOfRange = false, required this.c});
   @override
-  Widget build(BuildContext context) => AnimatedContainer(
-    duration: const Duration(milliseconds: 140),
-    decoration: BoxDecoration(
-      color: isSelected ? _teal.withOpacity(0.2)
-          : isCurrent ? _cyan.withOpacity(0.08)
-          : c.glassCardInset.withOpacity(isOutOfRange ? 0.4 : 1.0),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(
-        color: isSelected ? _teal.withOpacity(0.6)
-            : isCurrent ? _cyan.withOpacity(0.3)
-            : c.glassBorder.withOpacity(isOutOfRange ? 0.5 : 1.0),
-        width: isSelected ? 1.3 : 1),
-      boxShadow: isSelected
-          ? [BoxShadow(color: _teal.withOpacity(0.2), blurRadius: 8)]
-          : null),
-    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Text(label, style: TextStyle(
-          color: isOutOfRange ? c.textTertiary
-              : isSelected ? _teal : c.textPrimary,
-          fontSize: 12,
-          fontWeight: isSelected || isCurrent
-              ? FontWeight.w700 : FontWeight.w500),
-          textAlign: TextAlign.center),
-      if (subLabel != null)
-        Text(subLabel!, style: const TextStyle(
-            fontSize: 9, color: _teal, fontWeight: FontWeight.w600)),
-    ]));
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final neutralBorder = isDark
+        ? Colors.white.withOpacity(0.14)
+        : Colors.black.withOpacity(0.10);
+
+    final Color borderColor = isSelected
+        ? _teal.withOpacity(0.75)
+        : isCurrent
+            ? _cyan.withOpacity(0.55)
+            : neutralBorder;
+    final Color fillColor = isSelected
+        ? _teal.withOpacity(0.20)
+        : isCurrent
+            ? _cyan.withOpacity(0.10)
+            : Colors.transparent;
+    final Color textColor = isOutOfRange
+        ? c.textTertiary
+        : isSelected
+            ? _teal
+            : isCurrent
+                ? _cyan
+                : c.textPrimary;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      decoration: BoxDecoration(
+        color: fillColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: borderColor, width: isSelected ? 1.4 : 1),
+        boxShadow: isSelected
+            ? [BoxShadow(color: _teal.withOpacity(0.25), blurRadius: 8)]
+            : null),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, textAlign: TextAlign.center, style: TextStyle(
+              color: textColor,
+              fontSize: 12,
+              fontWeight: isSelected || isCurrent
+                  ? FontWeight.w800 : FontWeight.w600)),
+          if (subLabel != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: _teal.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(6)),
+                child: Text(subLabel!, style: const TextStyle(
+                    fontSize: 9, color: _teal, fontWeight: FontWeight.w700)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
+
 // ─────────────────────────────────────────────────────────────
-// _GlassDayCell — invariato
+// _GlassDayCell — RISCRITTA
+//
+// FIX principale: `onTap` non è più nullable — un giorno SENZA
+// sessioni è sempre selezionabile (Parte 5). "Ha sessioni" (cerchio
+// pieno teal) e "è selezionato" (anello di bordo) sono ora due
+// segnali visivi indipendenti e combinabili, invece di un'unica
+// rappresentazione che confondeva i due concetti.
 // ─────────────────────────────────────────────────────────────
 class _GlassDayCell extends StatefulWidget {
-  final int day; final bool hasSessions, isToday;
-  final List<HiveSession> sessions; final VoidCallback? onTap;
+  final int day; final bool hasSessions, isToday, isSelected;
+  final VoidCallback onTap;
   final double circleSize, fontSize; final MarkFitColors c;
   const _GlassDayCell({
     required this.day, required this.hasSessions, required this.isToday,
-    required this.sessions, required this.circleSize, required this.fontSize,
-    required this.c, this.onTap});
+    required this.isSelected, required this.circleSize,
+    required this.fontSize, required this.c, required this.onTap});
   @override
   State<_GlassDayCell> createState() => _GlassDayCellState();
 }
 class _GlassDayCellState extends State<_GlassDayCell> {
   bool _hovered = false;
-  OverlayEntry? _overlay;
-  void _showPreview(BuildContext ctx) {
-    if (!widget.hasSessions) return;
-    final box = ctx.findRenderObject() as RenderBox;
-    final offset = box.localToGlobal(Offset.zero);
-    final c = widget.c;
-    _overlay = OverlayEntry(builder: (_) => Positioned(
-      left: (offset.dx - 60).clamp(8.0, double.infinity),
-      top: offset.dy + box.size.height + 4,
-      child: Material(
-        elevation: 6, borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          constraints: const BoxConstraints(maxWidth: 200),
-          decoration: BoxDecoration(
-            color: c.sheetBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: c.glassBorder)),
-          child: Column(mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: widget.sessions.map((s) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(children: [
-                const Icon(Icons.fitness_center_rounded,
-                    size: 11, color: _teal),
-                const SizedBox(width: 6),
-                Flexible(child: Text(s.workoutName,
-                    style: TextStyle(
-                        color: c.textPrimary, fontSize: 12),
-                    overflow: TextOverflow.ellipsis)),
-              ]))).toList())))));
-    Overlay.of(ctx).insert(_overlay!);
-  }
-  void _hidePreview() { _overlay?.remove(); _overlay = null; }
-  @override
-  void dispose() { _hidePreview(); super.dispose(); }
+
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
-    if (!widget.hasSessions && !widget.isToday) {
-      return Center(child: Text('${widget.day}', style: TextStyle(
-          fontSize: widget.fontSize, color: c.textTertiary)));
+    final size = _hovered ? widget.circleSize * 1.1 : widget.circleSize;
+
+    Color bg = Colors.transparent;
+    Color textColor = c.textPrimary;
+    Border? border;
+    List<BoxShadow>? shadow;
+
+    if (widget.hasSessions) {
+      bg = _hovered ? _teal.withOpacity(0.85) : _teal;
+      textColor = Colors.white;
+      shadow = [BoxShadow(color: _teal.withOpacity(0.35), blurRadius: 8)];
+    } else if (widget.isToday) {
+      textColor = _cyan;
     }
-    final hoverSize = widget.circleSize * 1.1;
+
+    if (widget.isSelected) {
+      border = Border.all(
+          color: widget.hasSessions ? Colors.white : _teal,
+          width: 2);
+    } else if (widget.isToday && !widget.hasSessions) {
+      border = Border.all(color: _cyan.withOpacity(0.7), width: 1.5);
+    }
+
     return MouseRegion(
-      cursor: widget.hasSessions
-          ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      onEnter: (_) { setState(() => _hovered = true); _showPreview(context); },
-      onExit: (_) { setState(() => _hovered = false); _hidePreview(); },
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            width: _hovered ? hoverSize : widget.circleSize,
-            height: _hovered ? hoverSize : widget.circleSize,
+            width: size, height: size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: widget.hasSessions
-                  ? (_hovered ? _teal.withOpacity(0.8) : _teal)
-                  : _cyan.withOpacity(0.12),
-              border: widget.isToday && !widget.hasSessions
-                  ? Border.all(color: _cyan.withOpacity(0.7), width: 1.5)
-                  : null,
-              boxShadow: _hovered && widget.hasSessions
-                  ? [BoxShadow(color: _teal.withOpacity(0.45),
-                      blurRadius: 10, spreadRadius: 1)]
-                  : widget.hasSessions
-                      ? [BoxShadow(color: _teal.withOpacity(0.2), blurRadius: 6)]
-                      : null),
+              color: bg,
+              border: border,
+              boxShadow: shadow),
             child: Center(child: Text('${widget.day}', style: TextStyle(
                 fontSize: widget.fontSize, fontWeight: FontWeight.w700,
-                color: widget.hasSessions ? Colors.white : _cyan)))))));
+                color: textColor))),
+          ),
+        ),
+      ),
+    );
   }
 }
 // ─────────────────────────────────────────────────────────────
@@ -1477,7 +1608,7 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 // ─────────────────────────────────────────────────────────────
-// Empty states — _EmptyWorkouts esteso con parametro showingFiltered
+// Empty states — invariati
 // ─────────────────────────────────────────────────────────────
 class _EmptyWorkouts extends StatelessWidget {
   final bool showingFiltered;
