@@ -3,14 +3,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
+import { UsersModule } from '../users/users.module';
 
-// Fase 1: predispone JWT/Passport/guard/ruoli, condiviso da tutto
-// il backend. I controller register/login/logout con bcrypt e
-// refresh token arrivano in Fase 2 (qui la base è già pronta:
-// UsersService per creare utenti con password hashata esiste già,
-// vedi users/users.service.ts).
 @Module({
   imports: [
+    UsersModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -23,7 +22,8 @@ import { JwtStrategy } from './jwt.strategy';
       }),
     }),
   ],
-  providers: [JwtStrategy],
-  exports: [JwtModule, PassportModule],
+  controllers: [AuthController],
+  providers: [JwtStrategy, AuthService],
+  exports: [JwtModule, PassportModule, AuthService],
 })
 export class AuthModule {}
