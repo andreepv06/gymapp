@@ -1,0 +1,311 @@
+// ─────────────────────────────────────────────────────────────
+// MarkFit — Schema Prisma / PostgreSQL (Fase 1)
+// Mappatura dai modelli Hive reali della V1 (non conversione
+// meccanica): ogni riga ha una FK esplicita verso l'utente
+// proprietario, verificata sempre lato backend (mai dedotta da
+// un ID client). L'appartenenza a un circuito (in V1 codificata
+// con un prefisso stringa dentro "notes") diventa una vera FK.
+// TrainingMode.sets (embedded in Hive) diventa tabella figlia.
+// Versionamento/soft-delete delle modalità (già in V1) preservati.
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id            String   @id @default(uuid())
+  identifier    String   @unique
+  passwordHash  String
+  role          Role     @default(USER)
+  isActive      Boolean  @default(true)
+  emailVerified Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile          UserProfile?
+  exercises        Exercise[]
+  workouts         Workout[]
+  trainingModes    TrainingMode[]
+  sessions         Session[]
+  goals            Goal[]
+  sportSessions    SportSession[]
+  refreshTokens    RefreshToken[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  displayName String?
+  firstName   String?
+  lastName    String?
+  birthDate   DateTime? @db.Date
+  birthPlace  String?
+  phone       String?
+  bio         String?
+  avatarUrl   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_profiles")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Exercise {
+  id          String  @id @default(uuid())
+  userId      String
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  muscleGroup String
+  notes       String?
+  isCustom    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workoutExercises WorkoutExercise[]
+  sessionSets      SessionSet[]
+  exerciseNote     ExerciseNote?
+
+  @@unique([userId, name])
+  @@index([userId, muscleGroup])
+  @@map("exercises")
+}
+
+model ExerciseNote {
+  id         String   @id @default(uuid())
+  exerciseId String   @unique
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  note       String
+  updatedAt  DateTime @updatedAt
+
+  @@map("exercise_notes")
+}
+
+model TrainingMode {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name         String
+  category     String
+  isDefault    Boolean  @default(false)
+  isDeleted    Boolean  @default(false)
+  origin       String   @default("custom")
+  parentModeId String?
+  parentMode   TrainingMode?  @relation("ModeVersioning", fields: [parentModeId], references: [id])
+  childModes   TrainingMode[] @relation("ModeVersioning")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sets             TrainingModeSet[]
+  workoutExercises WorkoutExercise[]
+  sessionSets      SessionSet[]
+
+  @@index([userId, isDeleted])
+  @@map("training_modes")
+}
+
+model TrainingModeSet {
+  id             String       @id @default(uuid())
+  trainingModeId String
+  trainingMode   TrainingMode @relation(fields: [trainingModeId], references: [id], onDelete: Cascade)
+
+  order     Int
+  fixedReps Int?
+  minReps   Int?
+  maxReps   Int?
+
+  @@index([trainingModeId, order])
+  @@map("training_mode_sets")
+}
+
+model Workout {
+  id             String  @id @default(uuid())
+  userId         String
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name           String
+  iconId         String?
+  iconColorIndex Int?
+  customImageUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  circuits         Circuit[]
+  workoutExercises WorkoutExercise[]
+  sessions         Session[]
+
+  @@index([userId])
+  @@map("workouts")
+}
+
+model Circuit {
+  id        String  @id @default(uuid())
+  workoutId String
+  workout   Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  name      String
+  rounds    Int     @default(3)
+  sortOrder Int     @default(0)
+
+  workoutExercises WorkoutExercise[]
+
+  @@index([workoutId])
+  @@map("circuits")
+}
+
+model WorkoutExercise {
+  id         String   @id @default(uuid())
+  workoutId  String
+  workout    Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exerciseId String
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  circuitId  String?
+  circuit    Circuit? @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+
+  trainingModeId String?
+  trainingMode   TrainingMode? @relation(fields: [trainingModeId], references: [id])
+
+  sets         Int     @default(3)
+  targetReps   Int     @default(8)
+  targetWeight Float?
+  restSeconds  Int?
+  notes        String?
+  sortOrder    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workoutId])
+  @@index([circuitId])
+  @@map("workout_exercises")
+}
+
+model Session {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutId       String?
+  workout         Workout? @relation(fields: [workoutId], references: [id], onDelete: SetNull)
+
+  workoutName     String
+  date            DateTime
+  durationSeconds Int?
+
+  createdAt DateTime @default(now())
+
+  sessionSets SessionSet[]
+
+  @@index([userId, date])
+  @@map("sessions")
+}
+
+model SessionSet {
+  id         String   @id @default(uuid())
+  sessionId  String
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  exerciseId String
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  trainingModeId String?
+  trainingMode   TrainingMode? @relation(fields: [trainingModeId], references: [id])
+
+  setNumber       Int
+  weight          Float
+  reps            Int
+  completed       Boolean @default(false)
+  restSeconds     Int?
+  executionStatus String?
+
+  @@index([sessionId])
+  @@index([exerciseId])
+  @@map("session_sets")
+}
+
+model Goal {
+  id                     String    @id @default(uuid())
+  userId                 String
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title                  String
+  description            String?
+  category               String
+  scheduleType           String
+  scheduleDaysOfWeek     Int[]
+  scheduleStartDate      DateTime? @db.Date
+  scheduleEndDate        DateTime? @db.Date
+  scheduleCustomInterval Int?
+  status                 String    @default("active")
+  currentStreak          Int       @default(0)
+  bestStreak             Int       @default(0)
+  deadlineDate           DateTime? @db.Date
+  colorIndex             Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  completions GoalCompletion[]
+
+  @@index([userId])
+  @@map("goals")
+}
+
+model GoalCompletion {
+  id        String   @id @default(uuid())
+  goalId    String
+  goal      Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  completed Boolean  @default(false)
+
+  @@unique([goalId, date])
+  @@map("goal_completions")
+}
+
+model SportSession {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sportType       String
+  date            DateTime
+  durationSeconds Int
+  distanceKm      Float?
+  notes           String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+  @@map("sport_sessions")
+}
