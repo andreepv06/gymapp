@@ -19,6 +19,7 @@ import '../../widgets/cosmic_background.dart';
 import '../../widgets/glass_widgets.dart';
 import '../../widgets/shared_sheets.dart';
 import '../import/activity_import_screen.dart';
+import 'cloud_sync_screen.dart';
 
 // ─────────────────────────────────────────────────────────────
 // SettingsScreen — nessun Scaffold (tab di MainShell)
@@ -117,6 +118,13 @@ class SettingsScreen extends StatelessWidget {
               _SectionLabel('Sincronizzazione', c: c),
               const SizedBox(height: 8),
               _Section(c: c, tiles: [
+                _Tile(
+                  icon: Icons.cloud_sync_rounded,
+                  color: MarkFitColors.indigo,
+                  title: 'Sincronizzazione cloud (beta)',
+                  subtitle: 'Connetti il nuovo backend MarkFit',
+                  c: c,
+                  onTap: () => pushPage(context, const CloudSyncScreen())),
                 _Tile(
                   icon: Icons.upload_file_rounded,
                   color: MarkFitColors.blue,

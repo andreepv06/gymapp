@@ -25,6 +25,7 @@ import 'screens/home/home_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/workouts/allenamenti_screen.dart';
 import 'services/notification_service.dart';
+import 'providers/backend_auth_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -89,6 +90,7 @@ class MyApp extends StatelessWidget {
         // solo dopo il login). Le schermate che lo usano (Fase 3+)
         // chiamano loadModes() nel proprio initState.
         ChangeNotifierProvider(create: (_) => TrainingModeProvider()),
+        ChangeNotifierProvider(create: (_) => BackendAuthProvider()),
         ChangeNotifierProvider(
             create: (_) => ProfileProvider()..loadProfile()),
       ],
