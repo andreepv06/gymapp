@@ -8,6 +8,8 @@ import { ExercisesModule } from './exercises/exercises.module';
 import { WorkoutsModule } from './workouts/workouts.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { TrainingModesModule } from './training-modes/training-modes.module';
+import { GoalsModule } from './goals/goals.module';
+import { SportSessionsModule } from './sport-sessions/sport-sessions.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { TrainingModesModule } from './training-modes/training-modes.module';
     WorkoutsModule,
     SessionsModule,
     TrainingModesModule,
+    GoalsModule,
+    SportSessionsModule,
   ],
 })
 export class AppModule {}
