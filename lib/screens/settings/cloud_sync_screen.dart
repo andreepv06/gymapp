@@ -2,19 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/markfit_colors.dart';
 import '../../providers/backend_auth_provider.dart';
+import '../../repositories/exercise_sync_repository.dart';
+import '../../repositories/workout_sync_repository.dart';
 import '../../services/api/api_client.dart';
+import '../../services/api/api_exception.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
+import '../../repositories/session_sync_repository.dart';
 
-// ─────────────────────────────────────────────────────────────
-// CloudSyncScreen — primo punto di contatto reale Flutter↔backend.
-//
-// Schermata isolata, raggiungibile da Impostazioni, che NON
-// sostituisce in alcun modo il login/i dati V1: permette solo di
-// testare/usare l'autenticazione contro il nuovo backend NestJS,
-// tramite BackendAuthProvider (stato completamente separato da
-// AuthProvider). Base per i prossimi blocchi di sincronizzazione.
-// ─────────────────────────────────────────────────────────────
 class CloudSyncScreen extends StatefulWidget {
   const CloudSyncScreen({super.key});
 
@@ -27,6 +22,84 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
   final _passwordCtrl = TextEditingController();
   final _baseUrlCtrl = TextEditingController(text: ApiClient.instance.baseUrl);
   bool _isRegisterMode = false;
+
+  bool _syncing = false;
+  ExerciseSyncResult? _lastSyncResult;
+  String? _syncError;
+
+  bool _syncingWorkouts = false;
+  WorkoutSyncResult? _lastWorkoutSyncResult;
+  String? _workoutSyncError;
+
+  bool _syncingSessions = false;
+  SessionSyncResult? _lastSessionSyncResult;
+  String? _sessionSyncError;
+  
+  Future<void> _syncSessions() async {
+    setState(() {
+      _syncingSessions = true;
+      _sessionSyncError = null;
+      _lastSessionSyncResult = null;
+    });
+    try {
+      final result = await SessionSyncRepository().syncLocalHistoryToBackend();
+      if (!mounted) return;
+      setState(() => _lastSessionSyncResult = result);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _sessionSyncError = e.message);
+    } finally {
+      if (mounted) setState(() => _syncingSessions = false);
+    }
+  }
+  
+  Widget _buildSessionSyncSection(BuildContext context, MarkFitColors c) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.glassCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MarkFitColors.blue.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.history_rounded, color: MarkFitColors.blue, size: 20),
+            const SizedBox(width: 8),
+            Text('Storico allenamenti', style: TextStyle(
+                color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            'Esporta tutte le sessioni e le relative serie. Operazione potenzialmente '
+            'lunga con storici estesi. Crea sempre nuove voci (nessuna deduplicazione in questa fase).',
+            style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          GlassPrimaryButton(
+            label: _syncingSessions ? 'Sincronizzazione in corso...' : 'Esporta storico',
+            color: MarkFitColors.blue,
+            onTap: _syncingSessions ? null : _syncSessions,
+          ),
+          if (_sessionSyncError != null) ...[
+            const SizedBox(height: 12),
+            Text(_sessionSyncError!,
+                style: const TextStyle(color: MarkFitColors.red, fontSize: 12)),
+          ],
+          if (_lastSessionSyncResult != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              '${_lastSessionSyncResult!.sessionsCreated} sessioni · '
+              '${_lastSessionSyncResult!.setsCreated} serie'
+              '${_lastSessionSyncResult!.hasFailures ? ' · ${_lastSessionSyncResult!.sessionsFailed} sessioni fallite, ${_lastSessionSyncResult!.setsFailed} serie fallite' : ''}',
+              style: TextStyle(color: c.textSecondary, fontSize: 12),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -64,6 +137,43 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     if (ok && mounted) {
       _identifierCtrl.clear();
       _passwordCtrl.clear();
+    }
+  }
+
+  Future<void> _syncExercises() async {
+    setState(() {
+      _syncing = true;
+      _syncError = null;
+      _lastSyncResult = null;
+    });
+    try {
+      final result =
+          await ExerciseSyncRepository().syncLocalLibraryToBackend();
+      if (!mounted) return;
+      setState(() => _lastSyncResult = result);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _syncError = e.message);
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
+  }
+
+  Future<void> _syncWorkouts() async {
+    setState(() {
+      _syncingWorkouts = true;
+      _workoutSyncError = null;
+      _lastWorkoutSyncResult = null;
+    });
+    try {
+      final result = await WorkoutSyncRepository().syncLocalWorkoutsToBackend();
+      if (!mounted) return;
+      setState(() => _lastWorkoutSyncResult = result);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _workoutSyncError = e.message);
+    } finally {
+      if (mounted) setState(() => _syncingWorkouts = false);
     }
   }
 
@@ -147,6 +257,12 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                     const SizedBox(height: 24),
                     if (auth.isAuthenticated) ...[
                       _buildAuthenticatedState(context, c, auth),
+                      const SizedBox(height: 20),
+                      _buildExerciseSyncSection(context, c),
+                      const SizedBox(height: 20),
+                      _buildWorkoutSyncSection(context, c),
+                      const SizedBox(height: 20),
+                      _buildSessionSyncSection(context, c),
                     ] else ...[
                       _buildLoginForm(context, c, auth),
                     ],
@@ -199,6 +315,118 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     );
   }
 
+  Widget _buildExerciseSyncSection(BuildContext context, MarkFitColors c) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.glassCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MarkFitColors.indigo.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.fitness_center_rounded,
+                color: MarkFitColors.indigo, size: 20),
+            const SizedBox(width: 8),
+            Text('Libreria esercizi', style: TextStyle(
+                color: c.textPrimary, fontSize: 14,
+                fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            'Esporta i tuoi esercizi locali (Hive) verso il nuovo backend. '
+            'Operazione manuale, ripetibile, non elimina né modifica nulla in locale.',
+            style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          GlassPrimaryButton(
+            label: _syncing ? 'Sincronizzazione in corso...' : 'Esporta libreria esercizi',
+            color: MarkFitColors.indigo,
+            onTap: _syncing ? null : _syncExercises,
+          ),
+          if (_syncError != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: MarkFitColors.red.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: MarkFitColors.red.withOpacity(0.3)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.error_outline_rounded,
+                    color: MarkFitColors.red, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(_syncError!,
+                      style: TextStyle(color: c.textPrimary, fontSize: 12)),
+                ),
+              ]),
+            ),
+          ],
+          if (_lastSyncResult != null) ...[
+            const SizedBox(height: 12),
+            _SyncResultSummary(result: _lastSyncResult!, c: c),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkoutSyncSection(BuildContext context, MarkFitColors c) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.glassCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MarkFitColors.orange.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.assignment_rounded,
+                color: MarkFitColors.orange, size: 20),
+            const SizedBox(width: 8),
+            Text('Schede di allenamento', style: TextStyle(
+                color: c.textPrimary, fontSize: 14,
+                fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            'Esporta le schede locali con esercizi liberi e circuiti. '
+            'Crea sempre nuove voci nel backend (nessuna deduplicazione schede/circuiti in questa fase).',
+            style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          GlassPrimaryButton(
+            label: _syncingWorkouts ? 'Sincronizzazione in corso...' : 'Esporta schede',
+            color: MarkFitColors.orange,
+            onTap: _syncingWorkouts ? null : _syncWorkouts,
+          ),
+          if (_workoutSyncError != null) ...[
+            const SizedBox(height: 12),
+            Text(_workoutSyncError!,
+                style: const TextStyle(color: MarkFitColors.red, fontSize: 12)),
+          ],
+          if (_lastWorkoutSyncResult != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              '${_lastWorkoutSyncResult!.workoutsCreated} schede · '
+              '${_lastWorkoutSyncResult!.freeExercisesLinked} esercizi liberi · '
+              '${_lastWorkoutSyncResult!.circuitsCreated} circuiti · '
+              '${_lastWorkoutSyncResult!.circuitExercisesLinked} esercizi in circuito'
+              '${_lastWorkoutSyncResult!.hasFailures ? ' · ${_lastWorkoutSyncResult!.failedWorkoutNames.length} falliti' : ''}',
+              style: TextStyle(color: c.textSecondary, fontSize: 12),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildLoginForm(
       BuildContext context, MarkFitColors c, BackendAuthProvider auth) {
     return Column(
@@ -230,12 +458,7 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
           onChanged: (_) {},
         ),
         const SizedBox(height: 10),
-        GlassTextField(
-          controller: _passwordCtrl,
-          hintText: 'Password',
-          obscureText: true,
-          onChanged: (_) {},
-        ),
+        _PasswordField(controller: _passwordCtrl, c: c),
         if (auth.lastError != null) ...[
           const SizedBox(height: 10),
           Text(auth.lastError!,
@@ -250,6 +473,97 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
           onTap: auth.loading ? null : _submit,
         ),
       ],
+    );
+  }
+}
+
+class _PasswordField extends StatefulWidget {
+  final TextEditingController controller;
+  final MarkFitColors c;
+  const _PasswordField({required this.controller, required this.c});
+
+  @override
+  State<_PasswordField> createState() => _PasswordFieldState();
+}
+
+class _PasswordFieldState extends State<_PasswordField> {
+  bool _obscured = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    final isDark = context.isDarkMode;
+    return Container(
+      decoration: BoxDecoration(
+        color: c.inputBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.inputBorder, width: 0.8),
+      ),
+      child: TextField(
+        controller: widget.controller,
+        obscureText: _obscured,
+        keyboardAppearance: isDark ? Brightness.dark : Brightness.light,
+        style: TextStyle(color: c.inputText, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Password',
+          hintStyle: TextStyle(color: c.inputHint, fontSize: 14),
+          border: InputBorder.none,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          suffixIcon: GestureDetector(
+            onTap: () => setState(() => _obscured = !_obscured),
+            child: Icon(
+              _obscured
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              color: c.iconSecondary,
+              size: 18,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SyncResultSummary extends StatelessWidget {
+  final ExerciseSyncResult result;
+  final MarkFitColors c;
+  const _SyncResultSummary({required this.result, required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: MarkFitColors.teal.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: MarkFitColors.teal.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.check_circle_outline_rounded,
+                color: MarkFitColors.teal, size: 16),
+            const SizedBox(width: 6),
+            Text('Sincronizzazione completata (${result.total} totali)',
+                style: TextStyle(
+                    color: c.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 6),
+          Text('${result.created} creati · ${result.alreadySynced} già presenti'
+              '${result.hasFailures ? ' · ${result.failedNames.length} falliti' : ''}',
+              style: TextStyle(color: c.textSecondary, fontSize: 12)),
+          if (result.hasFailures) ...[
+            const SizedBox(height: 6),
+            Text('Falliti: ${result.failedNames.join(', ')}',
+                style: const TextStyle(color: MarkFitColors.red, fontSize: 11)),
+          ],
+        ],
+      ),
     );
   }
 }
