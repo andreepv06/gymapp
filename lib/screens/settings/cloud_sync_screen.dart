@@ -4,11 +4,14 @@ import '../../core/theme/markfit_colors.dart';
 import '../../providers/backend_auth_provider.dart';
 import '../../repositories/exercise_sync_repository.dart';
 import '../../repositories/workout_sync_repository.dart';
+import '../../repositories/session_sync_repository.dart';
+import '../../repositories/training_mode_sync_repository.dart';
+import '../../repositories/goal_sync_repository.dart';
+import '../../repositories/sport_session_sync_repository.dart';
 import '../../services/api/api_client.dart';
 import '../../services/api/api_exception.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
-import '../../repositories/session_sync_repository.dart';
 
 class CloudSyncScreen extends StatefulWidget {
   const CloudSyncScreen({super.key});
@@ -34,7 +37,19 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
   bool _syncingSessions = false;
   SessionSyncResult? _lastSessionSyncResult;
   String? _sessionSyncError;
-  
+
+  bool _syncingModes = false;
+  TrainingModeSyncResult? _lastModeSyncResult;
+  String? _modeSyncError;
+
+  bool _syncingGoals = false;
+  GoalSyncResult? _lastGoalSyncResult;
+  String? _goalSyncError;
+
+  bool _syncingSportSessions = false;
+  SportSessionSyncResult? _lastSportSyncResult;
+  String? _sportSyncError;
+
   Future<void> _syncSessions() async {
     setState(() {
       _syncingSessions = true;
@@ -52,7 +67,63 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
       if (mounted) setState(() => _syncingSessions = false);
     }
   }
-  
+
+  Future<void> _syncTrainingModes() async {
+    setState(() {
+      _syncingModes = true;
+      _modeSyncError = null;
+      _lastModeSyncResult = null;
+    });
+    try {
+      final result =
+          await TrainingModeSyncRepository().syncLocalModesToBackend();
+      if (!mounted) return;
+      setState(() => _lastModeSyncResult = result);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _modeSyncError = e.message);
+    } finally {
+      if (mounted) setState(() => _syncingModes = false);
+    }
+  }
+
+  Future<void> _syncGoals() async {
+    setState(() {
+      _syncingGoals = true;
+      _goalSyncError = null;
+      _lastGoalSyncResult = null;
+    });
+    try {
+      final result = await GoalSyncRepository().syncLocalGoalsToBackend();
+      if (!mounted) return;
+      setState(() => _lastGoalSyncResult = result);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _goalSyncError = e.message);
+    } finally {
+      if (mounted) setState(() => _syncingGoals = false);
+    }
+  }
+
+  Future<void> _syncSportSessions() async {
+    setState(() {
+      _syncingSportSessions = true;
+      _sportSyncError = null;
+      _lastSportSyncResult = null;
+    });
+    try {
+      final result =
+          await SportSessionSyncRepository().syncLocalSportSessionsToBackend();
+      if (!mounted) return;
+      setState(() => _lastSportSyncResult = result);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _sportSyncError = e.message);
+    } finally {
+      if (mounted) setState(() => _syncingSportSessions = false);
+    }
+  }
+
   Widget _buildSessionSyncSection(BuildContext context, MarkFitColors c) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -93,6 +164,146 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
               '${_lastSessionSyncResult!.sessionsCreated} sessioni · '
               '${_lastSessionSyncResult!.setsCreated} serie'
               '${_lastSessionSyncResult!.hasFailures ? ' · ${_lastSessionSyncResult!.sessionsFailed} sessioni fallite, ${_lastSessionSyncResult!.setsFailed} serie fallite' : ''}',
+              style: TextStyle(color: c.textSecondary, fontSize: 12),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrainingModeSyncSection(BuildContext context, MarkFitColors c) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.glassCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MarkFitColors.purple.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.repeat_rounded, color: MarkFitColors.purple, size: 20),
+            const SizedBox(width: 8),
+            Text('Modalità di allenamento', style: TextStyle(
+                color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            'Esporta le modalità disponibili (non eliminate). Nessun versionamento/'
+            'lineage sincronizzato in questa fase.',
+            style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          GlassPrimaryButton(
+            label: _syncingModes ? 'Sincronizzazione in corso...' : 'Esporta modalità',
+            color: MarkFitColors.purple,
+            onTap: _syncingModes ? null : _syncTrainingModes,
+          ),
+          if (_modeSyncError != null) ...[
+            const SizedBox(height: 12),
+            Text(_modeSyncError!,
+                style: const TextStyle(color: MarkFitColors.red, fontSize: 12)),
+          ],
+          if (_lastModeSyncResult != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              '${_lastModeSyncResult!.created} modalità create'
+              '${_lastModeSyncResult!.hasFailures ? ' · ${_lastModeSyncResult!.failed} fallite' : ''}',
+              style: TextStyle(color: c.textSecondary, fontSize: 12),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoalSyncSection(BuildContext context, MarkFitColors c) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.glassCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MarkFitColors.green.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.track_changes_rounded, color: MarkFitColors.green, size: 20),
+            const SizedBox(width: 8),
+            Text('Obiettivi', style: TextStyle(
+                color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            'Esporta obiettivi e relativi completamenti storici.',
+            style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          GlassPrimaryButton(
+            label: _syncingGoals ? 'Sincronizzazione in corso...' : 'Esporta obiettivi',
+            color: MarkFitColors.green,
+            onTap: _syncingGoals ? null : _syncGoals,
+          ),
+          if (_goalSyncError != null) ...[
+            const SizedBox(height: 12),
+            Text(_goalSyncError!,
+                style: const TextStyle(color: MarkFitColors.red, fontSize: 12)),
+          ],
+          if (_lastGoalSyncResult != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              '${_lastGoalSyncResult!.goalsCreated} obiettivi · '
+              '${_lastGoalSyncResult!.completionsCreated} completamenti'
+              '${_lastGoalSyncResult!.hasFailures ? ' · ${_lastGoalSyncResult!.goalsFailed} obiettivi falliti, ${_lastGoalSyncResult!.completionsFailed} completamenti falliti' : ''}',
+              style: TextStyle(color: c.textSecondary, fontSize: 12),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSportSessionSyncSection(BuildContext context, MarkFitColors c) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.glassCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MarkFitColors.cyan.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.directions_run_rounded, color: MarkFitColors.cyan, size: 20),
+            const SizedBox(width: 8),
+            Text('Attività sportive', style: TextStyle(
+                color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            'Esporta le sessioni di corsa, ciclismo e altre attività registrate.',
+            style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          GlassPrimaryButton(
+            label: _syncingSportSessions ? 'Sincronizzazione in corso...' : 'Esporta attività',
+            color: MarkFitColors.cyan,
+            onTap: _syncingSportSessions ? null : _syncSportSessions,
+          ),
+          if (_sportSyncError != null) ...[
+            const SizedBox(height: 12),
+            Text(_sportSyncError!,
+                style: const TextStyle(color: MarkFitColors.red, fontSize: 12)),
+          ],
+          if (_lastSportSyncResult != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              '${_lastSportSyncResult!.created} attività create'
+              '${_lastSportSyncResult!.hasFailures ? ' · ${_lastSportSyncResult!.failed} fallite' : ''}',
               style: TextStyle(color: c.textSecondary, fontSize: 12),
             ),
           ],
@@ -263,6 +474,12 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                       _buildWorkoutSyncSection(context, c),
                       const SizedBox(height: 20),
                       _buildSessionSyncSection(context, c),
+                      const SizedBox(height: 20),
+                      _buildTrainingModeSyncSection(context, c),
+                      const SizedBox(height: 20),
+                      _buildGoalSyncSection(context, c),
+                      const SizedBox(height: 20),
+                      _buildSportSessionSyncSection(context, c),
                     ] else ...[
                       _buildLoginForm(context, c, auth),
                     ],
