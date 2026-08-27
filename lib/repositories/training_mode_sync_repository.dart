@@ -2,36 +2,49 @@ import '../db/training_mode_database.dart';
 import '../services/api/api_exception.dart';
 import '../services/api/dto/training_mode_dto.dart';
 import '../services/api/training_modes_api_service.dart';
+import 'sync_mapping_storage.dart';
 
 class TrainingModeSyncResult {
   final int created;
+  final int alreadySynced;
   final int failed;
-  const TrainingModeSyncResult({required this.created, required this.failed});
+  const TrainingModeSyncResult({
+    required this.created,
+    required this.alreadySynced,
+    required this.failed,
+  });
   bool get hasFailures => failed > 0;
 }
 
-/// Sincronizza le modalità di allenamento locali (Hive, solo quelle
-/// disponibili — non soft-eliminate) verso il backend. Solo lettura
-/// da Hive, mai scrittura locale.
-///
-/// LIMITAZIONE NOTA: nessuna deduplicazione né preservazione del
-/// versionamento/lineage (parentModeKey) in questa fase — ogni
-/// esecuzione crea nuove modalità indipendenti sul backend. La
-/// modalità marcata come predefinita in locale viene impostata come
-/// predefinita anche sul backend al termine della sincronizzazione.
 class TrainingModeSyncRepository {
+  static const domain = 'trainingMode';
+
   final TrainingModesApiService _api;
-  TrainingModeSyncRepository({TrainingModesApiService? api})
-      : _api = api ?? TrainingModesApiService();
+  final SyncMappingStorage _mapping;
+
+  TrainingModeSyncRepository({
+    TrainingModesApiService? api,
+    SyncMappingStorage? mapping,
+  })  : _api = api ?? TrainingModesApiService(),
+        _mapping = mapping ?? SyncMappingStorage();
 
   Future<TrainingModeSyncResult> syncLocalModesToBackend() async {
     final localModes = TrainingModeDatabase.instance.getAvailable();
 
     int created = 0;
+    int alreadySynced = 0;
     int failed = 0;
     String? defaultRemoteId;
 
     for (final mode in localModes) {
+      final localKey = mode.key;
+      final existing = await _mapping.getRemoteId(domain, localKey);
+      if (existing != null) {
+        alreadySynced++;
+        if (mode.isDefault) defaultRemoteId = existing;
+        continue;
+      }
+
       try {
         final remoteSets = mode.orderedSets
             .map((s) => RemoteTrainingModeSet(
@@ -47,11 +60,9 @@ class TrainingModeSyncRepository {
           category: mode.category,
           sets: remoteSets,
         );
+        await _mapping.setRemoteId(domain, localKey, remote.id);
         created++;
-
-        if (mode.isDefault) {
-          defaultRemoteId = remote.id;
-        }
+        if (mode.isDefault) defaultRemoteId = remote.id;
       } on ApiException {
         failed++;
       }
@@ -61,13 +72,15 @@ class TrainingModeSyncRepository {
       try {
         await _api.setDefault(defaultRemoteId);
       } on ApiException {
-        // Non incrementiamo "failed" per questo: le modalità sono
-        // comunque state create correttamente, solo il flag di
-        // default non è stato applicato — segnalato via log, non
-        // bloccante per il riepilogo principale.
+        // Non bloccante: le modalità sono comunque state
+        // sincronizzate correttamente.
       }
     }
 
-    return TrainingModeSyncResult(created: created, failed: failed);
+    return TrainingModeSyncResult(
+      created: created,
+      alreadySynced: alreadySynced,
+      failed: failed,
+    );
   }
 }

@@ -2,16 +2,18 @@ import '../db/hive_database.dart';
 import '../services/api/api_exception.dart';
 import '../services/api/exercises_api_service.dart';
 import '../services/api/sessions_api_service.dart';
-import '../services/api/workouts_api_service.dart';
+import 'sync_mapping_storage.dart';
 
 class SessionSyncResult {
   final int sessionsCreated;
+  final int sessionsAlreadySynced;
   final int setsCreated;
   final int sessionsFailed;
   final int setsFailed;
 
   const SessionSyncResult({
     required this.sessionsCreated,
+    required this.sessionsAlreadySynced,
     required this.setsCreated,
     required this.sessionsFailed,
     required this.setsFailed,
@@ -21,29 +23,28 @@ class SessionSyncResult {
 }
 
 /// Sincronizza lo storico allenamenti locale (Hive) verso il
-/// backend. Solo lettura da Hive, mai scrittura/cancellazione
-/// locale — anche in caso di errore parziale, i dati Hive restano
-/// invariati.
-///
-/// LIMITAZIONI NOTE (documentate esplicitamente):
-///  - nessuna deduplicazione: ogni esecuzione ricrea tutte le
-///    sessioni nel backend (idempotenza reale prevista Step 12);
-///  - il collegamento sessione→scheda remota è best-effort per
-///    nome, solo se la scheda è già presente sul backend;
-///  - trainingModeId non sincronizzato sulle serie in questo step
-///    (previsto Step 10, quando le modalità saranno sincronizzate).
+/// backend, in modo idempotente: sessioni già sincronizzate vengono
+/// saltate. Collegamento sessione→scheda remota tramite mapping
+/// persistito (session.workoutKey → workout remoto), più affidabile
+/// del matching per nome usato nella prima versione. Esercizi delle
+/// serie risolti tramite mapping (set.exerciseKey). Solo lettura da
+/// Hive, mai scrittura/cancellazione locale.
 class SessionSyncRepository {
+  static const _sessionDomain = 'session';
+  static const _workoutDomain = 'workout';
+  static const _exerciseDomain = 'exercise';
+
   final SessionsApiService _sessionsApi;
   final ExercisesApiService _exercisesApi;
-  final WorkoutsApiService _workoutsApi;
+  final SyncMappingStorage _mapping;
 
   SessionSyncRepository({
     SessionsApiService? sessionsApi,
     ExercisesApiService? exercisesApi,
-    WorkoutsApiService? workoutsApi,
+    SyncMappingStorage? mapping,
   })  : _sessionsApi = sessionsApi ?? SessionsApiService(),
         _exercisesApi = exercisesApi ?? ExercisesApiService(),
-        _workoutsApi = workoutsApi ?? WorkoutsApiService();
+        _mapping = mapping ?? SyncMappingStorage();
 
   Future<SessionSyncResult> syncLocalHistoryToBackend() async {
     final localSessions = HiveDatabase.instance.getSessions();
@@ -53,29 +54,38 @@ class SessionSyncRepository {
       for (final e in remoteExercises) e.name.trim().toLowerCase(): e.id,
     };
 
-    final remoteWorkouts = await _workoutsApi.fetchAll();
-    final workoutIdByName = {
-      for (final w in remoteWorkouts) w.name.trim().toLowerCase(): w.id,
-    };
-
-    Future<String> resolveExerciseId(String name, String muscleGroup) async {
+    Future<String> resolveExerciseId(
+        int exerciseKey, String name, String muscleGroup) async {
+      final mapped = await _mapping.getRemoteId(_exerciseDomain, exerciseKey);
+      if (mapped != null) return mapped;
       final normalized = name.trim().toLowerCase();
       final existing = exerciseIdByName[normalized];
-      if (existing != null) return existing;
-      final created = await _exercisesApi.create(
-        name: name,
-        muscleGroup: muscleGroup,
-      );
+      if (existing != null) {
+        await _mapping.setRemoteId(_exerciseDomain, exerciseKey, existing);
+        return existing;
+      }
+      final created =
+          await _exercisesApi.create(name: name, muscleGroup: muscleGroup);
       exerciseIdByName[normalized] = created.id;
+      await _mapping.setRemoteId(_exerciseDomain, exerciseKey, created.id);
       return created.id;
     }
 
     int sessionsCreated = 0;
+    int sessionsAlreadySynced = 0;
     int setsCreated = 0;
     int sessionsFailed = 0;
     int setsFailed = 0;
 
     for (final session in localSessions) {
+      final sessionLocalKey = session.key;
+      final alreadyId =
+          await _mapping.getRemoteId(_sessionDomain, sessionLocalKey);
+      if (alreadyId != null) {
+        sessionsAlreadySynced++;
+        continue;
+      }
+
       String? isoDate;
       try {
         isoDate = DateTime.parse(session.date).toIso8601String();
@@ -88,7 +98,7 @@ class SessionSyncRepository {
       }
 
       final matchedWorkoutId =
-          workoutIdByName[session.workoutName.trim().toLowerCase()];
+          await _mapping.getRemoteId(_workoutDomain, session.workoutKey);
 
       String remoteSessionId;
       try {
@@ -99,6 +109,8 @@ class SessionSyncRepository {
           durationSeconds: session.durationSeconds,
         );
         remoteSessionId = remoteSession.id;
+        await _mapping.setRemoteId(
+            _sessionDomain, sessionLocalKey, remoteSessionId);
         sessionsCreated++;
       } on ApiException {
         sessionsFailed++;
@@ -108,8 +120,8 @@ class SessionSyncRepository {
       final localSets = HiveDatabase.instance.getSessionSets(session.key);
       for (final set in localSets) {
         try {
-          final exerciseId =
-              await resolveExerciseId(set.exerciseName, set.muscleGroup);
+          final exerciseId = await resolveExerciseId(
+              set.exerciseKey, set.exerciseName, set.muscleGroup);
           await _sessionsApi.addSet(
             sessionId: remoteSessionId,
             exerciseId: exerciseId,
@@ -129,6 +141,7 @@ class SessionSyncRepository {
 
     return SessionSyncResult(
       sessionsCreated: sessionsCreated,
+      sessionsAlreadySynced: sessionsAlreadySynced,
       setsCreated: setsCreated,
       sessionsFailed: sessionsFailed,
       setsFailed: setsFailed,

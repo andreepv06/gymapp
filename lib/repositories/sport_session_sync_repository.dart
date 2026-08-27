@@ -1,31 +1,45 @@
 import '../db/sport_database.dart';
-import '../services/api/api_exception.dart';
 import '../services/api/sport_sessions_api_service.dart';
+import 'sync_mapping_storage.dart';
 
 class SportSessionSyncResult {
   final int created;
+  final int alreadySynced;
   final int failed;
-  const SportSessionSyncResult({required this.created, required this.failed});
+  const SportSessionSyncResult({
+    required this.created,
+    required this.alreadySynced,
+    required this.failed,
+  });
   bool get hasFailures => failed > 0;
 }
 
-/// Sincronizza le sessioni sportive locali (Hive: corsa, ciclismo,
-/// ecc.) verso il backend. Solo lettura da Hive, mai scrittura locale.
-///
-/// LIMITAZIONE NOTA: nessuna deduplicazione — ogni esecuzione crea
-/// nuove sessioni sul backend (Step 12).
 class SportSessionSyncRepository {
+  static const domain = 'sportSession';
+
   final SportSessionsApiService _api;
-  SportSessionSyncRepository({SportSessionsApiService? api})
-      : _api = api ?? SportSessionsApiService();
+  final SyncMappingStorage _mapping;
+
+  SportSessionSyncRepository({
+    SportSessionsApiService? api,
+    SyncMappingStorage? mapping,
+  })  : _api = api ?? SportSessionsApiService(),
+        _mapping = mapping ?? SyncMappingStorage();
 
   Future<SportSessionSyncResult> syncLocalSportSessionsToBackend() async {
     final localSessions = SportDatabase.instance.getSessions();
 
     int created = 0;
+    int alreadySynced = 0;
     int failed = 0;
 
     for (final session in localSessions) {
+      final localKey = session.key;
+      final existing = await _mapping.getRemoteId(domain, localKey);
+      if (existing != null) {
+        alreadySynced++;
+        continue;
+      }
       try {
         final isoDate = DateTime.parse(session.date).toIso8601String();
         await _api.create(
@@ -35,16 +49,24 @@ class SportSessionSyncRepository {
           distanceKm: session.distanceKm,
           notes: session.notes,
         );
+        // NOTA: SportSessionsApiService.create() attualmente non
+        // restituisce l'id remoto creato (POST /sport-sessions
+        // risponde con l'oggetto completo, ma il service scarta il
+        // body). Senza id non possiamo registrare il mapping: questa
+        // entità resta quindi NON idempotente in questo incremento —
+        // limite dichiarato esplicitamente, da chiudere quando
+        // SportSessionsApiService.create() sarà aggiornato per
+        // restituire e propagare l'id (modifica minima futura).
         created++;
       } catch (_) {
-        // Copre sia ApiException sia un eventuale errore di parsing
-        // data (es. formato non ISO): entrambi contano come
-        // fallimento di quella singola sessione, senza bloccare le
-        // altre.
         failed++;
       }
     }
 
-    return SportSessionSyncResult(created: created, failed: failed);
+    return SportSessionSyncResult(
+      created: created,
+      alreadySynced: alreadySynced,
+      failed: failed,
+    );
   }
 }

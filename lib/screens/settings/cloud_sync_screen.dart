@@ -161,7 +161,8 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
           if (_lastSessionSyncResult != null) ...[
             const SizedBox(height: 12),
             Text(
-              '${_lastSessionSyncResult!.sessionsCreated} sessioni · '
+              '${_lastSessionSyncResult!.sessionsCreated} sessioni create · '
+              '${_lastSessionSyncResult!.sessionsAlreadySynced} già sincronizzate · '
               '${_lastSessionSyncResult!.setsCreated} serie'
               '${_lastSessionSyncResult!.hasFailures ? ' · ${_lastSessionSyncResult!.sessionsFailed} sessioni fallite, ${_lastSessionSyncResult!.setsFailed} serie fallite' : ''}',
               style: TextStyle(color: c.textSecondary, fontSize: 12),
@@ -209,7 +210,8 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
           if (_lastModeSyncResult != null) ...[
             const SizedBox(height: 12),
             Text(
-              '${_lastModeSyncResult!.created} modalità create'
+              '${_lastModeSyncResult!.created} modalità create · '
+              '${_lastModeSyncResult!.alreadySynced} già sincronizzate'
               '${_lastModeSyncResult!.hasFailures ? ' · ${_lastModeSyncResult!.failed} fallite' : ''}',
               style: TextStyle(color: c.textSecondary, fontSize: 12),
             ),
@@ -255,7 +257,8 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
           if (_lastGoalSyncResult != null) ...[
             const SizedBox(height: 12),
             Text(
-              '${_lastGoalSyncResult!.goalsCreated} obiettivi · '
+              '${_lastGoalSyncResult!.goalsCreated} obiettivi creati · '
+              '${_lastGoalSyncResult!.goalsAlreadySynced} già sincronizzati · '
               '${_lastGoalSyncResult!.completionsCreated} completamenti'
               '${_lastGoalSyncResult!.hasFailures ? ' · ${_lastGoalSyncResult!.goalsFailed} obiettivi falliti, ${_lastGoalSyncResult!.completionsFailed} completamenti falliti' : ''}',
               style: TextStyle(color: c.textSecondary, fontSize: 12),
@@ -302,7 +305,8 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
           if (_lastSportSyncResult != null) ...[
             const SizedBox(height: 12),
             Text(
-              '${_lastSportSyncResult!.created} attività create'
+              '${_lastSportSyncResult!.created} attività create · '
+              '${_lastSportSyncResult!.alreadySynced} già sincronizzate'
               '${_lastSportSyncResult!.hasFailures ? ' · ${_lastSportSyncResult!.failed} fallite' : ''}',
               style: TextStyle(color: c.textSecondary, fontSize: 12),
             ),
@@ -631,7 +635,8 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
           if (_lastWorkoutSyncResult != null) ...[
             const SizedBox(height: 12),
             Text(
-              '${_lastWorkoutSyncResult!.workoutsCreated} schede · '
+              '${_lastWorkoutSyncResult!.workoutsCreated} schede create · '
+              '${_lastWorkoutSyncResult!.workoutsAlreadySynced} già sincronizzate · '
               '${_lastWorkoutSyncResult!.freeExercisesLinked} esercizi liberi · '
               '${_lastWorkoutSyncResult!.circuitsCreated} circuiti · '
               '${_lastWorkoutSyncResult!.circuitExercisesLinked} esercizi in circuito'
