@@ -10,6 +10,7 @@ import { SessionsModule } from './sessions/sessions.module';
 import { TrainingModesModule } from './training-modes/training-modes.module';
 import { GoalsModule } from './goals/goals.module';
 import { SportSessionsModule } from './sport-sessions/sport-sessions.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SportSessionsModule } from './sport-sessions/sport-sessions.module';
     TrainingModesModule,
     GoalsModule,
     SportSessionsModule,
+    AdminModule,
   ],
 })
 export class AppModule {}
