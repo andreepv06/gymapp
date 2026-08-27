@@ -12,6 +12,7 @@ import '../../services/api/api_client.dart';
 import '../../services/api/api_exception.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
+import '../admin/admin_users_screen.dart';
 
 class CloudSyncScreen extends StatefulWidget {
   const CloudSyncScreen({super.key});
@@ -531,6 +532,17 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
             color: MarkFitColors.red,
             onTap: auth.loading ? null : () => auth.logout(),
           ),
+          if (user?.role == 'ADMIN') ...[
+            const SizedBox(height: 10),
+            GlassPrimaryButton(
+              label: 'Apri pannello admin',
+              color: MarkFitColors.orange,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AdminUsersScreen()),
+              ),
+            ),
+          ],
         ],
       ),
     );
