@@ -1,4 +1,5 @@
 import '../db/sport_database.dart';
+import '../services/api/api_exception.dart';
 import '../services/api/sport_sessions_api_service.dart';
 import 'sync_mapping_storage.dart';
 
@@ -14,6 +15,9 @@ class SportSessionSyncResult {
   bool get hasFailures => failed > 0;
 }
 
+/// Sincronizza le sessioni sportive locali (Hive) verso il backend,
+/// idempotente tramite mapping persistito. Solo lettura da Hive,
+/// mai scrittura locale.
 class SportSessionSyncRepository {
   static const domain = 'sportSession';
 
@@ -42,23 +46,20 @@ class SportSessionSyncRepository {
       }
       try {
         final isoDate = DateTime.parse(session.date).toIso8601String();
-        await _api.create(
+        final remote = await _api.create(
           sportType: session.sportType,
           isoDate: isoDate,
           durationSeconds: session.durationSeconds,
           distanceKm: session.distanceKm,
           notes: session.notes,
         );
-        // NOTA: SportSessionsApiService.create() attualmente non
-        // restituisce l'id remoto creato (POST /sport-sessions
-        // risponde con l'oggetto completo, ma il service scarta il
-        // body). Senza id non possiamo registrare il mapping: questa
-        // entità resta quindi NON idempotente in questo incremento —
-        // limite dichiarato esplicitamente, da chiudere quando
-        // SportSessionsApiService.create() sarà aggiornato per
-        // restituire e propagare l'id (modifica minima futura).
+        await _mapping.setRemoteId(domain, localKey, remote.id);
         created++;
+      } on ApiException {
+        failed++;
       } catch (_) {
+        // Copre errori di parsing data non ISO: conta come
+        // fallimento di quella singola sessione, senza bloccare le altre.
         failed++;
       }
     }
