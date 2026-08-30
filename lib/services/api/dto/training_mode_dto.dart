@@ -22,9 +22,18 @@ class RemoteTrainingModeSet {
 class RemoteTrainingMode {
   final String id;
   final String name;
+  final String category;
 
-  const RemoteTrainingMode({required this.id, required this.name});
+  const RemoteTrainingMode({
+    required this.id,
+    required this.name,
+    required this.category,
+  });
 
   factory RemoteTrainingMode.fromJson(Map<String, dynamic> json) =>
-      RemoteTrainingMode(id: json['id'] as String, name: json['name'] as String);
+      RemoteTrainingMode(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        category: json['category'] as String? ?? '',
+      );
 }

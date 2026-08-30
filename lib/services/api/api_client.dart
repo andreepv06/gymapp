@@ -7,25 +7,16 @@ import 'token_storage.dart';
 
 /// Client HTTP condiviso verso il backend NestJS MarkFit.
 ///
-/// Base URL configurabile: in sviluppo locale punta di default a
-/// http://localhost:3000/api (backend avviato con `npm run start:dev`).
-/// Sovrascrivibile a runtime (vedi CloudSyncScreen) per test contro
-/// un backend distribuito, senza dover ricompilare l'app — utile in
-/// vista della Fase 4 (deploy) quando l'URL cambierà da locale a
-/// pubblico.
-///
-/// Gestisce automaticamente:
-///  - header Authorization con l'access token salvato;
-///  - un singolo tentativo di refresh trasparente su 401 (il
-///    chiamante non deve gestirlo, a meno che il refresh stesso
-///    fallisca, nel qual caso propaga comunque un 401 — la UI deve
-///    reindirizzare al login);
-///  - mappatura di ogni errore HTTP/di rete in ApiException.
+/// Timeout esteso a 60s (invece dei 15s iniziali): il piano free di
+/// Render "addormenta" il servizio dopo inattività e può impiegare
+/// fino a ~50s per risvegliarsi alla prima richiesta — un timeout
+/// più corto interpretava il cold start come un errore di rete.
 class ApiClient {
   ApiClient._internal();
   static final ApiClient instance = ApiClient._internal();
 
   static const _defaultBaseUrl = 'http://localhost:3000/api';
+  static const _requestTimeout = Duration(seconds: 60);
   String _baseUrl = _defaultBaseUrl;
   final TokenStorage _tokens = TokenStorage();
 
@@ -82,7 +73,7 @@ class ApiClient {
       final encodedBody = body != null ? jsonEncode(body) : null;
 
       response = await _dispatch(method, uri, headers, encodedBody)
-          .timeout(const Duration(seconds: 15));
+          .timeout(_requestTimeout);
     } on TimeoutException {
       throw ApiException.timeout();
     } catch (e) {
@@ -90,7 +81,6 @@ class ApiClient {
       throw ApiException.network();
     }
 
-    // Refresh trasparente: un solo tentativo per evitare loop.
     if (response.statusCode == 401 && auth && !isRetry) {
       final refreshed = await _tryRefresh();
       if (refreshed) {
@@ -149,7 +139,7 @@ class ApiClient {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'refreshToken': refreshToken}),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_requestTimeout);
       if (response.statusCode != 200) {
         await _tokens.clear();
         return false;

@@ -5,6 +5,16 @@ class TrainingModesApiService {
   final ApiClient _client;
   TrainingModesApiService({ApiClient? client}) : _client = client ?? ApiClient.instance;
 
+  Future<List<RemoteTrainingMode>> fetchAll() async {
+    final json = await _client.get('/training-modes?all=true');
+    final raw = json['data'] ?? json.values.first;
+    if (raw is! List) return [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(RemoteTrainingMode.fromJson)
+        .toList();
+  }
+
   Future<RemoteTrainingMode> create({
     required String name,
     required String category,
