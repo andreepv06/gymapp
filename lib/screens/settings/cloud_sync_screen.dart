@@ -13,6 +13,13 @@ import '../../services/api/api_exception.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
 import '../admin/admin_users_screen.dart';
+import '../../repositories/exercise_sync_repository.dart';
+import '../../repositories/workout_sync_repository.dart';
+import '../../repositories/session_sync_repository.dart';
+import '../../repositories/training_mode_sync_repository.dart';
+import '../../repositories/goal_sync_repository.dart';
+import '../../repositories/sport_session_sync_repository.dart';
+
 
 class CloudSyncScreen extends StatefulWidget {
   const CloudSyncScreen({super.key});
@@ -50,6 +57,111 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
   bool _syncingSportSessions = false;
   SportSessionSyncResult? _lastSportSyncResult;
   String? _sportSyncError;
+
+  bool _syncingAll = false;
+  List<String>? _syncAllLog;
+
+  Future<void> _syncAll() async {
+    setState(() {
+      _syncingAll = true;
+      _syncAllLog = [];
+    });
+    final log = <String>[];
+
+    Future<void> step(String label, Future<String> Function() run) async {
+      try {
+        log.add(await run());
+      } catch (e) {
+        log.add('$label: ERRORE — $e');
+      }
+      if (mounted) setState(() => _syncAllLog = List.of(log));
+    }
+
+    await step('Esercizi', () async {
+      final r = await ExerciseSyncRepository().syncLocalLibraryToBackend();
+      return 'Esercizi: ${r.created} create, ${r.alreadySynced} già sincronizzate'
+          '${r.hasFailures ? ', ${r.failedNames.length} fallite (${r.failedNames.join(", ")})' : ''}';
+    });
+
+    await step('Schede', () async {
+      final r = await WorkoutSyncRepository().syncLocalWorkoutsToBackend();
+      return 'Schede: ${r.workoutsCreated} create, ${r.workoutsAlreadySynced} già sincronizzate, '
+          '${r.freeExercisesLinked} esercizi liberi, ${r.circuitsCreated} circuiti, '
+          '${r.circuitExercisesLinked} esercizi in circuito'
+          '${r.hasFailures ? ', ${r.failedWorkoutNames.length} fallite' : ''}';
+    });
+
+    await step('Storico', () async {
+      final r = await SessionSyncRepository().syncLocalHistoryToBackend();
+      return 'Storico: ${r.sessionsCreated} sessioni create, ${r.sessionsAlreadySynced} già sincronizzate, '
+          '${r.setsCreated} serie'
+          '${r.hasFailures ? ', ${r.sessionsFailed} sessioni fallite, ${r.setsFailed} serie fallite' : ''}';
+    });
+
+    await step('Modalità', () async {
+      final r = await TrainingModeSyncRepository().syncLocalModesToBackend();
+      return 'Modalità: ${r.created} create, ${r.alreadySynced} già sincronizzate'
+          '${r.hasFailures ? ', ${r.failed} fallite' : ''}';
+    });
+
+    await step('Obiettivi', () async {
+      final r = await GoalSyncRepository().syncLocalGoalsToBackend();
+      return 'Obiettivi: ${r.goalsCreated} creati, ${r.goalsAlreadySynced} già sincronizzati, '
+          '${r.completionsCreated} completamenti'
+          '${r.hasFailures ? ', ${r.goalsFailed} obiettivi falliti, ${r.completionsFailed} completamenti falliti' : ''}';
+    });
+
+    await step('Attività sportive', () async {
+      final r = await SportSessionSyncRepository().syncLocalSportSessionsToBackend();
+      return 'Attività sportive: ${r.created} create, ${r.alreadySynced} già sincronizzate'
+          '${r.hasFailures ? ', ${r.failed} fallite' : ''}';
+    });
+
+    if (mounted) setState(() => _syncingAll = false);
+  }
+
+  Widget _buildSyncAllSection(BuildContext context, MarkFitColors c) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.glassCardStrong,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MarkFitColors.teal.withOpacity(0.4), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.sync_rounded, color: MarkFitColors.teal, size: 22),
+            const SizedBox(width: 8),
+            Text('Sincronizza tutto', style: TextStyle(
+                color: c.textPrimary, fontSize: 15, fontWeight: FontWeight.w800)),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            'Esegue in sequenza tutte le sincronizzazioni sottostanti e mostra un riepilogo unico. '
+            'Utile per il test funzionale completo. Nessuna scrittura o cancellazione locale.',
+            style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          GlassPrimaryButton(
+            label: _syncingAll ? 'Sincronizzazione in corso...' : 'Sincronizza tutto ora',
+            color: MarkFitColors.teal,
+            onTap: _syncingAll ? null : _syncAll,
+          ),
+          if (_syncAllLog != null && _syncAllLog!.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            ..._syncAllLog!.map((line) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Text(line, style: TextStyle(
+                      color: line.contains('ERRORE') ? MarkFitColors.red : c.textSecondary,
+                      fontSize: 12)),
+                )),
+          ],
+        ],
+      ),
+    );
+  }
 
   Future<void> _syncSessions() async {
     setState(() {
@@ -473,6 +585,8 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                     const SizedBox(height: 24),
                     if (auth.isAuthenticated) ...[
                       _buildAuthenticatedState(context, c, auth),
+                      const SizedBox(height: 20),
+                      _buildSyncAllSection(context, c),
                       const SizedBox(height: 20),
                       _buildExerciseSyncSection(context, c),
                       const SizedBox(height: 20),
