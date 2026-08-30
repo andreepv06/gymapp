@@ -42,7 +42,7 @@ class ProgressRing extends StatelessWidget {
               strokeCap: StrokeCap.round,
             ),
           ),
-          if (center != null) center!,
+          ?center,
         ],
       ),
     );

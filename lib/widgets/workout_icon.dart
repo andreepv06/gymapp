@@ -246,7 +246,7 @@ class WorkoutAvatar extends StatelessWidget {
         child: Image.file(
           file,
           fit:          BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
+          errorBuilder: (_, _, _) =>
               _buildIconAvatar(fallbackColor, fallbackIcon),
         ),
       );

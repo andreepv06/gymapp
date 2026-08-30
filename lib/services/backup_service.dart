@@ -723,7 +723,7 @@ class BackupService {
         durationSeconds: (s['durationSeconds'] as num?)?.toInt(),
       );
       final newKey = await sesBox.add(obj);
-      sesKeyMap[oldId] = newKey as int;
+      sesKeyMap[oldId] = newKey;
     }
 
     // 7. Session sets

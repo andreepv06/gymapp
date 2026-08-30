@@ -414,8 +414,11 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
             GestureDetector(
               onTap: () {
                 HapticFeedback.lightImpact();
-                if (inDetail) setState(() => _selectedName = null);
-                else Navigator.pop(context);
+                if (inDetail) {
+                  setState(() => _selectedName = null);
+                } else {
+                  Navigator.pop(context);
+                }
               },
               child: Container(width: 36, height: 36,
                 decoration: BoxDecoration(
@@ -811,7 +814,7 @@ class _CategoryChips extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount:       categories.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
           final cat   = categories[i];
           final isSel = cat == selected;
@@ -1420,7 +1423,7 @@ class _ModeScopeChips extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
           final k     = items[i];
           final isAll = k == _allScopeSentinel;

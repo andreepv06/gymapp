@@ -653,7 +653,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                           proxyDecorator: (child, i, anim) =>
                               AnimatedBuilder(
                             animation: anim,
-                            builder: (_, __) => Material(
+                            builder: (_, _) => Material(
                               elevation: 0,
                               color:     Colors.transparent,
                               child:     child,
@@ -1370,7 +1370,7 @@ class _CircuitCard extends StatelessWidget {
                       proxyDecorator:
                           (child, index, animation) => AnimatedBuilder(
                         animation: animation,
-                        builder: (_, __) => Material(
+                        builder: (_, _) => Material(
                           elevation: 0,
                           color:     Colors.transparent,
                           child: DecoratedBox(
@@ -1505,8 +1505,11 @@ class _AddExercisesToWorkoutSheetState
                         onTap: isIn
                             ? null
                             : () => setState(() {
-                                  if (isSel) _selected.remove(ex.key);
-                                  else _selected.add(ex.key);
+                                  if (isSel) {
+                                    _selected.remove(ex.key);
+                                  } else {
+                                    _selected.add(ex.key);
+                                  }
                                 }),
                       );
                     },
@@ -1612,8 +1615,11 @@ class _AddCircuitToWorkoutSheetState
                         isAlreadyIn: false,
                         isSelected:  isSel,
                         onTap: () => setState(() {
-                          if (isSel) _selected.remove(ex.key);
-                          else _selected.add(ex.key);
+                          if (isSel) {
+                            _selected.remove(ex.key);
+                          } else {
+                            _selected.add(ex.key);
+                          }
                         }),
                       );
                     },
@@ -2314,7 +2320,7 @@ class _MuscleChips extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount:       groups.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
           final g   = groups[i];
           final sel = selected == g;

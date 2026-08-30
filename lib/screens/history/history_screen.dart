@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/navigation/app_router.dart';
 import '../../core/theme/markfit_colors.dart';
@@ -183,7 +182,9 @@ class _HistoryScreenState extends State<HistoryScreen>
     while (true) {
       final we = ws.add(const Duration(days: 6));
       if (!dates.any((d) =>
-          !d.isBefore(ws) && d.isBefore(we.add(const Duration(days: 1))))) break;
+          !d.isBefore(ws) && d.isBefore(we.add(const Duration(days: 1))))) {
+        break;
+      }
       streak++;
       ws = ws.subtract(const Duration(days: 7));
       if (streak > 200) break;
@@ -445,7 +446,7 @@ class _HistoryScreenState extends State<HistoryScreen>
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: _SportFilter.values.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              separatorBuilder: (_, _) => const SizedBox(width: 6),
               itemBuilder: (_, i) {
                 final f = _SportFilter.values[i];
                 final sel = _sportFilter == f;
@@ -702,8 +703,9 @@ class _GlassCalendar extends StatelessWidget {
       'Maggio','Giugno','Luglio','Agosto','Settembre',
       'Ottobre','Novembre','Dicembre'];
   String get _titleText {
-    if (calendarMode == 'day')
+    if (calendarMode == 'day') {
       return '${_mFull[_focusedMonth.month]} ${_focusedMonth.year}';
+    }
     if (calendarMode == 'month') return '${_focusedMonth.year}';
     if (calendarMode == 'year') {
       final dec = (_focusedMonth.year ~/ 10) * 10;
@@ -715,8 +717,9 @@ class _GlassCalendar extends StatelessWidget {
   // Ciclo completo dei 4 livelli, un solo passo alla volta — mai un
   // salto (Parte 1/13 del fix).
   void _drillUp() {
-    if (calendarMode == 'day') onModeChanged('month');
-    else if (calendarMode == 'month') onModeChanged('year');
+    if (calendarMode == 'day') {
+      onModeChanged('month');
+    } else if (calendarMode == 'month') onModeChanged('year');
     else if (calendarMode == 'year') onModeChanged('decade');
   }
 
@@ -765,9 +768,9 @@ class _GlassCalendar extends StatelessWidget {
   Widget _buildHeader(BuildContext context, MarkFitColors c) {
     return Row(children: [
       _CalBtn(icon: Icons.chevron_left_rounded, c: c, onTap: () {
-        if (calendarMode == 'day')
+        if (calendarMode == 'day') {
           onNavigate(DateTime(_focusedMonth.year, _focusedMonth.month - 1));
-        else if (calendarMode == 'month')
+        } else if (calendarMode == 'month')
           onNavigate(DateTime(_focusedMonth.year - 1, _focusedMonth.month));
         else if (calendarMode == 'year')
           onNavigate(DateTime(_focusedMonth.year - 10, _focusedMonth.month));
@@ -808,9 +811,9 @@ class _GlassCalendar extends StatelessWidget {
       ] else
         const SizedBox(width: 6),
       _CalBtn(icon: Icons.chevron_right_rounded, c: c, onTap: () {
-        if (calendarMode == 'day')
+        if (calendarMode == 'day') {
           onNavigate(DateTime(_focusedMonth.year, _focusedMonth.month + 1));
-        else if (calendarMode == 'month')
+        } else if (calendarMode == 'month')
           onNavigate(DateTime(_focusedMonth.year + 1, _focusedMonth.month));
         else if (calendarMode == 'year')
           onNavigate(DateTime(_focusedMonth.year + 10, _focusedMonth.month));
@@ -1422,8 +1425,11 @@ class _GlassDayDetailSheetState extends State<_GlassDayDetailSheet> {
                         ])),
                         GestureDetector(
                           onTap: () => setState(() {
-                            if (isExp) _expanded.remove(s.key);
-                            else _expanded.add(s.key);
+                            if (isExp) {
+                              _expanded.remove(s.key);
+                            } else {
+                              _expanded.add(s.key);
+                            }
                           }),
                           child: Container(padding: const EdgeInsets.all(5),
                             decoration: BoxDecoration(
@@ -1612,7 +1618,7 @@ class _SectionHeader extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 class _EmptyWorkouts extends StatelessWidget {
   final bool showingFiltered;
-  _EmptyWorkouts({this.showingFiltered = false});
+  const _EmptyWorkouts({this.showingFiltered = false});
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;

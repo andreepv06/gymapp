@@ -115,9 +115,7 @@ class SessionExercise {
       sessionNote: j['sessionNote'] as String?,
       circuitId: j['circuitId'] as String?,
       trainingModeKey: j['trainingModeKey'],
-      expectedStructure: rawStructure == null
-          ? null
-          : rawStructure.map((e) {
+      expectedStructure: rawStructure?.map((e) {
               final m = Map<String, dynamic>.from(e as Map);
               return TrainingModeSet(
                 order: m['order'] as int,

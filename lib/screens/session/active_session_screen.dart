@@ -487,7 +487,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       buildDefaultDragHandles: false,
       proxyDecorator: (child, i, anim) => AnimatedBuilder(
         animation: anim,
-        builder: (_, __) => Material(
+        builder: (_, _) => Material(
           elevation: 0,
           color:     Colors.transparent,
           child: DecoratedBox(
@@ -1045,7 +1045,6 @@ class _SessionExerciseCard extends StatefulWidget {
   final String                         currentNote;
 
   const _SessionExerciseCard({
-    super.key,
     required this.exercise,     required this.sets,
     required this.isRestingHere, required this.onToggle,
     required this.onUpdate,     required this.onAddSet,
@@ -1248,7 +1247,6 @@ class _SessionCircuitCard extends StatefulWidget {
   final void Function(List<SessionExercise>) onReorderExercises;
 
   const _SessionCircuitCard({
-    super.key,
     required this.circuitId,       required this.circuitName,
     required this.exercises,       required this.currentRound,
     required this.totalRounds,     required this.getSets,
@@ -1596,7 +1594,7 @@ class _CircuitRoundContent extends StatelessWidget {
       buildDefaultDragHandles: false,
       proxyDecorator: (child, index, animation) => AnimatedBuilder(
         animation: animation,
-        builder: (_, __) => Material(
+        builder: (_, _) => Material(
           elevation: 0, color: Colors.transparent,
           child: DecoratedBox(
             decoration: BoxDecoration(

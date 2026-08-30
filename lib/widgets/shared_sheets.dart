@@ -726,8 +726,11 @@ class _ExercisePickerSheetState extends State<ExercisePickerSheet> {
   void _toggle(dynamic key) {
     if (widget.disabledKeys.contains(key)) return;
     setState(() {
-      if (_selectedKeys.contains(key)) _selectedKeys.remove(key);
-      else _selectedKeys.add(key);
+      if (_selectedKeys.contains(key)) {
+        _selectedKeys.remove(key);
+      } else {
+        _selectedKeys.add(key);
+      }
     });
   }
 
@@ -848,7 +851,7 @@ class _SharedMuscleChips extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount:       groups.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
           final g   = groups[i];
           final sel = selected == g;

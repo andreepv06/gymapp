@@ -95,7 +95,7 @@ class MyApp extends StatelessWidget {
             create: (_) => ProfileProvider()..loadProfile()),
       ],
       child: Consumer<ThemeProvider>(
-        builder: (context, tp, __) => MaterialApp(
+        builder: (context, tp, _) => MaterialApp(
           title:                      'MarkFit',
           debugShowCheckedModeBanner: false,
           theme:     _buildTheme(Brightness.light),
@@ -576,8 +576,9 @@ class _LiquidNavItemState extends State<_LiquidNavItem>
   @override
   void didUpdateWidget(_LiquidNavItem old) {
     super.didUpdateWidget(old);
-    if (widget.selected && !old.selected) _ctrl.forward();
-    else if (!widget.selected && old.selected) _ctrl.reverse();
+    if (widget.selected && !old.selected) {
+      _ctrl.forward();
+    } else if (!widget.selected && old.selected) _ctrl.reverse();
   }
 
   @override
@@ -589,7 +590,7 @@ class _LiquidNavItemState extends State<_LiquidNavItem>
     return SizedBox(height: 68,
       child: AnimatedBuilder(
         animation: _ctrl,
-        builder: (_, __) {
+        builder: (_, _) {
           final pillW     = 52.0 + 8.0 * _width.value;
           final iconScale = 0.85 + 0.15 * _scale.value;
           return Center(

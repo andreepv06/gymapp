@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 // Import condizionale
 import 'image_picker_helper_web.dart'

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/goal_provider.dart';
-import '../../widgets/glass_card.dart';
 import '../dashboard/widgets/goal_card.dart';
 
 class GoalsCalendarScreen extends StatefulWidget {

@@ -152,18 +152,22 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
   String? _validate() {
     if (_titleCtrl.text.trim().isEmpty) return 'Il titolo è obbligatorio.';
     if (_selectedCategory.isEmpty) return 'Seleziona una categoria.';
-    if (_scheduleType == _ScheduleType.specificDays && _selectedDays.isEmpty)
+    if (_scheduleType == _ScheduleType.specificDays && _selectedDays.isEmpty) {
       return 'Seleziona almeno un giorno.';
+    }
     if (_scheduleType == _ScheduleType.dateRange) {
-      if (_startDate == null || _endDate == null)
+      if (_startDate == null || _endDate == null) {
         return 'Seleziona le date di inizio e fine.';
-      if (_endDate!.isBefore(_startDate!))
+      }
+      if (_endDate!.isBefore(_startDate!)) {
         return 'La data di fine deve essere successiva a quella di inizio.';
+      }
     }
     if (_scheduleType == _ScheduleType.customInterval) {
       final n = int.tryParse(_intervalCtrl.text.trim());
-      if (n == null || n < 1)
+      if (n == null || n < 1) {
         return 'Inserisci un intervallo valido (≥ 1 giorno).';
+      }
     }
     return null;
   }
@@ -246,12 +250,14 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
     final err = await CategoriesRepository.addCustom(name);
     if (err != null && mounted) { _showError(err); return; }
     await _loadCategories();
-    if (mounted) setState(() {
+    if (mounted) {
+      setState(() {
       _selectedCategory   = name;
       _showCustomCatField = false;
       _customCatCtrl.clear();
       FocusScope.of(context).unfocus();
     });
+    }
   }
 
   Future<DateTime?> _pickDate(DateTime initial, {DateTime? firstDate}) async {
@@ -353,8 +359,9 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
                         final d = await _pickDate(_deadlineDate != null
                             ? DateTime.parse(_deadlineDate!)
                             : DateTime.now());
-                        if (d != null)
+                        if (d != null) {
                           setState(() => _deadlineDate = _fmtDate(d));
+                        }
                       },
                       onClear: _deadlineDate != null
                           ? () => setState(() => _deadlineDate = null) : null),
@@ -399,8 +406,11 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
               final sel = _selectedDays.contains(day);
               return GestureDetector(
                 onTap: () => setState(() {
-                  if (sel) _selectedDays.remove(day);
-                  else     _selectedDays.add(day);
+                  if (sel) {
+                    _selectedDays.remove(day);
+                  } else {
+                    _selectedDays.add(day);
+                  }
                 }),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),

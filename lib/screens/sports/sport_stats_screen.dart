@@ -65,7 +65,7 @@ class SportStatsScreen extends StatelessWidget {
                 child: _StatTile(
                   label: 'Media a sessione',
                   value:
-                      '${_fmtDuration(stats.avgSecondsPerSession.round())}',
+                      _fmtDuration(stats.avgSecondsPerSession.round()),
                   icon: Icons.equalizer,
                 ),
               ),

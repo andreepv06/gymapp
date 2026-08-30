@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../core/theme/markfit_colors.dart';
@@ -69,7 +68,7 @@ class _CosmicBackgroundState extends State<CosmicBackground>
       if (isDark)
         Positioned.fill(child: AnimatedBuilder(
           animation: _ctrl,
-          builder: (_, __) => CustomPaint(
+          builder: (_, _) => CustomPaint(
             painter: _StarPainter(
                 stars: _stars, progress: _ctrl.value,
                 subtle: widget.subtle)))),

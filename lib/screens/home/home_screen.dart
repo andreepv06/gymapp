@@ -431,9 +431,9 @@ class _ProfileAvatar extends StatelessWidget {
     Widget inner;
     if (hasAvatar) {
       try {
-        final bytes = base64Decode(b64!);
+        final bytes = base64Decode(b64);
         inner = Image.memory(bytes, fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) =>
+            errorBuilder: (_, _, _) =>
                 const Icon(Icons.person_rounded,
                     color: Colors.white, size: 28));
       } catch (_) {
