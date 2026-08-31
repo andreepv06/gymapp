@@ -13,136 +13,128 @@
   comportamento: le password lato server sono sempre hashate
   (bcrypt).
 - **Hosting**: GitHub Pages, deploy automatico da `main` tramite
-  `.github/workflows/deploy.yml` (build `flutter build web --release
-  --base-href "/gymapp/"`, pubblicazione sul branch `gh-pages`).
-- **Dominio applicativo già implementato**: esercizi, schede
-  (workout), circuiti, sessioni con serie/ripetizioni/pesi, note
-  esercizio, modalità di allenamento (con versionamento e
-  soft-delete), storico, calendario, progressi/grafici, obiettivi
-  (goals) con streak, sessioni sportive (corsa/ciclismo/ecc.),
-  profilo utente con immagine.
+  `.github/workflows/deploy.yml`.
+- **Dominio applicativo**: esercizi, schede (workout), circuiti,
+  sessioni con serie/ripetizioni/pesi, note esercizio, modalità di
+  allenamento (con versionamento e soft-delete), storico, calendario,
+  progressi/grafici, obiettivi (goals) con streak, sessioni sportive
+  (corsa/ciclismo/ecc.), profilo utente con immagine.
 
-La V1 **rimane invariata e pienamente funzionante** durante tutto lo
-sviluppo descritto in questo documento.
+La V1 **rimane invariata e pienamente funzionante**. Nessuna modifica
+a Hive, all'autenticazione locale o al comportamento applicativo è
+mai stata effettuata durante questa evoluzione architetturale.
 
-## 2. Architettura target
+## 2. Architettura realizzata
 
-\`\`\`
-Flutter Web (UI + Provider)
+```
+Flutter Web (UI + Provider, V1 invariata)
         │
-        │ HTTPS / REST (Repository + API Client — Fase 3)
+        │ HTTPS / REST (Repository + API Client, opt-in)
         ▼
-   NestJS API (Fase 1-2)
+   NestJS API  ──── https://gymapp-i09h.onrender.com/api
         │
         │ Prisma
         ▼
-   PostgreSQL (Fase 1-2)
-\`\`\`
+   PostgreSQL (Neon, managed)
+```
 
-Frontend, backend e database restano **componenti indipendenti**:
-il frontend può in futuro essere spostato da GitHub Pages a Netlify
-(o altro static hosting) senza toccare backend/database; il database
-può essere spostato tra provider managed senza riscrivere Flutter,
-grazie a Prisma come layer di astrazione.
+Frontend, backend e database sono componenti indipendenti e
+verificati in produzione:
+- **Frontend**: GitHub Pages (`https://andreepv06.github.io/gymapp/`),
+  portabile in futuro su altro static hosting senza impatti su
+  backend/database.
+- **Backend**: Render (piano free), deploy automatico da `main`,
+  build command `npm install --include=dev && npx prisma generate &&
+  npm run build`.
+- **Database**: Neon PostgreSQL (serverless), schema applicato con
+  `prisma migrate deploy`.
 
-## 3. Mappa di dipendenza attuale da Hive (V1)
+## 3. Stato di completamento per fase
 
-\`\`\`
-UI (screens/*)
-  ↓
-Provider (WorkoutProvider, ExerciseProvider, SessionProvider,
-          GoalProvider, SportProvider, TrainingModeProvider,
-          AuthProvider)
-  ↓
-Database layer locale (HiveDatabase, GoalDatabase, SportDatabase,
-                        TrainingModeDatabase — box Hive per-utente)
-  ↓
-Hive (browser storage)
-\`\`\`
+### Fase 1 — Backend foundation
+**Completata.** NestJS + Prisma + PostgreSQL, health check
+(`GET /api/health`), Swagger (`/api/docs`), schema dati completo
+mappato dai modelli Hive reali (non conversione meccanica: FK
+esplicite per ownership, normalizzazione di circuiti e modalità di
+allenamento).
 
-Nessun livello "Repository"/"Service" astratto esiste oggi tra
-Provider e i database Hive: i Provider chiamano direttamente i
-metodi statici `*Database.instance.*`. Questo è il punto in cui, in
-Fase 3, verrà inserito il nuovo livello:
+### Fase 2 — Backend completo, autenticazione, API
+**Completata.** JWT (access + refresh con rotazione), bcrypt,
+`RolesGuard` con enum `USER`/`ADMIN`, CRUD completo con ownership
+verificata lato server per: users, exercises (+ note), workouts
+(+ circuits + workout-exercises), sessions (+ session-sets),
+training-modes (con versionamento/soft-delete preservati), goals
+(+ completions), sport-sessions, admin (lista utenti, dati sensibili
+mai esposti).
 
-\`\`\`
-UI
-  ↓
-Provider (invariati nell'interfaccia pubblica, quando possibile)
-  ↓
-Repository (nuovo, Fase 3)
-  ↓
-API Client (nuovo, Fase 3) ──┬── HTTP → NestJS → PostgreSQL
-                              └── fallback locale Hive (transizione)
-\`\`\`
+### Fase 3 — Integrazione Flutter, Repository, sincronizzazione
+**Completata e verificata con dati reali.** Layer `ApiClient` (con
+refresh trasparente, gestione errori centralizzata, timeout adeguato
+a hosting free-tier con cold start), `BackendAuthProvider` (separato
+da `AuthProvider` V1), un `*SyncRepository` per dominio (exercises,
+workouts+circuits, sessions+sets, training-modes, goals+completions,
+sport-sessions), tutti **idempotenti** tramite mapping locale↔remoto
+persistito (`SyncMappingStorage`) con fallback per nome/firma quando
+l'utente cambia account V1 locale mantenendo lo stesso account
+backend. Verificato con dati reali non banali: schede con esercizi
+liberi e circuiti, sessioni con serie multiple (incluse incomplete),
+obiettivi con completamenti storici.
 
-## 4. Schema dati (Fase 1)
+Hive resta l'unica fonte di lettura per la sincronizzazione: **mai
+una scrittura o cancellazione locale** in nessun repository di sync.
 
-Vedi `backend/prisma/schema.prisma`. Entità principali: `User`,
-`UserProfile`, `RefreshToken`, `Exercise`, `ExerciseNote`,
-`TrainingMode`, `TrainingModeSet`, `Workout`, `Circuit`,
-`WorkoutExercise`, `Session`, `SessionSet`, `Goal`,
-`GoalCompletion`, `SportSession`.
+### Fase 4 — Admin Panel, deploy, migrazione
+**Completata.**
+- **Admin Panel**: schermata dedicata (`AdminUsersScreen`), accesso
+  condizionato al ruolo `ADMIN` sia lato UI sia (soprattutto) lato
+  backend (`RolesGuard`), verificata con un account admin dedicato
+  che vede correttamente l'elenco utenti con ruoli distinti.
+- **Deploy**: backend live su Render, database live su Neon,
+  CORS configurato per l'origine esatta di produzione
+  (`https://andreepv06.github.io`, senza path — il confronto CORS
+  opera solo su schema+host, non sul path della pagina).
+- **Multi-dispositivo**: verificato end-to-end — stesso account
+  backend raggiunto da PC e da telefono via GitHub Pages, con
+  sincronizzazione riuscita da entrambi.
+- **Migrazione dati**: il meccanismo di sincronizzazione (Fase 3)
+  costituisce la migrazione stessa — non un passaggio distruttivo
+  separato. Ogni utente, quando lo desidera, sincronizza i propri
+  dati Hive verso il backend dalla schermata "Sincronizzazione
+  cloud" (azione opt-in, ripetibile, mai distruttiva verso Hive).
+  Non esiste un evento di migrazione "una tantum" eseguito
+  automaticamente: la V1 resta pienamente utilizzabile offline-first
+  a tempo indeterminato, indipendentemente dal backend.
 
-Differenze principali rispetto a una conversione meccanica di Hive:
+## 4. Sicurezza
 
-- ogni riga ha una **foreign key esplicita verso l'utente
-  proprietario** (`userId`), verificata sempre lato backend — mai
-  dedotta da un ID che il client potrebbe manipolare;
-- l'appartenenza di un `WorkoutExercise` a un circuito, codificata in
-  V1 con un prefisso stringa dentro `notes`, diventa una vera FK
-  (`circuitId`);
-- `TrainingMode.sets` (lista embedded in Hive) diventa una tabella
-  figlia `TrainingModeSet` con ordine esplicito;
-- versionamento e soft-delete delle modalità di allenamento (già
-  presenti in V1) sono preservati (`isDeleted`, `parentModeId`).
-
-## 5. Autenticazione (predisposta in Fase 1, implementata in Fase 2)
-
-- Password hashate con bcrypt lato server.
-- JWT access token (breve durata) + refresh token (tabella
-  `RefreshToken` dedicata, revocabile).
-- Ruoli `USER` / `ADMIN` (enum `Role`), estendibile in futuro.
-- Verifica email e recupero password: schema compatibile, flussi
-  implementati in Fase 2 (richiede un provider SMTP esterno, quindi
-  un intervento manuale dell'utente per la configurazione).
-
-## 6. Sicurezza
-
-- Nessun segreto nel repository: `.env` escluso da Git,
-  `.env.example` versionato come template.
-- CORS esplicito per origine (mai wildcard quando saranno coinvolte
-  credenziali).
-- Validazione input lato server (`class-validator`, Fase 2).
+- Nessun segreto nel repository: `.env` escluso da Git in ogni
+  ambiente (locale, Render), `.env.example` versionato come
+  template.
+- CORS esplicito per origine esatta (mai wildcard).
+- Password hashate con bcrypt lato server; mai esposte da nessun
+  endpoint (incluso quello admin).
 - Autorizzazione sempre verificata lato backend confrontando
-  `userId` della risorsa con l'utente autenticato dal token — mai
-  fidandosi di un ID passato dal client.
+  l'utente autenticato dal token con l'ownership della risorsa —
+  mai fidandosi di un ID passato dal client.
+- Promozione a ruolo `ADMIN` è un'operazione manuale diretta su
+  database (nessun endpoint self-service di promozione, scelta
+  deliberata per evitare un vettore di escalation privilegi).
 
-## 7. Migrazione da Hive
+## 5. Limiti noti e lavoro futuro (non bloccanti)
 
-Hive **non viene rimosso in questa fase**. Strategia:
-
-1. Fase 1-2: backend e database pronti, V1 invariata.
-2. Fase 3: introduzione di un Repository layer in Flutter che può
-   parlare con l'API; Hive può restare come cache/fallback locale
-   durante la transizione.
-3. Fase 4: procedura di migrazione dati (Hive → export JSON →
-   validazione → import PostgreSQL) **solo dopo verifica esplicita**
-   dell'utente; nessuna cancellazione dei dati Hive originali prima
-   della verifica.
-
-## 8. Hosting (indicazioni, dettagliate a inizio Fase 2)
-
-- **Frontend**: resta su GitHub Pages finché non deciso
-  diversamente; portabile su Netlify senza impatti su backend/DB.
-- **Backend**: piattaforma da scegliere in Fase 2 (es. Render,
-  Railway) — richiede azione manuale dell'utente (creazione account).
-- **Database**: provider PostgreSQL managed da scegliere in Fase 2
-  (vedi raccomandazione sotto) — richiede azione manuale dell'utente.
-
-## 9. Ruoli e Admin Panel
-
-Schema già predisposto (`Role.ADMIN`). L'interfaccia amministrativa
-vera e propria (gestione utenti, gestione workout per conto di un
-utente, audit log) è pianificata per la Macrofase 4, dopo che
-autenticazione e API core saranno complete e testate.
+- **Sincronizzazione monodirezionale**: locale → backend. Non esiste
+  ancora un percorso inverso (backend → Hive) né una vera
+  risoluzione dei conflitti multi-dispositivo (l'ultimo che
+  sincronizza "vince" semplicemente aggiungendo dati, senza merge).
+- **Sport sessions**: non ancora testato con dati reali in un ciclo
+  di sync (verificato solo strutturalmente).
+- **Deprecazioni Flutter** (`withOpacity`→`withValues`, `Color.value`)
+  presenti in tutta la UI esistente: `info`-level, non bloccanti,
+  non introdotte da questo lavoro, non affrontate per restare
+  focalizzati sulla ristrutturazione architetturale.
+- **Piano free Render**: cold start dopo inattività (fino a ~50s),
+  mitigato con timeout client a 60s ma non eliminato; da rivalutare
+  con un piano a pagamento se l'uso diventa continuativo.
+- **Rimozione di Hive**: intenzionalmente non pianificata in questa
+  fase. Resta una decisione futura indipendente, da valutare solo
+  dopo un periodo di utilizzo reale della sincronizzazione.
