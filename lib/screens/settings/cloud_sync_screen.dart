@@ -95,79 +95,91 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     }
   }
   
-  Widget _buildImportSection(BuildContext context, MarkFitColors c) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.glassCardStrong,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: MarkFitColors.indigo.withOpacity(0.4), width: 1.2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            const Icon(Icons.cloud_download_rounded, color: MarkFitColors.indigo, size: 22),
-            const SizedBox(width: 8),
-            Text('Importa dal backend', style: TextStyle(
-                color: c.textPrimary, fontSize: 15, fontWeight: FontWeight.w800)),
-          ]),
-          const SizedBox(height: 6),
-          Text(
-            'Recupera su questo dispositivo i dati già sincronizzati da altri dispositivi '
-            'con lo stesso account. Nessuna modifica o cancellazione dei dati locali esistenti.',
-            style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
-          ),
-          const SizedBox(height: 14),
-          GlassPrimaryButton(
-            label: _importingAll ? 'Importazione in corso...' : 'Importa dal backend',
-            color: MarkFitColors.indigo,
-            onTap: _importingAll ? null : _importAll,
-          ),
-          if (_lastImportResult != null) ...[
-            const SizedBox(height: 14),
-            Text(
-              '${_lastImportResult!.exercisesImported} esercizi, '
-              '${_lastImportResult!.trainingModesImported} modalità, '
-              '${_lastImportResult!.workoutsImported} schede '
-              '(${_lastImportResult!.workoutExercisesImported} esercizi, '
-              '${_lastImportResult!.circuitsImported} circuiti), '
-              '${_lastImportResult!.sessionsImported} sessioni '
-              '(${_lastImportResult!.sessionSetsImported} serie), '
-              '${_lastImportResult!.goalsImported} obiettivi '
-              '(${_lastImportResult!.goalCompletionsImported} completamenti) importati.',
-              style: TextStyle(color: c.textSecondary, fontSize: 12),
-            ),
-            if (_lastImportResult!.hasErrors) ...[
-              const SizedBox(height: 8),
-              ..._lastImportResult!.errors.map((e) => Text(e,
-                  style: const TextStyle(color: MarkFitColors.red, fontSize: 11))),
-            ],
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: MarkFitColors.orange.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: MarkFitColors.orange.withOpacity(0.3)),
-              ),
-              child: Row(children: [
-                const Icon(Icons.info_outline_rounded, color: MarkFitColors.orange, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Riavvia l\'app (o naviga via e torna) per vedere i nuovi dati nelle '
-                    'schermate Home/Allenamenti/Storico.',
-                    style: TextStyle(color: c.textSecondary, fontSize: 11),
-                  ),
-                ),
-              ]),
-            ),
-          ],
+Widget _buildImportSection(BuildContext context, MarkFitColors c) {
+  final auth = context.watch<BackendAuthProvider>();
+  final summary = auth.lastAutoImportSummary;
+
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: c.glassCardStrong,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: MarkFitColors.indigo.withOpacity(0.4), width: 1.2),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          const Icon(Icons.cloud_sync_rounded, color: MarkFitColors.indigo, size: 22),
+          const SizedBox(width: 8),
+          Text('Dati da altri dispositivi', style: TextStyle(
+              color: c.textPrimary, fontSize: 15, fontWeight: FontWeight.w800)),
+        ]),
+        const SizedBox(height: 6),
+        Text(
+          auth.autoImporting
+              ? 'Recupero automatico in corso...'
+              : 'I dati sincronizzati da altri dispositivi con questo account vengono '
+                'recuperati automaticamente all\'accesso. Nessuna modifica o cancellazione '
+                'dei dati locali esistenti.',
+          style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
+        ),
+        const SizedBox(height: 14),
+        GlassPrimaryButton(
+          label: auth.autoImporting ? 'Aggiornamento in corso...' : 'Aggiorna ora',
+          color: MarkFitColors.indigo,
+          onTap: auth.autoImporting ? null : () => auth.refreshFromBackend(),
+        ),
+        if (auth.lastAutoImportError != null) ...[
+          const SizedBox(height: 12),
+          Text('Errore: ${auth.lastAutoImportError}',
+              style: const TextStyle(color: MarkFitColors.red, fontSize: 12)),
         ],
-      ),
-    );
-  }
+        if (summary != null) ...[
+          const SizedBox(height: 14),
+          Text(
+            '${summary.exercisesImported} esercizi, '
+            '${summary.trainingModesImported} modalità, '
+            '${summary.workoutsImported} schede '
+            '(${summary.workoutExercisesImported} esercizi, '
+            '${summary.circuitsImported} circuiti), '
+            '${summary.sessionsImported} sessioni '
+            '(${summary.sessionSetsImported} serie), '
+            '${summary.goalsImported} obiettivi '
+            '(${summary.goalCompletionsImported} completamenti) recuperati.',
+            style: TextStyle(color: c.textSecondary, fontSize: 12),
+          ),
+          if (summary.hasErrors) ...[
+            const SizedBox(height: 8),
+            ...summary.errors.map((e) => Text(e,
+                style: const TextStyle(color: MarkFitColors.red, fontSize: 11))),
+          ],
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: MarkFitColors.orange.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: MarkFitColors.orange.withOpacity(0.3)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.info_outline_rounded, color: MarkFitColors.orange, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Se non vedi subito i nuovi dati in Home/Allenamenti/Storico, '
+                  'naviga via e torna in quella schermata.',
+                  style: TextStyle(color: c.textSecondary, fontSize: 11),
+                ),
+              ),
+            ]),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
 
   Future<void> _syncAll() async {
     setState(() {

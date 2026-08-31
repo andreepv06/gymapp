@@ -1,27 +1,41 @@
 import 'package:flutter/material.dart';
+import '../repositories/backend_import_repository.dart';
 import '../services/api/auth_api_service.dart';
 import '../services/api/api_exception.dart';
 import '../services/api/dto/auth_dto.dart';
 
 enum BackendAuthStatus { unknown, authenticated, unauthenticated }
 
-/// Provider dedicato alla sessione verso il NUOVO backend NestJS.
+/// Provider dedicato alla sessione verso il backend NestJS.
+/// Separato da AuthProvider (autenticazione locale V1).
 ///
-/// Completamente separato da AuthProvider (autenticazione locale V1,
-/// Hive/SharedPreferences 'accounts'): questo provider non tocca in
-/// alcun modo lo stato o i dati di AuthProvider. È pensato per essere
-/// usato in aggiunta, non in sostituzione, finché la migrazione non
-/// sarà verificata (Fase 4).
+/// FIX: import automatico dei dati dal backend ad ogni:
+///  - avvio dell'app con una sessione backend già valida
+///    (restoreSession, chiamato eagerly da main.dart);
+///  - login/registrazione riusciti.
+/// Nessun passaggio manuale richiesto per vedere su un nuovo
+/// dispositivo i dati già sincronizzati da un altro. L'import resta
+/// comunque additivo e non distruttivo (BackendImportRepository):
+/// nessun dato Hive esistente viene mai sovrascritto o eliminato.
 class BackendAuthProvider extends ChangeNotifier {
   final AuthApiService _authApi;
+  final BackendImportRepository _importRepo;
 
-  BackendAuthProvider({AuthApiService? authApi})
-      : _authApi = authApi ?? AuthApiService();
+  BackendAuthProvider({
+    AuthApiService? authApi,
+    BackendImportRepository? importRepo,
+  })  : _authApi = authApi ?? AuthApiService(),
+        _importRepo = importRepo ?? BackendImportRepository();
 
   BackendAuthStatus _status = BackendAuthStatus.unknown;
   BackendUserProfile? _currentUser;
   String? _lastError;
   bool _loading = false;
+
+  bool _autoImportDone = false;
+  bool autoImporting = false;
+  ImportSummary? lastAutoImportSummary;
+  String? lastAutoImportError;
 
   BackendAuthStatus get status => _status;
   BackendUserProfile? get currentUser => _currentUser;
@@ -48,6 +62,10 @@ class BackendAuthProvider extends ChangeNotifier {
     }
     _loading = false;
     notifyListeners();
+
+    if (_status == BackendAuthStatus.authenticated) {
+      unawaited(_triggerAutoImport());
+    }
   }
 
   Future<bool> register(String identifier, String password) =>
@@ -66,6 +84,7 @@ class BackendAuthProvider extends ChangeNotifier {
       _status = BackendAuthStatus.authenticated;
       _loading = false;
       notifyListeners();
+      unawaited(_triggerAutoImport());
       return true;
     } on ApiException catch (e) {
       _lastError = e.message;
@@ -76,13 +95,44 @@ class BackendAuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Import automatico, silenzioso, guardato contro esecuzioni
+  /// concorrenti/ripetute nella stessa sessione app.
+  Future<void> _triggerAutoImport() async {
+    if (_autoImportDone || autoImporting) return;
+    autoImporting = true;
+    notifyListeners();
+    try {
+      lastAutoImportSummary = await _importRepo.importAllFromBackend();
+      lastAutoImportError = null;
+      _autoImportDone = true;
+    } catch (e) {
+      lastAutoImportError = e.toString();
+    } finally {
+      autoImporting = false;
+      notifyListeners();
+    }
+  }
+
+  /// Forza un nuovo import anche se già eseguito in questa sessione
+  /// (es. pulsante "Aggiorna ora" nella UI, dopo che un altro
+  /// dispositivo ha sincronizzato nuovi dati).
+  Future<void> refreshFromBackend() async {
+    _autoImportDone = false;
+    await _triggerAutoImport();
+  }
+
   Future<void> logout() async {
     _loading = true;
     notifyListeners();
     await _authApi.logout();
     _currentUser = null;
     _status = BackendAuthStatus.unauthenticated;
+    _autoImportDone = false;
+    lastAutoImportSummary = null;
+    lastAutoImportError = null;
     _loading = false;
     notifyListeners();
   }
 }
+
+void unawaited(Future<void> future) {}

@@ -1,3 +1,5 @@
+import 'package:hive/hive.dart';
+
 import '../db/hive_database.dart';
 import '../db/goal_database.dart';
 import '../db/training_mode_database.dart';
@@ -272,15 +274,18 @@ class BackendImportRepository {
   ) async {
     int sessionsCreated = 0;
     int setsCreated = 0;
-
     try {
       final remoteSessions = await _api.fetchSessions();
-      // Dedup grezzo per (nome scheda + data esatta): una sessione
-      // locale con stesso nome+timestamp è considerata la stessa.
       final localSignatures = HiveDatabase.instance
           .getSessions()
           .map((s) => '${s.workoutName.trim().toLowerCase()}|${s.date}')
           .toSet();
+
+      // Accesso diretto al box, come già fa BackupService.restoreBackup:
+      // createSession() imposterebbe date=now(), inadatto qui perché
+      // dobbiamo preservare la data storica reale della sessione importata.
+      final uid = HiveDatabase.instance.currentUserId;
+      final sessionBox = Hive.box<HiveSession>('${uid}_sessions');
 
       for (final remoteSession in remoteSessions) {
         final signature =
@@ -288,18 +293,18 @@ class BackendImportRepository {
         if (localSignatures.contains(signature)) continue;
 
         final createdSession = HiveSession(
-          workoutKey: 0, // nessun riferimento diretto a scheda in import cross-device
+          workoutKey: 0,
           workoutName: remoteSession.workoutName,
           date: remoteSession.date,
           durationSeconds: remoteSession.durationSeconds,
         );
-        final newSessionKey = await HiveDatabase.instance.addSession(createdSession);
+        final newSessionKey = await sessionBox.add(createdSession) as int;
         sessionsCreated++;
         localSignatures.add(signature);
 
         final remoteSets = await _api.fetchSessionSets(remoteSession.id);
         for (final set in remoteSets) {
-          final localExerciseKey = exerciseMap.getLocalByName(set.exerciseName) ??
+          final localExerciseKey =
               await _ensureExercise(set.exerciseName, set.muscleGroup, exerciseMap);
 
           await HiveDatabase.instance.addSessionSet(HiveSessionSet(
@@ -319,7 +324,6 @@ class BackendImportRepository {
     } catch (e) {
       errors.add('Storico: $e');
     }
-
     return _SessionImportResult(sessionsCreated: sessionsCreated, setsCreated: setsCreated);
   }
 
