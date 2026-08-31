@@ -19,6 +19,7 @@ import '../../repositories/session_sync_repository.dart';
 import '../../repositories/training_mode_sync_repository.dart';
 import '../../repositories/goal_sync_repository.dart';
 import '../../repositories/sport_session_sync_repository.dart';
+import '../../repositories/backend_import_repository.dart';
 
 
 class CloudSyncScreen extends StatefulWidget {
@@ -60,6 +61,113 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
 
   bool _syncingAll = false;
   List<String>? _syncAllLog;
+
+  bool _importingAll = false;
+  ImportSummary? _lastImportResult;
+  
+  Future<void> _importAll() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Importa dal backend'),
+        content: const Text(
+          'Verranno aggiunti a questo dispositivo i dati già presenti sul backend '
+          '(creati da altri dispositivi con lo stesso account). Nessun dato locale '
+          'esistente verrà modificato o eliminato. Continuare?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Importa')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+  
+    setState(() {
+      _importingAll = true;
+      _lastImportResult = null;
+    });
+    try {
+      final result = await BackendImportRepository().importAllFromBackend();
+      if (mounted) setState(() => _lastImportResult = result);
+    } finally {
+      if (mounted) setState(() => _importingAll = false);
+    }
+  }
+  
+  Widget _buildImportSection(BuildContext context, MarkFitColors c) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.glassCardStrong,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MarkFitColors.indigo.withOpacity(0.4), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.cloud_download_rounded, color: MarkFitColors.indigo, size: 22),
+            const SizedBox(width: 8),
+            Text('Importa dal backend', style: TextStyle(
+                color: c.textPrimary, fontSize: 15, fontWeight: FontWeight.w800)),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            'Recupera su questo dispositivo i dati già sincronizzati da altri dispositivi '
+            'con lo stesso account. Nessuna modifica o cancellazione dei dati locali esistenti.',
+            style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          GlassPrimaryButton(
+            label: _importingAll ? 'Importazione in corso...' : 'Importa dal backend',
+            color: MarkFitColors.indigo,
+            onTap: _importingAll ? null : _importAll,
+          ),
+          if (_lastImportResult != null) ...[
+            const SizedBox(height: 14),
+            Text(
+              '${_lastImportResult!.exercisesImported} esercizi, '
+              '${_lastImportResult!.trainingModesImported} modalità, '
+              '${_lastImportResult!.workoutsImported} schede '
+              '(${_lastImportResult!.workoutExercisesImported} esercizi, '
+              '${_lastImportResult!.circuitsImported} circuiti), '
+              '${_lastImportResult!.sessionsImported} sessioni '
+              '(${_lastImportResult!.sessionSetsImported} serie), '
+              '${_lastImportResult!.goalsImported} obiettivi '
+              '(${_lastImportResult!.goalCompletionsImported} completamenti) importati.',
+              style: TextStyle(color: c.textSecondary, fontSize: 12),
+            ),
+            if (_lastImportResult!.hasErrors) ...[
+              const SizedBox(height: 8),
+              ..._lastImportResult!.errors.map((e) => Text(e,
+                  style: const TextStyle(color: MarkFitColors.red, fontSize: 11))),
+            ],
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: MarkFitColors.orange.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: MarkFitColors.orange.withOpacity(0.3)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.info_outline_rounded, color: MarkFitColors.orange, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Riavvia l\'app (o naviga via e torna) per vedere i nuovi dati nelle '
+                    'schermate Home/Allenamenti/Storico.',
+                    style: TextStyle(color: c.textSecondary, fontSize: 11),
+                  ),
+                ),
+              ]),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   Future<void> _syncAll() async {
     setState(() {
@@ -587,6 +695,8 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                       _buildAuthenticatedState(context, c, auth),
                       const SizedBox(height: 20),
                       _buildSyncAllSection(context, c),
+                      const SizedBox(height: 20),
+                      _buildImportSection(context, c),
                       const SizedBox(height: 20),
                       _buildExerciseSyncSection(context, c),
                       const SizedBox(height: 20),
