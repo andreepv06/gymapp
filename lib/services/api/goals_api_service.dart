@@ -5,6 +5,13 @@ class GoalsApiService {
   final ApiClient _client;
   GoalsApiService({ApiClient? client}) : _client = client ?? ApiClient.instance;
 
+  Future<List<RemoteGoal>> fetchAll() async {
+    final json = await _client.get('/goals');
+    final raw = json['data'] ?? json.values.first;
+    if (raw is! List) return [];
+    return raw.whereType<Map<String, dynamic>>().map(RemoteGoal.fromJson).toList();
+  }
+
   Future<RemoteGoal> create({
     required String title,
     String? description,
@@ -26,8 +33,7 @@ class GoalsApiService {
         'scheduleDaysOfWeek': scheduleDaysOfWeek,
       if (scheduleStartDate != null) 'scheduleStartDate': scheduleStartDate,
       if (scheduleEndDate != null) 'scheduleEndDate': scheduleEndDate,
-      if (scheduleCustomInterval != null)
-        'scheduleCustomInterval': scheduleCustomInterval,
+      if (scheduleCustomInterval != null) 'scheduleCustomInterval': scheduleCustomInterval,
       if (deadlineDate != null) 'deadlineDate': deadlineDate,
       'colorIndex': colorIndex,
     });
@@ -35,8 +41,6 @@ class GoalsApiService {
   }
 
   Future<void> setCompletion(String goalId, String date, bool completed) async {
-    await _client.put('/goals/$goalId/completions/$date', body: {
-      'completed': completed,
-    });
+    await _client.put('/goals/$goalId/completions/$date', body: {'completed': completed});
   }
 }

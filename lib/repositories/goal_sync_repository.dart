@@ -22,10 +22,12 @@ class GoalSyncResult {
 }
 
 /// Sincronizza obiettivi e completamenti locali (Hive) verso il
-/// backend, in modo idempotente sugli obiettivi (mapping persistito).
-/// I completamenti vengono risincronizzati anche per obiettivi già
-/// mappati: è sicuro perché PUT /goals/:id/completions/:date è
-/// idempotente per costruzione lato backend (upsert sulla data).
+/// backend, idempotente su due livelli come per esercizi/modalità:
+///  1. mapping locale↔remoto persistito;
+///  2. fallback per titolo+categoria contro l'elenco remoto, per
+///     coprire il cambio di account V1 locale mantenendo lo stesso
+///     account backend (le chiavi Hive non sono uniche tra account
+///     V1 diversi — causa già diagnosticata sulle modalità).
 class GoalSyncRepository {
   static const domain = 'goal';
 
@@ -36,8 +38,16 @@ class GoalSyncRepository {
       : _api = api ?? GoalsApiService(),
         _mapping = mapping ?? SyncMappingStorage();
 
+  String _signature(String title, String category) =>
+      '${title.trim().toLowerCase()}|${category.trim().toLowerCase()}';
+
   Future<GoalSyncResult> syncLocalGoalsToBackend() async {
     final localGoals = GoalDatabase.instance.getGoals();
+
+    final remoteGoals = await _api.fetchAll();
+    final remoteBySignature = {
+      for (final g in remoteGoals) _signature(g.title, g.category): g.id,
+    };
 
     int goalsCreated = 0;
     int goalsAlreadySynced = 0;
@@ -49,38 +59,46 @@ class GoalSyncRepository {
       final localKey = goal.key;
       String remoteGoalId;
 
-      final existing = await _mapping.getRemoteId(domain, localKey);
-      if (existing != null) {
-        remoteGoalId = existing;
+      final mapped = await _mapping.getRemoteId(domain, localKey);
+      if (mapped != null) {
+        remoteGoalId = mapped;
         goalsAlreadySynced++;
       } else {
-        try {
-          final remote = await _api.create(
-            title: goal.title,
-            description: goal.description,
-            category: goal.category,
-            scheduleType: goal.scheduleType,
-            scheduleDaysOfWeek: goal.scheduleDaysOfWeek,
-            scheduleStartDate: goal.scheduleStartDate,
-            scheduleEndDate: goal.scheduleEndDate,
-            scheduleCustomInterval: goal.scheduleCustomInterval,
-            deadlineDate: goal.deadlineDate,
-            colorIndex: goal.colorIndex,
-          );
-          remoteGoalId = remote.id;
-          await _mapping.setRemoteId(domain, localKey, remoteGoalId);
-          goalsCreated++;
-        } on ApiException {
-          goalsFailed++;
-          continue;
+        final signature = _signature(goal.title, goal.category);
+        final existingId = remoteBySignature[signature];
+        if (existingId != null) {
+          await _mapping.setRemoteId(domain, localKey, existingId);
+          remoteGoalId = existingId;
+          goalsAlreadySynced++;
+        } else {
+          try {
+            final remote = await _api.create(
+              title: goal.title,
+              description: goal.description,
+              category: goal.category,
+              scheduleType: goal.scheduleType,
+              scheduleDaysOfWeek: goal.scheduleDaysOfWeek,
+              scheduleStartDate: goal.scheduleStartDate,
+              scheduleEndDate: goal.scheduleEndDate,
+              scheduleCustomInterval: goal.scheduleCustomInterval,
+              deadlineDate: goal.deadlineDate,
+              colorIndex: goal.colorIndex,
+            );
+            remoteGoalId = remote.id;
+            await _mapping.setRemoteId(domain, localKey, remoteGoalId);
+            remoteBySignature[signature] = remoteGoalId;
+            goalsCreated++;
+          } on ApiException {
+            goalsFailed++;
+            continue;
+          }
         }
       }
 
       final completions = GoalDatabase.instance.getCompletionsForGoal(goal.key);
       for (final completion in completions) {
         try {
-          await _api.setCompletion(
-              remoteGoalId, completion.date, completion.completed);
+          await _api.setCompletion(remoteGoalId, completion.date, completion.completed);
           completionsCreated++;
         } on ApiException {
           completionsFailed++;
