@@ -122,10 +122,6 @@ class AuthProvider extends ChangeNotifier {
         await GoalDatabase.instance.switchUser(_currentIdentifier!);
         await SportDatabase.instance.switchUser(_currentIdentifier!);
         await TrainingModeDatabase.instance.switchUser(_currentIdentifier!);
-        // NOTA: qui non abbiamo la password in chiaro (checkLogin
-        // ripristina solo lo stato, non riautentica) — l'identità
-        // cloud viene rinnovata da BackendAuthProvider.restoreSession()
-        // in modo indipendente, tramite il proprio token salvato.
       }
     } catch (e) {
       debugPrint('[AUTH] checkLogin error: $e');
@@ -210,12 +206,15 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // MODIFICATO — quando l'identifier non è tra gli account LOCALI di
-  // questo dispositivo, prima di rifiutare il login verifica se
-  // esiste già un account sul backend con queste credenziali
-  // (registrato da un altro dispositivo). Questo è il fix per
-  // "login con lo stesso account da un dispositivo nuovo":
-  // prima la ricerca era SOLO locale e falliva sempre in quel caso.
+  // MODIFICATO — FIX CRITICO: prima di chiedere la verifica/import al
+  // backend (che scrive subito nei box Hive "correnti"), passiamo
+  // esplicitamente ai box Hive di questo identifier. In precedenza lo
+  // switchUser avveniva solo DENTRO _loginInternal, DOPO la verifica:
+  // l'import scaricava quindi i dati nei box dell'utente sbagliato (o
+  // di nessun utente), che venivano poi "seppelliti" dallo switchUser
+  // successivo che apre i box (vuoti) del nuovo utente — i dati
+  // sembravano scaricarsi ma sparire subito. Ora l'ordine è corretto:
+  // switch PRIMA, poi verifica+import, poi tutto il resto del login.
   Future<String?> login({
     required String identifier,
     required String password,
@@ -242,20 +241,25 @@ class AuthProvider extends ChangeNotifier {
         return null;
       }
 
-      // NUOVO — account sconosciuto su questo dispositivo: verifica
-      // sul backend prima di dichiarare fallito il login.
+      // Account sconosciuto su questo dispositivo: verifica sul
+      // backend prima di dichiarare fallito il login.
       debugPrint('[AUTH] "$id" non trovato localmente, verifico sul backend...');
+
+      // FIX — passa ai box Hive di "id" PRIMA della verifica, perché
+      // la verifica stessa scarica e scrive subito i dati dell'utente.
+      await HiveDatabase.instance.switchUser(id);
+      await GoalDatabase.instance.switchUser(id);
+      await SportDatabase.instance.switchUser(id);
+      await TrainingModeDatabase.instance.switchUser(id);
+
       final remoteOk = await CloudAuthBridge.instance.verifyRemoteAccount(id, password);
       if (!remoteOk) {
         return 'Account non trovato. Registrati prima.';
       }
 
       // Credenziali valide sul backend: crea l'account "ombra" su
-      // questo dispositivo (stesso identifier/password) così tutta
-      // la parte V1 (Hive per-utente, provider, UI) funziona come per
-      // un account nativo. I dati reali (schede, esercizi, storico,
-      // obiettivi) sono già stati scaricati durante la verifica sul
-      // backend, prima di arrivare qui.
+      // questo dispositivo. I dati reali sono già stati scaricati
+      // nei box giusti durante la verifica, appena sopra.
       final type = _isEmail(id) ? 'email' : 'username';
       _accounts.add(UserAccount(identifier: id, password: password, type: type));
       await _saveAccounts();
@@ -277,13 +281,12 @@ class AuthProvider extends ChangeNotifier {
     await prefs.setString('current_identifier', identifier);
     await prefs.setString('current_type', type);
     debugPrint('[AUTH] _loginInternal: loggato come $identifier');
+    // Idempotente: se già switchati sopra (caso nuovo dispositivo),
+    // questo è un no-op sicuro sugli stessi box già aperti.
     await HiveDatabase.instance.switchUser(identifier);
     await GoalDatabase.instance.switchUser(identifier);
     await SportDatabase.instance.switchUser(identifier);
     await TrainingModeDatabase.instance.switchUser(identifier);
-    // Allinea trasparentemente l'identità sul backend cloud con le
-    // stesse credenziali V1 appena usate. Fire-and-forget: non blocca
-    // né fa fallire il login V1 se il backend non è raggiungibile.
     unawaited(CloudAuthBridge.instance.syncIdentity(identifier, password));
     notifyListeners();
   }
