@@ -11705,7 +11705,7 @@ this.d=b
 this.a=c},
 aXG:function aXG(){},
 ac_:function ac_(a){this.a=a},
-ac6:function ac6(a){this.a="http://localhost:3000/api"
+ac6:function ac6(a){this.a="https://gymapp-i09h.onrender.com/api"
 this.b=a},
 b4I(){return B.GF},
 bg1(a,b){switch(a){case 400:return new A.dV(b==null?"Richiesta non valida.":b,B.Gz)

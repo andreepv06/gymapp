@@ -15,8 +15,16 @@ class ApiClient {
   ApiClient._internal();
   static final ApiClient instance = ApiClient._internal();
 
-  static const _defaultBaseUrl = 'http://localhost:3000/api';
+  // MODIFICATO — il default deve puntare al backend reale in
+  // produzione (Render), non a localhost. Prima di questa modifica
+  // ogni dispositivo che non avesse MAI aperto manualmente
+  // "Sincronizzazione cloud" e impostato l'URL a mano parlava con
+  // localhost:3000, che su un dispositivo diverso dal PC di sviluppo
+  // non esiste mai (ERR_CONNECTION_REFUSED) — causa reale del
+  // fallimento di login/registrazione/sync su un secondo dispositivo.
+  static const _defaultBaseUrl = 'https://gymapp-i09h.onrender.com/api';
   static const _requestTimeout = Duration(seconds: 60);
+
   String _baseUrl = _defaultBaseUrl;
   final TokenStorage _tokens = TokenStorage();
 
@@ -71,7 +79,6 @@ class ApiClient {
       }
       final uri = _uri(path);
       final encodedBody = body != null ? jsonEncode(body) : null;
-
       response = await _dispatch(method, uri, headers, encodedBody)
           .timeout(_requestTimeout);
     } on TimeoutException {
