@@ -20,6 +20,9 @@ class ImportSummary {
   final int goalsImported;
   final int goalCompletionsImported;
   final List<String> errors;
+  // NUOVO — numero di schede rimosse localmente perché non più
+  // presenti sul backend (cancellate da un altro dispositivo).
+  final int workoutsPruned;
 
   const ImportSummary({
     required this.exercisesImported,
@@ -32,6 +35,7 @@ class ImportSummary {
     required this.goalsImported,
     required this.goalCompletionsImported,
     required this.errors,
+    this.workoutsPruned = 0,
   });
 
   bool get hasErrors => errors.isNotEmpty;
@@ -49,7 +53,10 @@ class ImportSummary {
 ///    su questo stesso dispositivo lo riconosce come "già
 ///    sincronizzato" invece di rimandarlo al backend (evita un loop
 ///    invio→ricezione→reinvio);
-///  - nessuna cancellazione, in nessun caso.
+///  - NUOVO: se un elemento locale ha una mappatura verso un ID
+///    remoto che non è più presente nella lista scaricata dal
+///    backend, significa che è stato eliminato da un altro
+///    dispositivo → viene rimosso anche qui (_pruneDeletedWorkouts).
 ///
 /// Sport sessions non incluso in questo primo blocco (nessuna
 /// dipendenza da altri domini, aggiunta simmetrica rimandata).
@@ -74,6 +81,9 @@ class BackendImportRepository {
     final exerciseIdMap = await _importExercises(errors);
     final trainingModeIdMap = await _importTrainingModes(errors);
     final workoutResult = await _importWorkouts(errors, exerciseIdMap, trainingModeIdMap);
+    // NUOVO — riconciliazione cancellazioni: dopo aver importato ciò
+    // che è nuovo, rimuove localmente ciò che è sparito dal backend.
+    final workoutsPruned = await _pruneDeletedWorkouts(errors);
     final sessionResult = await _importSessions(errors, exerciseIdMap, trainingModeIdMap);
     final goalResult = await _importGoals(errors);
 
@@ -88,6 +98,7 @@ class BackendImportRepository {
       goalsImported: goalResult.goalsCreated,
       goalCompletionsImported: goalResult.completionsCreated,
       errors: errors,
+      workoutsPruned: workoutsPruned,
     );
   }
 
@@ -264,6 +275,51 @@ class BackendImportRepository {
       exercisesLinked: exercisesLinked,
       circuitsCreated: circuitsCreated,
     );
+  }
+
+  // ── NUOVO — Riconciliazione cancellazioni schede ─────────
+  //
+  // Scenario: sul PC l'utente elimina una scheda già sincronizzata.
+  // WorkoutProvider.deleteWorkout propaga subito il DELETE al backend
+  // e rimuove la mappatura locale su quel dispositivo. Ma sul
+  // TELEFONO la scheda esiste ancora in Hive, con una mappatura verso
+  // un remoteId che ORA non esiste più sul backend.
+  //
+  // Qui scarichiamo l'elenco aggiornato delle schede remote e, per
+  // ogni mappatura locale "workout" che punta a un id non più
+  // presente, eliminiamo la scheda anche su questo dispositivo e
+  // ripuliamo la mappatura. Se una scheda non è MAI stata
+  // sincronizzata (nessuna mappatura), non viene mai toccata da
+  // questo meccanismo: solo ciò che era già stato condiviso col
+  // backend può essere rimosso in questo modo.
+  Future<int> _pruneDeletedWorkouts(List<String> errors) async {
+    int pruned = 0;
+    try {
+      final remoteWorkouts = await _api.fetchWorkouts();
+      final remoteIds = remoteWorkouts.map((w) => w.id).toSet();
+      final localMappings = await _mapping.getAllMappings(_workoutDomain);
+
+      for (final entry in localMappings.entries) {
+        if (remoteIds.contains(entry.value)) continue;
+
+        // La mappatura punta a un id remoto che non esiste più:
+        // la scheda è stata eliminata altrove.
+        final localKey = int.tryParse(entry.key);
+        if (localKey != null) {
+          try {
+            await HiveDatabase.instance.deleteWorkout(localKey);
+            pruned++;
+          } catch (_) {
+            // La scheda locale potrebbe già non esistere più
+            // (es. eliminata manualmente anche qui): non è un errore.
+          }
+        }
+        await _mapping.removeMapping(_workoutDomain, entry.key);
+      }
+    } catch (e) {
+      errors.add('Pulizia schede eliminate: $e');
+    }
+    return pruned;
   }
 
   // ── Storico + serie ───────────────────────────────────────

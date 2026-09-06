@@ -90,7 +90,10 @@ class MyApp extends StatelessWidget {
         // solo dopo il login). Le schermate che lo usano (Fase 3+)
         // chiamano loadModes() nel proprio initState.
         ChangeNotifierProvider(create: (_) => TrainingModeProvider()),
-        ChangeNotifierProvider(create: (_) => BackendAuthProvider()..restoreSession()),
+        ChangeNotifierProvider(
+          create: (_) => BackendAuthProvider()..restoreSession(),
+          lazy: false,
+        ),
         ChangeNotifierProvider(
             create: (_) => ProfileProvider()..loadProfile()),
       ],

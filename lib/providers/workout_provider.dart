@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/hive_models.dart';
 import '../db/hive_database.dart';
+import '../services/sync/sync_trigger.dart';
+import '../services/sync/delete_propagator.dart';
+
+void _unawaited(Future<void> future) {}
 
 class WorkoutProvider extends ChangeNotifier {
   List<HiveWorkout> _workouts = [];
@@ -29,6 +33,7 @@ class WorkoutProvider extends ChangeNotifier {
     final key =
         await HiveDatabase.instance.addWorkout(workout);
     loadWorkouts();
+    SyncTrigger.instance.requestSync();
     return key;
   }
 
@@ -37,11 +42,19 @@ class WorkoutProvider extends ChangeNotifier {
     await HiveDatabase.instance
         .updateWorkout(key, newName);
     loadWorkouts();
+    SyncTrigger.instance.requestSync();
   }
 
+  // MODIFICATO — propaga la cancellazione al backend tramite
+  // DeletePropagator (già esistente nel progetto, best-effort e
+  // silenzioso: il delete locale avviene comunque sempre per primo).
   Future<void> deleteWorkout(dynamic key) async {
+    final intKey = key is int ? key : null;
     await HiveDatabase.instance.deleteWorkout(key);
     loadWorkouts();
+    if (intKey != null) {
+      _unawaited(DeletePropagator.propagateWorkoutDelete(intKey));
+    }
   }
 
   Future<void> addExercisesToWorkout(
@@ -52,6 +65,7 @@ class WorkoutProvider extends ChangeNotifier {
     }
     if (list.isNotEmpty) {
       loadWorkoutExercises(list.first.workoutKey);
+      SyncTrigger.instance.requestSync();
     }
   }
 
@@ -60,6 +74,7 @@ class WorkoutProvider extends ChangeNotifier {
     await HiveDatabase.instance
         .updateWorkoutExercise(key, updated);
     loadWorkoutExercises(updated.workoutKey);
+    SyncTrigger.instance.requestSync();
   }
 
   Future<void> removeExerciseFromWorkout(
@@ -67,6 +82,7 @@ class WorkoutProvider extends ChangeNotifier {
     await HiveDatabase.instance
         .deleteWorkoutExercise(key);
     loadWorkoutExercises(workoutKey);
+    SyncTrigger.instance.requestSync();
   }
 
   Future<void> reorderExercises(dynamic workoutKey,

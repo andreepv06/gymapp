@@ -8,18 +8,13 @@ import '../../repositories/session_sync_repository.dart';
 import '../../repositories/training_mode_sync_repository.dart';
 import '../../repositories/goal_sync_repository.dart';
 import '../../repositories/sport_session_sync_repository.dart';
+import '../../repositories/backend_import_repository.dart';
 import '../../services/api/api_client.dart';
 import '../../services/api/api_exception.dart';
+import '../../services/sync/sync_engine.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
 import '../admin/admin_users_screen.dart';
-import '../../repositories/exercise_sync_repository.dart';
-import '../../repositories/workout_sync_repository.dart';
-import '../../repositories/session_sync_repository.dart';
-import '../../repositories/training_mode_sync_repository.dart';
-import '../../repositories/goal_sync_repository.dart';
-import '../../repositories/sport_session_sync_repository.dart';
-import '../../repositories/backend_import_repository.dart';
 
 
 class CloudSyncScreen extends StatefulWidget {
@@ -95,91 +90,90 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     }
   }
   
-Widget _buildImportSection(BuildContext context, MarkFitColors c) {
-  final auth = context.watch<BackendAuthProvider>();
-  final summary = auth.lastAutoImportSummary;
+  Widget _buildImportSection(BuildContext context, MarkFitColors c) {
+    final auth = context.watch<BackendAuthProvider>();
+    final summary = auth.lastAutoImportSummary;
 
-  return Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: c.glassCardStrong,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: MarkFitColors.indigo.withOpacity(0.4), width: 1.2),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(children: [
-          const Icon(Icons.cloud_sync_rounded, color: MarkFitColors.indigo, size: 22),
-          const SizedBox(width: 8),
-          Text('Dati da altri dispositivi', style: TextStyle(
-              color: c.textPrimary, fontSize: 15, fontWeight: FontWeight.w800)),
-        ]),
-        const SizedBox(height: 6),
-        Text(
-          auth.autoImporting
-              ? 'Recupero automatico in corso...'
-              : 'I dati sincronizzati da altri dispositivi con questo account vengono '
-                'recuperati automaticamente all\'accesso. Nessuna modifica o cancellazione '
-                'dei dati locali esistenti.',
-          style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
-        ),
-        const SizedBox(height: 14),
-        GlassPrimaryButton(
-          label: auth.autoImporting ? 'Aggiornamento in corso...' : 'Aggiorna ora',
-          color: MarkFitColors.indigo,
-          onTap: auth.autoImporting ? null : () => auth.refreshFromBackend(),
-        ),
-        if (auth.lastAutoImportError != null) ...[
-          const SizedBox(height: 12),
-          Text('Errore: ${auth.lastAutoImportError}',
-              style: const TextStyle(color: MarkFitColors.red, fontSize: 12)),
-        ],
-        if (summary != null) ...[
-          const SizedBox(height: 14),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.glassCardStrong,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MarkFitColors.indigo.withOpacity(0.4), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.cloud_sync_rounded, color: MarkFitColors.indigo, size: 22),
+            const SizedBox(width: 8),
+            Text('Dati da altri dispositivi', style: TextStyle(
+                color: c.textPrimary, fontSize: 15, fontWeight: FontWeight.w800)),
+          ]),
+          const SizedBox(height: 6),
           Text(
-            '${summary.exercisesImported} esercizi, '
-            '${summary.trainingModesImported} modalità, '
-            '${summary.workoutsImported} schede '
-            '(${summary.workoutExercisesImported} esercizi, '
-            '${summary.circuitsImported} circuiti), '
-            '${summary.sessionsImported} sessioni '
-            '(${summary.sessionSetsImported} serie), '
-            '${summary.goalsImported} obiettivi '
-            '(${summary.goalCompletionsImported} completamenti) recuperati.',
-            style: TextStyle(color: c.textSecondary, fontSize: 12),
+            auth.autoImporting
+                ? 'Recupero automatico in corso...'
+                : 'I dati sincronizzati da altri dispositivi con questo account vengono '
+                  'recuperati automaticamente all\'accesso. Nessuna modifica o cancellazione '
+                  'dei dati locali esistenti.',
+            style: TextStyle(color: c.textTertiary, fontSize: 12, height: 1.4),
           ),
-          if (summary.hasErrors) ...[
-            const SizedBox(height: 8),
-            ...summary.errors.map((e) => Text(e,
-                style: const TextStyle(color: MarkFitColors.red, fontSize: 11))),
+          const SizedBox(height: 14),
+          GlassPrimaryButton(
+            label: auth.autoImporting ? 'Aggiornamento in corso...' : 'Aggiorna ora',
+            color: MarkFitColors.indigo,
+            onTap: auth.autoImporting ? null : () => auth.refreshFromBackend(),
+          ),
+          if (auth.lastAutoImportError != null) ...[
+            const SizedBox(height: 12),
+            Text('Errore: ${auth.lastAutoImportError}',
+                style: const TextStyle(color: MarkFitColors.red, fontSize: 12)),
           ],
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: MarkFitColors.orange.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: MarkFitColors.orange.withOpacity(0.3)),
+          if (summary != null) ...[
+            const SizedBox(height: 14),
+            Text(
+              '${summary.exercisesImported} esercizi, '
+              '${summary.trainingModesImported} modalità, '
+              '${summary.workoutsImported} schede '
+              '(${summary.workoutExercisesImported} esercizi, '
+              '${summary.circuitsImported} circuiti), '
+              '${summary.sessionsImported} sessioni '
+              '(${summary.sessionSetsImported} serie), '
+              '${summary.goalsImported} obiettivi '
+              '(${summary.goalCompletionsImported} completamenti) recuperati.',
+              style: TextStyle(color: c.textSecondary, fontSize: 12),
             ),
-            child: Row(children: [
-              const Icon(Icons.info_outline_rounded, color: MarkFitColors.orange, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Se non vedi subito i nuovi dati in Home/Allenamenti/Storico, '
-                  'naviga via e torna in quella schermata.',
-                  style: TextStyle(color: c.textSecondary, fontSize: 11),
-                ),
+            if (summary.hasErrors) ...[
+              const SizedBox(height: 8),
+              ...summary.errors.map((e) => Text(e,
+                  style: const TextStyle(color: MarkFitColors.red, fontSize: 11))),
+            ],
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: MarkFitColors.orange.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: MarkFitColors.orange.withOpacity(0.3)),
               ),
-            ]),
-          ),
+              child: Row(children: [
+                const Icon(Icons.info_outline_rounded, color: MarkFitColors.orange, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Se non vedi subito i nuovi dati in Home/Allenamenti/Storico, '
+                    'naviga via e torna in quella schermata.',
+                    style: TextStyle(color: c.textSecondary, fontSize: 11),
+                  ),
+                ),
+              ]),
+            ),
+          ],
         ],
-      ],
-    ),
-  );
-}
-
+      ),
+    );
+  }
 
   Future<void> _syncAll() async {
     setState(() {
@@ -704,13 +698,16 @@ Widget _buildImportSection(BuildContext context, MarkFitColors c) {
                     ),
                     const SizedBox(height: 24),
                     if (auth.isAuthenticated) ...[
-                      _buildAuthenticatedState(context, c, auth),
+                      AnimatedBuilder(
+                        animation: auth.syncEngine,
+                        builder: (_, __) => _buildAuthenticatedState(context, c, auth),
+                      ),
+                      const SizedBox(height: 20),
+                      _buildExerciseSyncSection(context, c),
                       const SizedBox(height: 20),
                       _buildSyncAllSection(context, c),
                       const SizedBox(height: 20),
                       _buildImportSection(context, c),
-                      const SizedBox(height: 20),
-                      _buildExerciseSyncSection(context, c),
                       const SizedBox(height: 20),
                       _buildWorkoutSyncSection(context, c),
                       const SizedBox(height: 20),
@@ -734,6 +731,42 @@ Widget _buildImportSection(BuildContext context, MarkFitColors c) {
     );
   }
 
+  Widget _buildSyncEngineStatus(
+      BuildContext context, MarkFitColors c, BackendAuthProvider auth) {
+    final engine = auth.syncEngine;
+    String label;
+    Color color;
+    switch (engine.phase) {
+      case SyncPhase.uploading:
+        label = 'Invio dati in corso...';
+        color = MarkFitColors.indigo;
+        break;
+      case SyncPhase.downloading:
+        label = 'Ricezione dati in corso...';
+        color = MarkFitColors.indigo;
+        break;
+      case SyncPhase.error:
+        label = 'Ultimo tentativo fallito (${engine.consecutiveFailures}x) — riprova automaticamente';
+        color = MarkFitColors.orange;
+        break;
+      case SyncPhase.idle:
+        label = engine.lastSuccessAt != null
+            ? 'Sincronizzato — ultimo aggiornamento ${_fmtTime(engine.lastSuccessAt!)}'
+            : 'In attesa del primo ciclo di sincronizzazione...';
+        color = MarkFitColors.teal;
+        break;
+    }
+    return Row(children: [
+      Container(width: 7, height: 7,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      const SizedBox(width: 6),
+      Expanded(child: Text(label, style: TextStyle(color: c.textTertiary, fontSize: 11))),
+    ]);
+  }
+
+  String _fmtTime(DateTime t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:${t.second.toString().padLeft(2, '0')}';
+
   Widget _buildAuthenticatedState(
       BuildContext context, MarkFitColors c, BackendAuthProvider auth) {
     final user = auth.currentUser;
@@ -755,6 +788,8 @@ Widget _buildImportSection(BuildContext context, MarkFitColors c) {
                 color: c.textPrimary, fontSize: 14,
                 fontWeight: FontWeight.w700)),
           ]),
+          const SizedBox(height: 10),
+          _buildSyncEngineStatus(context, c, auth),
           const SizedBox(height: 8),
           Text('Identifier: ${user?.identifier ?? '-'}',
               style: TextStyle(color: c.textSecondary, fontSize: 13)),

@@ -9,6 +9,7 @@ import '../models/hive_models.dart';
 import '../models/training_mode.dart';
 import '../services/notification_service.dart';
 import '../services/session_classification_service.dart';
+import '../services/sync/sync_trigger.dart';
 
 class ActiveSet {
   int setNumber;
@@ -1235,6 +1236,7 @@ class SessionProvider extends ChangeNotifier {
       }
     }
     await _clearPausedState();
+        SyncTrigger.instance.requestSync();
     _resetSession();
   }
 

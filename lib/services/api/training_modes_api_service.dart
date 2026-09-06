@@ -31,4 +31,7 @@ class TrainingModesApiService {
   Future<void> setDefault(String id) async {
     await _client.post('/training-modes/$id/set-default');
   }
+    Future<void> softDelete(String remoteId) async {
+    await _client.delete('/training-modes/$remoteId');
+  }
 }

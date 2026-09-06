@@ -33,4 +33,13 @@ class ExercisesApiService {
     });
     return RemoteExercise.fromJson(json);
   }
+
+  /// NUOVO — propaga l'eliminazione di un esercizio al backend.
+  /// Attenzione: il backend usa onDelete Restrict su Exercise per
+  /// WorkoutExercise/SessionSet — se l'esercizio è ancora referenziato
+  /// da una scheda o da uno storico remoti, la chiamata fallirà con un
+  /// errore del server. Il chiamante deve gestire l'eccezione.
+  Future<void> delete(String id) async {
+    await _client.delete('/exercises/$id');
+  }
 }

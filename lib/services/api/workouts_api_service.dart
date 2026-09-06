@@ -48,4 +48,11 @@ class WorkoutsApiService {
       'sortOrder': sortOrder,
     });
   }
+
+  /// NUOVO — propaga l'eliminazione di una scheda al backend.
+  /// Il backend elimina in cascata circuiti ed esercizi collegati
+  /// (vedi schema Prisma: onDelete Cascade su Workout).
+  Future<void> delete(String id) async {
+    await _client.delete('/workouts/$id');
+  }
 }

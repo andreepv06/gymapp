@@ -5,6 +5,7 @@ import '../db/hive_database.dart';
 import '../db/goal_database.dart';
 import '../db/sport_database.dart';
 import '../db/training_mode_database.dart';
+import '../services/sync/cloud_auth_bridge.dart';
 
 class UserAccount {
   final String identifier;
@@ -47,8 +48,7 @@ class UserAccount {
         'avatarBase64': avatarBase64,
       };
 
-  factory UserAccount.fromJson(Map<String, dynamic> json) =>
-      UserAccount(
+  factory UserAccount.fromJson(Map<String, dynamic> json) => UserAccount(
         identifier: json['identifier'] as String,
         password: json['password'] as String,
         type: json['type'] as String? ?? 'email',
@@ -96,8 +96,7 @@ class AuthProvider extends ChangeNotifier {
   UserAccount? get currentAccount {
     if (_currentIdentifier == null) return null;
     try {
-      return _accounts
-          .firstWhere((a) => a.identifier == _currentIdentifier);
+      return _accounts.firstWhere((a) => a.identifier == _currentIdentifier);
     } catch (_) {
       return null;
     }
@@ -112,30 +111,21 @@ class AuthProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       _isLoggedIn = prefs.getBool('is_logged_in') ?? false;
-      _currentIdentifier =
-          prefs.getString('current_identifier') ??
-              prefs.getString('user_email');
-      _currentType =
-          prefs.getString('current_type') ?? 'email';
+      _currentIdentifier = prefs.getString('current_identifier') ?? prefs.getString('user_email');
+      _currentType = prefs.getString('current_type') ?? 'email';
       _accounts = await _readAccountsFromDisk();
-
-      debugPrint(
-          '[AUTH] checkLogin: isLoggedIn=$_isLoggedIn, '
+      debugPrint('[AUTH] checkLogin: isLoggedIn=$_isLoggedIn, '
           'identifier=$_currentIdentifier, '
           'accounts=${_accounts.map((a) => a.identifier).toList()}');
-
       if (_isLoggedIn && _currentIdentifier != null) {
-        await HiveDatabase.instance
-            .switchUser(_currentIdentifier!);
-        // Sincronizza i DB indipendenti dei nuovi sistemi
-        // con lo stesso utente già autenticato dal sistema Fitness.
+        await HiveDatabase.instance.switchUser(_currentIdentifier!);
         await GoalDatabase.instance.switchUser(_currentIdentifier!);
         await SportDatabase.instance.switchUser(_currentIdentifier!);
-        // FASE 1 — Sistema Modalità di Allenamento: apre/semina il
-        // box dedicato per l'utente corrente, stesso pattern di
-        // GoalDatabase/SportDatabase.
-        await TrainingModeDatabase.instance
-            .switchUser(_currentIdentifier!);
+        await TrainingModeDatabase.instance.switchUser(_currentIdentifier!);
+        // NOTA: qui non abbiamo la password in chiaro (checkLogin
+        // ripristina solo lo stato, non riautentica) — l'identità
+        // cloud viene rinnovata da BackendAuthProvider.restoreSession()
+        // in modo indipendente, tramite il proprio token salvato.
       }
     } catch (e) {
       debugPrint('[AUTH] checkLogin error: $e');
@@ -152,12 +142,9 @@ class AuthProvider extends ChangeNotifier {
     if (raw != null && raw.isNotEmpty) {
       try {
         final list = jsonDecode(raw) as List;
-        final accounts = list
-            .map((e) =>
-                UserAccount.fromJson(e as Map<String, dynamic>))
-            .toList();
-        debugPrint(
-            '[AUTH] accounts letti: ${accounts.map((a) => a.identifier).toList()}');
+        final accounts =
+            list.map((e) => UserAccount.fromJson(e as Map<String, dynamic>)).toList();
+        debugPrint('[AUTH] accounts letti: ${accounts.map((a) => a.identifier).toList()}');
         return accounts;
       } catch (e) {
         debugPrint('[AUTH] parse error: $e');
@@ -168,16 +155,8 @@ class AuthProvider extends ChangeNotifier {
     final oldPassword = prefs.getString('user_password');
     if (oldEmail != null && oldPassword != null) {
       debugPrint('[AUTH] migrazione vecchio account: $oldEmail');
-      final migrated = [
-        UserAccount(
-            identifier: oldEmail,
-            password: oldPassword,
-            type: 'email')
-      ];
-      await prefs.setString(
-        'accounts',
-        jsonEncode(migrated.map((a) => a.toJson()).toList()),
-      );
+      final migrated = [UserAccount(identifier: oldEmail, password: oldPassword, type: 'email')];
+      await prefs.setString('accounts', jsonEncode(migrated.map((a) => a.toJson()).toList()));
       return migrated;
     }
     debugPrint('[AUTH] nessun account su disco');
@@ -186,11 +165,9 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _saveAccounts() async {
     final prefs = await SharedPreferences.getInstance();
-    final json =
-        jsonEncode(_accounts.map((a) => a.toJson()).toList());
+    final json = jsonEncode(_accounts.map((a) => a.toJson()).toList());
     await prefs.setString('accounts', json);
-    debugPrint(
-        '[AUTH] _saveAccounts: salvati ${_accounts.length} account: '
+    debugPrint('[AUTH] _saveAccounts: salvati ${_accounts.length} account: '
         '${_accounts.map((a) => a.identifier).toList()}');
     final verify = prefs.getString('accounts');
     debugPrint('[AUTH] verifica disco dopo save: $verify');
@@ -205,10 +182,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       final id = identifier.trim().toLowerCase();
       final type = _isEmail(id) ? 'email' : 'username';
-
-      debugPrint(
-          '[AUTH] register chiamato con id="$id", type=$type');
-
+      debugPrint('[AUTH] register chiamato con id="$id", type=$type');
       if (id.isEmpty) return 'Inserisci email o username';
       if (!_isEmail(id) && id.length < 3) {
         return 'Username troppo corto (min 3 caratteri)';
@@ -216,32 +190,19 @@ class AuthProvider extends ChangeNotifier {
       if (password.length < 6) {
         return 'Password troppo corta (min 6 caratteri)';
       }
-
       final diskAccounts = await _readAccountsFromDisk();
-      debugPrint(
-          '[AUTH] account su disco prima del check: '
+      debugPrint('[AUTH] account su disco prima del check: '
           '${diskAccounts.map((a) => a.identifier).toList()}');
-
-      final exists =
-          diskAccounts.any((a) => a.identifier == id);
-      debugPrint(
-          '[AUTH] id "$id" già presente? $exists');
-
+      final exists = diskAccounts.any((a) => a.identifier == id);
+      debugPrint('[AUTH] id "$id" già presente? $exists');
       if (exists) {
-        final label = type == 'email'
-            ? 'indirizzo email'
-            : 'username';
+        final label = type == 'email' ? 'indirizzo email' : 'username';
         return 'Account già esistente con questo $label';
       }
-
       _accounts = diskAccounts;
-      _accounts.add(UserAccount(
-        identifier: id,
-        password: password,
-        type: type,
-      ));
+      _accounts.add(UserAccount(identifier: id, password: password, type: type));
       await _saveAccounts();
-      await _loginInternal(id, type);
+      await _loginInternal(id, type, password);
       return null;
     } catch (e) {
       debugPrint('[AUTH] register error: $e');
@@ -249,6 +210,12 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  // MODIFICATO — quando l'identifier non è tra gli account LOCALI di
+  // questo dispositivo, prima di rifiutare il login verifica se
+  // esiste già un account sul backend con queste credenziali
+  // (registrato da un altro dispositivo). Questo è il fix per
+  // "login con lo stesso account da un dispositivo nuovo":
+  // prima la ricerca era SOLO locale e falliva sempre in quel caso.
   Future<String?> login({
     required String identifier,
     required String password,
@@ -256,27 +223,44 @@ class AuthProvider extends ChangeNotifier {
     try {
       final id = identifier.trim().toLowerCase();
       debugPrint('[AUTH] login con id="$id"');
-
       final diskAccounts = await _readAccountsFromDisk();
       _accounts = diskAccounts;
-
-      debugPrint(
-          '[AUTH] account disponibili: '
-          '${_accounts.map((a) => a.identifier).toList()}');
+      debugPrint('[AUTH] account disponibili: ${_accounts.map((a) => a.identifier).toList()}');
 
       UserAccount? account;
       try {
-        account = _accounts
-            .firstWhere((a) => a.identifier == id);
+        account = _accounts.firstWhere((a) => a.identifier == id);
       } catch (_) {
+        account = null;
+      }
+
+      if (account != null) {
+        if (account.password != password) {
+          return 'Password errata';
+        }
+        await _loginInternal(id, account.type, password);
+        return null;
+      }
+
+      // NUOVO — account sconosciuto su questo dispositivo: verifica
+      // sul backend prima di dichiarare fallito il login.
+      debugPrint('[AUTH] "$id" non trovato localmente, verifico sul backend...');
+      final remoteOk = await CloudAuthBridge.instance.verifyRemoteAccount(id, password);
+      if (!remoteOk) {
         return 'Account non trovato. Registrati prima.';
       }
 
-      if (account.password != password) {
-        return 'Password errata';
-      }
-
-      await _loginInternal(id, account.type);
+      // Credenziali valide sul backend: crea l'account "ombra" su
+      // questo dispositivo (stesso identifier/password) così tutta
+      // la parte V1 (Hive per-utente, provider, UI) funziona come per
+      // un account nativo. I dati reali (schede, esercizi, storico,
+      // obiettivi) sono già stati scaricati durante la verifica sul
+      // backend, prima di arrivare qui.
+      final type = _isEmail(id) ? 'email' : 'username';
+      _accounts.add(UserAccount(identifier: id, password: password, type: type));
+      await _saveAccounts();
+      await _loginInternal(id, type, password);
+      debugPrint('[AUTH] "$id" autenticato tramite verifica backend (nuovo dispositivo)');
       return null;
     } catch (e) {
       debugPrint('[AUTH] login error: $e');
@@ -284,8 +268,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _loginInternal(
-      String identifier, String type) async {
+  Future<void> _loginInternal(String identifier, String type, String password) async {
     final prefs = await SharedPreferences.getInstance();
     _isLoggedIn = true;
     _currentIdentifier = identifier;
@@ -293,14 +276,15 @@ class AuthProvider extends ChangeNotifier {
     await prefs.setBool('is_logged_in', true);
     await prefs.setString('current_identifier', identifier);
     await prefs.setString('current_type', type);
-    debugPrint(
-        '[AUTH] _loginInternal: loggato come $identifier');
+    debugPrint('[AUTH] _loginInternal: loggato come $identifier');
     await HiveDatabase.instance.switchUser(identifier);
-    // Stessa sincronizzazione anche al login/registrazione.
     await GoalDatabase.instance.switchUser(identifier);
     await SportDatabase.instance.switchUser(identifier);
-    // FASE 1 — Sistema Modalità di Allenamento.
     await TrainingModeDatabase.instance.switchUser(identifier);
+    // Allinea trasparentemente l'identità sul backend cloud con le
+    // stesse credenziali V1 appena usate. Fire-and-forget: non blocca
+    // né fa fallire il login V1 se il backend non è raggiungibile.
+    unawaited(CloudAuthBridge.instance.syncIdentity(identifier, password));
     notifyListeners();
   }
 
@@ -331,8 +315,7 @@ class AuthProvider extends ChangeNotifier {
     String? avatarBase64,
   }) async {
     _accounts = await _readAccountsFromDisk();
-    final idx = _accounts.indexWhere(
-        (a) => a.identifier == _currentIdentifier);
+    final idx = _accounts.indexWhere((a) => a.identifier == _currentIdentifier);
     if (idx == -1) return;
     final account = _accounts[idx];
     if (displayName != null) account.displayName = displayName;
@@ -351,11 +334,12 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> clearAvatar() async {
     _accounts = await _readAccountsFromDisk();
-    final idx = _accounts.indexWhere(
-        (a) => a.identifier == _currentIdentifier);
+    final idx = _accounts.indexWhere((a) => a.identifier == _currentIdentifier);
     if (idx == -1) return;
     _accounts[idx].avatarBase64 = null;
     await _saveAccounts();
     notifyListeners();
   }
 }
+
+void unawaited(Future<void> future) {}

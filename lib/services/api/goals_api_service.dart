@@ -43,4 +43,7 @@ class GoalsApiService {
   Future<void> setCompletion(String goalId, String date, bool completed) async {
     await _client.put('/goals/$goalId/completions/$date', body: {'completed': completed});
   }
+    Future<void> delete(String remoteId) async {
+    await _client.delete('/goals/$remoteId');
+  }
 }

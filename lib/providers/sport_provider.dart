@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../db/sport_database.dart';
 import '../models/sport_models.dart';
+import '../services/sync/sync_trigger.dart';
 
 class SportStats {
   final int count;
@@ -8,9 +9,8 @@ class SportStats {
   final double totalKm;
   final double avgSecondsPerSession;
   final double avgKmPerSession;
-  final Map<String, int> sessionsByMonth; // 'yyyy-MM' -> count
-  final Map<String, double> kmByMonth; // 'yyyy-MM' -> km
-
+  final Map<String, int> sessionsByMonth;
+  final Map<String, double> kmByMonth;
   const SportStats({
     required this.count,
     required this.totalSeconds,
@@ -24,7 +24,6 @@ class SportStats {
 
 class SportProvider extends ChangeNotifier {
   List<HiveSportSession> _sessions = [];
-
   List<HiveSportSession> get sessions => _sessions;
 
   void loadSessions() {
@@ -49,22 +48,22 @@ class SportProvider extends ChangeNotifier {
       notes: notes,
     ));
     loadSessions();
+    SyncTrigger.instance.requestSync();
   }
 
   Future<void> deleteSession(dynamic key) async {
     await SportDatabase.instance.deleteSession(key);
     loadSessions();
+    // Nessuna propagazione DELETE al backend in questo blocco (limite
+    // dichiarato): la sessione sportiva resta orfana sul backend fino
+    // a un'estensione futura di DeletePropagator per questo dominio.
   }
 
-  /// Statistiche dedicate per sport: totali, medie e breakdown
-  /// mensile (sessioni e km), utili per grafici/andamenti futuri
-  /// senza dover ricalcolare nulla a livello UI.
   SportStats statsFor(SportType type) {
     final list = sessionsForSport(type);
     final totalSeconds = list.fold<int>(0, (sum, s) => sum + s.durationSeconds);
     final totalKm = list.fold<double>(0, (sum, s) => sum + (s.distanceKm ?? 0));
     final count = list.length;
-
     final sessionsByMonth = <String, int>{};
     final kmByMonth = <String, double>{};
     for (final s in list) {
@@ -74,7 +73,6 @@ class SportProvider extends ChangeNotifier {
       sessionsByMonth[key] = (sessionsByMonth[key] ?? 0) + 1;
       kmByMonth[key] = (kmByMonth[key] ?? 0) + (s.distanceKm ?? 0);
     }
-
     return SportStats(
       count: count,
       totalSeconds: totalSeconds,
