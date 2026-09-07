@@ -298,6 +298,9 @@ class AuthProvider extends ChangeNotifier {
     _currentIdentifier = null;
     _currentType = null;
     debugPrint('[AUTH] logout eseguito');
+    // NUOVO — chiude anche la sessione backend, per non lasciare un
+    // token orfano che verrebbe riusato dal prossimo account V1.
+    unawaited(CloudAuthBridge.instance.notifyLogout());
     notifyListeners();
   }
 

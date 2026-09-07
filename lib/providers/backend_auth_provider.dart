@@ -36,6 +36,7 @@ class BackendAuthProvider extends ChangeNotifier {
     // NUOVO — collegamento con l'unico login che l'utente usa (V1).
     CloudAuthBridge.instance.register(syncFromV1Login);
     CloudAuthBridge.instance.registerVerifier(verifyRemoteCredentials);
+    CloudAuthBridge.instance.registerLogoutHandler(logout);
   }
 
   BackendAuthStatus _status = BackendAuthStatus.unknown;
