@@ -15,31 +15,36 @@ enum SyncPhase { idle, uploading, downloading, error }
 /// ciclo immediato quando SyncTrigger.requestSync() viene chiamato da
 /// un Provider dopo una mutazione locale, con debounce di 3s. Upload
 /// sempre prima del download.
+///
+/// MODIFICATO — introdotto un contatore di "epoca" (_epoch). Prima,
+/// stop() cancellava solo il Timer futuro ma NON interrompeva un
+/// runOnce() già in esecuzione: quel ciclo orfano continuava a girare
+/// in background con HiveDatabase/TokenStorage (singleton, letti
+/// "live") ormai puntati al NUOVO account appena switchato — causa
+/// osservata di raffiche di 401/400 durante switch rapidi di account
+/// (logout → registrazione immediata sullo stesso dispositivo).
+/// Ora ogni runOnce() cattura l'epoca corrente all'avvio e la
+/// ricontrolla dopo ogni fase; se stop()/start() hanno incrementato
+/// l'epoca nel frattempo, il ciclo si interrompe SENZA proseguire con
+/// altre chiamate di rete, invece di continuare "alla cieca".
 class SyncEngine extends ChangeNotifier {
   static final SyncEngine instance = SyncEngine();
 
-  // MODIFICATO — da 20s a 8s: rende il pull automatico (dati creati
-  // su un altro dispositivo) visibile molto più rapidamente, senza
-  // scendere a un polling così aggressivo da sovraccaricare il piano
-  // free di Render.
   static const _interval = Duration(seconds: 8);
   Timer? _timer;
   bool _running = false;
+  int _epoch = 0; // NUOVO
   SyncPhase phase = SyncPhase.idle;
   DateTime? lastSuccessAt;
   String? lastError;
   int consecutiveFailures = 0;
 
-  // NUOVO — callback impostato una sola volta da un widget con
-  // accesso ai Provider (vedi main.dart). Viene invocato dopo ogni
-  // ciclo completato con successo, così i Provider possono
-  // ricaricarsi dai box Hive appena aggiornati dall'import, senza
-  // che l'utente debba chiudere e riaprire l'app.
   VoidCallback? onSynced;
 
   bool get isActive => _timer != null;
 
   void start() {
+    _epoch++; // NUOVO — invalida qualunque ciclo precedente ancora in volo
     if (_timer != null) return;
     SyncTrigger.instance.register(runOnce);
     unawaited(runOnce());
@@ -47,6 +52,7 @@ class SyncEngine extends ChangeNotifier {
   }
 
   void stop() {
+    _epoch++; // NUOVO — invalida il ciclo corrente, se ce n'è uno in corso
     _timer?.cancel();
     _timer = null;
     SyncTrigger.instance.unregister();
@@ -56,38 +62,48 @@ class SyncEngine extends ChangeNotifier {
 
   Future<void> runOnce() async {
     if (_running) return;
+    final myEpoch = _epoch; // NUOVO — "firma" di questo ciclo
     _running = true;
     try {
       phase = SyncPhase.uploading;
       notifyListeners();
-      await _uploadAll();
+      await _uploadAll(myEpoch); // NUOVO — passa l'epoca
+      if (myEpoch != _epoch) return; // NUOVO — superato: interrompi
       phase = SyncPhase.downloading;
       notifyListeners();
       await BackendImportRepository().importAllFromBackend();
+      if (myEpoch != _epoch) return; // NUOVO
       lastSuccessAt = DateTime.now();
       lastError = null;
       consecutiveFailures = 0;
       phase = SyncPhase.idle;
-      // NUOVO — notifica i Provider di ricaricarsi ora che l'import
-      // ha scritto eventuali dati nuovi nei box Hive.
       onSynced?.call();
     } catch (e) {
+      if (myEpoch != _epoch) return; // NUOVO — errore di un ciclo ormai morto: ignora
       lastError = e.toString();
       consecutiveFailures++;
       phase = SyncPhase.error;
       debugPrint('[SyncEngine] ciclo fallito: $e');
     } finally {
-      _running = false;
+      if (myEpoch == _epoch) _running = false; // NUOVO — solo il ciclo "vivo" resetta il flag
       notifyListeners();
     }
   }
 
-  Future<void> _uploadAll() async {
+  // MODIFICATO — controlla l'epoca tra ogni sotto-fase, per fermarsi
+  // il prima possibile invece di completare comunque tutte le 6
+  // categorie anche se nel frattempo l'account è cambiato.
+  Future<void> _uploadAll(int myEpoch) async {
     await ExerciseSyncRepository().syncLocalLibraryToBackend();
+    if (myEpoch != _epoch) return;
     await WorkoutSyncRepository().syncLocalWorkoutsToBackend();
+    if (myEpoch != _epoch) return;
     await SessionSyncRepository().syncLocalHistoryToBackend();
+    if (myEpoch != _epoch) return;
     await TrainingModeSyncRepository().syncLocalModesToBackend();
+    if (myEpoch != _epoch) return;
     await GoalSyncRepository().syncLocalGoalsToBackend();
+    if (myEpoch != _epoch) return;
     await SportSessionSyncRepository().syncLocalSportSessionsToBackend();
   }
 }
