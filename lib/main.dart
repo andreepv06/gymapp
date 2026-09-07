@@ -26,6 +26,7 @@ import 'screens/settings/settings_screen.dart';
 import 'screens/workouts/allenamenti_screen.dart';
 import 'services/notification_service.dart';
 import 'providers/backend_auth_provider.dart';
+import 'services/sync/sync_engine.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -416,6 +417,19 @@ class _AppEntryState extends State<AppEntry> {
     if (context.read<AuthProvider>().isLoggedIn) {
       await context.read<SessionProvider>().tryRestoreSession();
     }
+    // NUOVO — registra una sola volta il callback che, ad ogni ciclo
+    // di SyncEngine completato con successo, ricarica i Provider dai
+    // box Hive appena aggiornati. AppEntry resta montato per tutta la
+    // vita dell'app (è il widget "home"), quindi il context qui
+    // rimane valido finché l'app è aperta.
+    SyncEngine.instance.onSynced = () {
+      if (!mounted) return;
+      context.read<WorkoutProvider>().loadWorkouts();
+      context.read<ExerciseProvider>().loadExercises();
+      context.read<GoalProvider>().loadGoals();
+      context.read<SportProvider>().loadSessions();
+      context.read<TrainingModeProvider>().loadModes();
+    };
     if (mounted) setState(() => _checked = true);
   }
 
