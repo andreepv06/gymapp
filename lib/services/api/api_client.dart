@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'api_exception.dart';
 import 'token_storage.dart';
-
 /// Client HTTP condiviso verso il backend NestJS MarkFit.
 ///
 /// Timeout esteso a 60s (invece dei 15s iniziali): il piano free di
@@ -14,7 +13,6 @@ import 'token_storage.dart';
 class ApiClient {
   ApiClient._internal();
   static final ApiClient instance = ApiClient._internal();
-
   // MODIFICATO — il default deve puntare al backend reale in
   // produzione (Render), non a localhost. Prima di questa modifica
   // ogni dispositivo che non avesse MAI aperto manualmente
@@ -24,45 +22,44 @@ class ApiClient {
   // fallimento di login/registrazione/sync su un secondo dispositivo.
   static const _defaultBaseUrl = 'https://gymapp-i09h.onrender.com/api';
   static const _requestTimeout = Duration(seconds: 60);
-
   String _baseUrl = _defaultBaseUrl;
   final TokenStorage _tokens = TokenStorage();
-
+  // NUOVO — invocato quando un 401 su una richiesta autenticata NON
+  // riesce ad essere risolto tramite refresh (refresh token assente
+  // o refresh fallito lato server). Questo è l'UNICO punto del
+  // codice che sa con certezza che la sessione backend non è più
+  // valida — non va confuso con errori di rete/timeout/500, che qui
+  // non fanno mai scattare questo callback. Chi si registra (tipicamente
+  // BackendAuthProvider) deve invalidare SOLO la sessione backend e
+  // fermare SyncEngine, senza toccare la sessione locale V1.
+  VoidCallback? onSessionExpired;
   String get baseUrl => _baseUrl;
-
   void setBaseUrl(String url) {
     _baseUrl = url.endsWith('/') ? url.substring(0, url.length - 1) : url;
   }
-
   Uri _uri(String path) => Uri.parse('$_baseUrl$path');
-
   Future<Map<String, dynamic>> get(String path, {bool auth = true}) =>
       _send('GET', path, auth: auth);
-
   Future<Map<String, dynamic>> post(
     String path, {
     Map<String, dynamic>? body,
     bool auth = true,
   }) =>
       _send('POST', path, body: body, auth: auth);
-
   Future<Map<String, dynamic>> patch(
     String path, {
     Map<String, dynamic>? body,
     bool auth = true,
   }) =>
       _send('PATCH', path, body: body, auth: auth);
-
   Future<Map<String, dynamic>> put(
     String path, {
     Map<String, dynamic>? body,
     bool auth = true,
   }) =>
       _send('PUT', path, body: body, auth: auth);
-
   Future<Map<String, dynamic>> delete(String path, {bool auth = true}) =>
       _send('DELETE', path, auth: auth);
-
   Future<Map<String, dynamic>> _send(
     String method,
     String path, {
@@ -87,20 +84,24 @@ class ApiClient {
       debugPrint('[ApiClient] network error: $e');
       throw ApiException.network();
     }
-
     if (response.statusCode == 401 && auth && !isRetry) {
       final refreshed = await _tryRefresh();
       if (refreshed) {
         return _send(method, path, body: body, auth: auth, isRetry: true);
       }
+      // NUOVO — refresh fallito o refresh token assente: la sessione
+      // backend è definitivamente non valida. Notifica chi è in
+      // ascolto PRIMA di lanciare l'eccezione, così chi gestisce lo
+      // stato di autenticazione (BackendAuthProvider) può reagire
+      // immediatamente fermando SyncEngine, invece di scoprirlo
+      // indirettamente dal messaggio di errore.
+      onSessionExpired?.call();
     }
-
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (response.body.isEmpty) return {};
       final decoded = jsonDecode(response.body);
       return decoded is Map<String, dynamic> ? decoded : {'data': decoded};
     }
-
     String? serverMessage;
     try {
       final decoded = jsonDecode(response.body);
@@ -110,10 +111,8 @@ class ApiClient {
             : decoded['message'].toString();
       }
     } catch (_) {}
-
     throw ApiException.fromStatus(response.statusCode, serverMessage);
   }
-
   Future<http.Response> _dispatch(
     String method,
     Uri uri,
@@ -135,7 +134,6 @@ class ApiClient {
         throw ApiException.network();
     }
   }
-
   Future<bool> _tryRefresh() async {
     final refreshToken = await _tokens.getRefreshToken();
     if (refreshToken == null) return false;

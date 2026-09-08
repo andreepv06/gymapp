@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import '../repositories/backend_import_repository.dart';
 import '../services/api/auth_api_service.dart';
+import '../services/api/api_client.dart';
 import '../services/api/api_exception.dart';
 import '../services/api/dto/auth_dto.dart';
+import '../services/api/token_storage.dart';
 import '../services/sync/sync_engine.dart';
 import '../services/sync/cloud_auth_bridge.dart';
-
 enum BackendAuthStatus { unknown, authenticated, unauthenticated }
-
 /// Provider dedicato alla sessione verso il backend NestJS.
 /// Separato da AuthProvider (autenticazione locale V1).
 ///
@@ -24,10 +24,17 @@ enum BackendAuthStatus { unknown, authenticated, unauthenticated }
 ///     dell'utente (schede, esercizi, storico, obiettivi) e fa
 ///     partire SyncEngine — TUTTO PRIMA che AuthProvider consideri il
 ///     login riuscito, così l'utente vede i propri dati appena entra.
+///
+/// NUOVO — si registra anche su ApiClient.instance.onSessionExpired:
+/// quando una richiesta autenticata riceve 401 e il refresh token non
+/// riesce a rinnovare la sessione, ApiClient non ha modo di sapere
+/// che deve fermare SyncEngine — è compito di questo provider, che
+/// possiede sia lo stato di autenticazione backend sia il riferimento
+/// a SyncEngine. La sessione V1 (AuthProvider) NON viene mai toccata
+/// da questo meccanismo.
 class BackendAuthProvider extends ChangeNotifier {
   final AuthApiService _authApi;
   final BackendImportRepository _importRepo;
-
   BackendAuthProvider({
     AuthApiService? authApi,
     BackendImportRepository? importRepo,
@@ -37,28 +44,26 @@ class BackendAuthProvider extends ChangeNotifier {
     CloudAuthBridge.instance.register(syncFromV1Login);
     CloudAuthBridge.instance.registerVerifier(verifyRemoteCredentials);
     CloudAuthBridge.instance.registerLogoutHandler(logout);
+    // NUOVO — collegamento con ApiClient per la gestione della
+    // sessione backend scaduta (OPZIONE B).
+    ApiClient.instance.onSessionExpired = _handleSessionExpired;
   }
-
   BackendAuthStatus _status = BackendAuthStatus.unknown;
   BackendUserProfile? _currentUser;
   String? _lastError;
   bool _loading = false;
-
   bool _autoImportDone = false;
   bool autoImporting = false;
   ImportSummary? lastAutoImportSummary;
   String? lastAutoImportError;
-
   BackendAuthStatus get status => _status;
   BackendUserProfile? get currentUser => _currentUser;
   String? get lastError => _lastError;
   bool get loading => _loading;
   bool get isAuthenticated => _status == BackendAuthStatus.authenticated;
-
   // Usato da cloud_sync_screen.dart (strumento di debug/admin) per
   // mostrare lo stato live del motore di sincronizzazione.
   SyncEngine get syncEngine => SyncEngine.instance;
-
   Future<void> restoreSession() async {
     _loading = true;
     notifyListeners();
@@ -78,13 +83,11 @@ class BackendAuthProvider extends ChangeNotifier {
     }
     _loading = false;
     notifyListeners();
-
     if (_status == BackendAuthStatus.authenticated) {
       unawaited(_triggerAutoImport());
       SyncEngine.instance.start();
     }
   }
-
   /// NUOVO — chiamato da CloudAuthBridge subito dopo ogni
   /// login/registrazione V1 riuscito su questo dispositivo (identità
   /// già nota localmente). Effettua login sul backend con le stesse
@@ -113,7 +116,6 @@ class BackendAuthProvider extends ChangeNotifier {
       debugPrint('[BackendAuthProvider] fetchCurrentUser dopo syncFromV1Login fallito: $e');
     }
   }
-
   /// NUOVO — chiamato da AuthProvider.login() quando l'identifier NON
   /// è tra gli account locali di questo dispositivo (primo accesso su
   /// un dispositivo nuovo). Prova login diretto sul backend con le
@@ -142,13 +144,10 @@ class BackendAuthProvider extends ChangeNotifier {
       return false;
     }
   }
-
   Future<bool> register(String identifier, String password) =>
       _runAuthFlow(() => _authApi.register(identifier, password));
-
   Future<bool> login(String identifier, String password) =>
       _runAuthFlow(() => _authApi.login(identifier, password));
-
   Future<bool> _runAuthFlow(Future<AuthTokens> Function() action) async {
     _loading = true;
     _lastError = null;
@@ -170,7 +169,6 @@ class BackendAuthProvider extends ChangeNotifier {
       return false;
     }
   }
-
   Future<void> _triggerAutoImport() async {
     if (_autoImportDone || autoImporting) return;
     autoImporting = true;
@@ -186,12 +184,10 @@ class BackendAuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-
   Future<void> refreshFromBackend() async {
     _autoImportDone = false;
     await _triggerAutoImport();
   }
-
   Future<void> logout() async {
     _loading = true;
     notifyListeners();
@@ -205,6 +201,30 @@ class BackendAuthProvider extends ChangeNotifier {
     _loading = false;
     notifyListeners();
   }
+  /// NUOVO — OPZIONE B. Chiamato da ApiClient quando una richiesta
+  /// autenticata riceve 401 e il tentativo di refresh del token NON
+  /// riesce a rinnovare la sessione (refresh token assente o rifiutato
+  /// dal server). A differenza di logout(), NON chiama _authApi.logout()
+  /// (eviterebbe una chiamata di rete su una sessione già invalida) e
+  /// NON tocca in alcun modo AuthProvider/la sessione locale V1: qui
+  /// si invalida SOLO lo stato di autenticazione backend.
+  ///
+  /// Guardia idempotente: se lo stato è già unauthenticated, non fa
+  /// nulla — evita lavoro ridondante se il callback scatta più volte
+  /// in rapida successione (es. più chiamate del ciclo di sync che
+  /// falliscono tutte per lo stesso motivo).
+  Future<void> _handleSessionExpired() async {
+    if (_status == BackendAuthStatus.unauthenticated) return;
+    debugPrint(
+        '[BackendAuthProvider] Sessione backend scaduta: arresto SyncEngine e invalidazione sessione backend (sessione locale V1 non toccata).');
+    SyncEngine.instance.stop();
+    await TokenStorage().clear();
+    _currentUser = null;
+    _status = BackendAuthStatus.unauthenticated;
+    _autoImportDone = false;
+    lastAutoImportSummary = null;
+    lastAutoImportError = null;
+    notifyListeners();
+  }
 }
-
 void unawaited(Future<void> future) {}

@@ -1,17 +1,14 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/hive_models.dart';
-
 class HiveDatabase {
   static final HiveDatabase instance =
       HiveDatabase._internal();
   HiveDatabase._internal();
-
   String _userId = '';
-
   // ── NUOVO: getter pubblico, usato da AuthProvider per
   // sincronizzare GoalDatabase/SportDatabase con lo stesso utente. ──
   String get currentUserId => _userId;
-
   String get _exercises => '${_userId}_exercises';
   String get _workouts => '${_userId}_workouts';
   String get _workoutExercises =>
@@ -21,7 +18,6 @@ class HiveDatabase {
   String get _exerciseNotes =>
       '${_userId}_exercise_notes';
   String get _circuits => '${_userId}_circuits';
-
   Future<void> init() async {
     await Hive.initFlutter();
     if (!Hive.isAdapterRegistered(0)) {
@@ -46,25 +42,25 @@ class HiveDatabase {
       Hive.registerAdapter(HiveCircuitAdapter());
     }
   }
-
   Future<void> switchUser(String userId) async {
     final newId = userId
         .trim()
         .replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
-
     if (newId == _userId && _currentBoxesOpen()) {
       return;
     }
-
     await _closeAllOpenBoxes();
     _userId = newId;
     await _openCurrentBoxes();
-
+    // NUOVO — pulizia di eventuali esercizi invalidi (senza nome)
+    // già presenti in Hive per questo utente, PRIMA di decidere se
+    // seminare gli esercizi di default. Vedi _purgeInvalidExercises
+    // per i dettagli.
+    await _purgeInvalidExercises();
     if (_exBox.isEmpty) {
       await _insertDefaultExercises();
     }
   }
-
   bool _currentBoxesOpen() {
     if (_userId.isEmpty) return false;
     return Hive.isBoxOpen(_exercises) &&
@@ -75,7 +71,6 @@ class HiveDatabase {
         Hive.isBoxOpen(_exerciseNotes) &&
         Hive.isBoxOpen(_circuits);
   }
-
   Future<void> _closeAllOpenBoxes() async {
     await Hive.close();
     if (!Hive.isAdapterRegistered(0)) {
@@ -100,7 +95,6 @@ class HiveDatabase {
       Hive.registerAdapter(HiveCircuitAdapter());
     }
   }
-
   Future<void> _openCurrentBoxes() async {
     if (_userId.isEmpty) return;
     await Hive.openBox<HiveExercise>(_exercises);
@@ -112,7 +106,6 @@ class HiveDatabase {
     await Hive.openBox<HiveExerciseNote>(_exerciseNotes);
     await Hive.openBox<HiveCircuit>(_circuits);
   }
-
   Box<HiveExercise> get _exBox =>
       Hive.box<HiveExercise>(_exercises);
   Box<HiveWorkout> get _woBox =>
@@ -127,9 +120,7 @@ class HiveDatabase {
       Hive.box<HiveExerciseNote>(_exerciseNotes);
   Box<HiveCircuit> get _ciBox =>
       Hive.box<HiveCircuit>(_circuits);
-
   // ── EXERCISES ──
-
   List<HiveExercise> getExercises() {
     final list = _exBox.values.toList();
     list.sort((a, b) {
@@ -138,34 +129,61 @@ class HiveDatabase {
     });
     return list;
   }
-
   Future<void> addExercise(HiveExercise exercise) async {
+    // NUOVO — guardia di integrità dati: nessun esercizio senza nome
+    // deve poter raggiungere la persistenza locale, indipendentemente
+    // da QUALE punto del codice tenti di scriverlo (form di
+    // creazione, import dal backend, o altro non ancora individuato).
+    // Se questo log compare in console, è la prova diretta che esiste
+    // un punto del codice che costruisce un HiveExercise incompleto:
+    // lo stack trace/contesto in quel momento identifica la causa
+    // reale con certezza.
+    if (exercise.name.trim().isEmpty) {
+      debugPrint(
+          '[HiveDatabase] BLOCCATO tentativo di salvare un esercizio senza nome (muscleGroup="${exercise.muscleGroup}"). Il record NON è stato scritto in Hive.');
+      return;
+    }
     await _exBox.add(exercise);
   }
-
   Future<void> deleteExercise(dynamic key) async {
     await _exBox.delete(key);
   }
-
   bool exerciseNameExists(String name) {
     return _exBox.values.any((e) =>
         e.name.trim().toLowerCase() ==
         name.trim().toLowerCase());
   }
-
+  // NUOVO — rimuove dalla box degli esercizi qualunque record già
+  // presente privo di nome (dato invalido/corrotto). Non tocca in
+  // alcun modo esercizi con nome valorizzato, anche se muscleGroup
+  // fosse vuoto o insolito: il criterio di invalidità è
+  // deliberatamente ristretto al solo campo che, se vuoto, rende
+  // l'esercizio impossibile da usare (non visualizzabile con dati
+  // reali, non modificabile, non filtrabile per categoria — esattamente
+  // i sintomi osservati). Eseguito ad ogni switchUser(), quindi ad
+  // ogni login, così ripulisce automaticamente anche account già
+  // esistenti che avessero già questo record corrotto salvato.
+  Future<void> _purgeInvalidExercises() async {
+    final invalidKeys = _exBox.keys.where((k) {
+      final ex = _exBox.get(k);
+      return ex == null || ex.name.trim().isEmpty;
+    }).toList();
+    if (invalidKeys.isNotEmpty) {
+      debugPrint(
+          '[HiveDatabase] Rimossi ${invalidKeys.length} esercizi invalidi (senza nome) dalla libreria di "$_userId".');
+      await _exBox.deleteAll(invalidKeys);
+    }
+  }
   // ── WORKOUTS ──
-
   List<HiveWorkout> getWorkouts() {
     final list = _woBox.values.toList();
     list.sort(
         (a, b) => b.createdAt.compareTo(a.createdAt));
     return list;
   }
-
   Future<int> addWorkout(HiveWorkout workout) async {
     return await _woBox.add(workout);
   }
-
   Future<void> updateWorkout(
       dynamic key, String name) async {
     final w = _woBox.get(key);
@@ -174,7 +192,6 @@ class HiveDatabase {
       await w.save();
     }
   }
-
   Future<void> deleteWorkout(dynamic key) async {
     await _woBox.delete(key);
     final toDelete = _weBox.keys
@@ -186,7 +203,6 @@ class HiveDatabase {
         .toList();
     await _ciBox.deleteAll(circuitsToDelete);
   }
-
   Future<void> updateWorkoutIcon(
     dynamic key, {
     String? iconId,
@@ -201,9 +217,7 @@ class HiveDatabase {
       await w.save();
     }
   }
-
   // ── WORKOUT EXERCISES ──
-
   List<HiveWorkoutExercise> getWorkoutExercises(
       dynamic workoutKey) {
     final list = _weBox.values
@@ -213,21 +227,17 @@ class HiveDatabase {
         (a, b) => a.sortOrder.compareTo(b.sortOrder));
     return list;
   }
-
   Future<void> addWorkoutExercise(
       HiveWorkoutExercise we) async {
     await _weBox.add(we);
   }
-
   Future<void> updateWorkoutExercise(
       dynamic key, HiveWorkoutExercise updated) async {
     await _weBox.put(key, updated);
   }
-
   Future<void> deleteWorkoutExercise(dynamic key) async {
     await _weBox.delete(key);
   }
-
   Future<void> reorderWorkoutExercises(
       List<HiveWorkoutExercise> exercises) async {
     for (int i = 0; i < exercises.length; i++) {
@@ -235,9 +245,7 @@ class HiveDatabase {
       await exercises[i].save();
     }
   }
-
   // ── CIRCUITS ──
-
   List<HiveCircuit> getCircuits(dynamic workoutKey) {
     final list = _ciBox.values
         .where((c) => c.workoutKey == workoutKey)
@@ -246,11 +254,9 @@ class HiveDatabase {
         (a, b) => a.sortOrder.compareTo(b.sortOrder));
     return list;
   }
-
   Future<dynamic> addCircuit(HiveCircuit circuit) async {
     return await _ciBox.add(circuit);
   }
-
   Future<void> updateCircuit(
       dynamic key, String name, int rounds) async {
     final c = _ciBox.get(key);
@@ -260,7 +266,6 @@ class HiveDatabase {
       await c.save();
     }
   }
-
   Future<void> deleteCircuit(dynamic key) async {
     await _ciBox.delete(key);
     final tag = '__circuit_$key';
@@ -269,9 +274,7 @@ class HiveDatabase {
         .toList();
     await _weBox.deleteAll(toDelete);
   }
-
   // ── SESSIONS ──
-
   Future<int> createSession(
       dynamic workoutKey, String workoutName) async {
     final session = HiveSession(
@@ -283,7 +286,6 @@ class HiveDatabase {
     );
     return await _seBox.add(session);
   }
-
   Future<void> deleteSession(dynamic sessionKey) async {
     await _seBox.delete(sessionKey);
     final keysToDelete = _ssBox.keys
@@ -292,7 +294,6 @@ class HiveDatabase {
         .toList();
     await _ssBox.deleteAll(keysToDelete);
   }
-
   Future<void> updateSessionDuration(
       dynamic sessionKey, int durationSeconds) async {
     final s = _seBox.get(sessionKey);
@@ -301,17 +302,14 @@ class HiveDatabase {
       await s.save();
     }
   }
-
   Future<void> addSessionSet(HiveSessionSet set) async {
     await _ssBox.add(set);
   }
-
   List<HiveSession> getSessions() {
     final list = _seBox.values.toList();
     list.sort((a, b) => b.date.compareTo(a.date));
     return list;
   }
-
   List<HiveSessionSet> getSessionSets(
       dynamic sessionKey) {
     return _ssBox.values
@@ -325,7 +323,6 @@ class HiveDatabase {
             : a.setNumber.compareTo(b.setNumber);
       });
   }
-
   List<HiveSessionSet> getLastExerciseSets(
       dynamic exerciseKey) {
     final allSets = _ssBox.values
@@ -341,7 +338,6 @@ class HiveDatabase {
       ..sort((a, b) =>
           a.setNumber.compareTo(b.setNumber));
   }
-
   List<HiveSessionSet> getExerciseHistory(
       dynamic exerciseKey) {
     return _ssBox.values
@@ -350,14 +346,11 @@ class HiveDatabase {
       ..sort((a, b) =>
           b.sessionKey.compareTo(a.sessionKey));
   }
-
   Future<void> deleteAllSessions() async {
     await _seBox.clear();
     await _ssBox.clear();
   }
-
   // ── EXERCISE NOTES ──
-
   Future<void> saveExerciseNote(
       dynamic exerciseKey, String note) async {
     HiveExerciseNote? existing;
@@ -365,7 +358,6 @@ class HiveDatabase {
       existing = _enBox.values.firstWhere(
           (n) => n.exerciseKey == exerciseKey);
     } catch (_) {}
-
     if (existing == null) {
       await _enBox.add(HiveExerciseNote(
         exerciseKey: exerciseKey is int
@@ -381,7 +373,6 @@ class HiveDatabase {
       await existing.save();
     }
   }
-
   Future<void> deleteExerciseNote(
       dynamic exerciseKey) async {
     final keys = _enBox.keys
@@ -390,7 +381,6 @@ class HiveDatabase {
         .toList();
     await _enBox.deleteAll(keys);
   }
-
   Future<void> updateCircuitSortOrder(
       dynamic key, int sortOrder) async {
     final c = _ciBox.get(key);
@@ -399,12 +389,10 @@ class HiveDatabase {
       await c.save();
     }
   }
-
   HiveWorkoutExercise? getWorkoutExerciseByKey(
       dynamic key) {
     return _weBox.get(key);
   }
-
   String? getExerciseNote(dynamic exerciseKey) {
     try {
       return _enBox.values
@@ -415,7 +403,6 @@ class HiveDatabase {
       return null;
     }
   }
-
   Map<int, String> getExerciseNotes(
       List<dynamic> keys) {
     final result = <int, String>{};
@@ -426,13 +413,10 @@ class HiveDatabase {
     }
     return result;
   }
-
   Future<void> deleteAllNotes() async {
     await _enBox.clear();
   }
-
   // ── DEFAULT EXERCISES ──
-
   Future<void> _insertDefaultExercises() async {
     final defaults = [
       HiveExercise(
@@ -756,6 +740,12 @@ class HiveDatabase {
           muscleGroup: 'Addominali'),
     ];
     for (final ex in defaults) {
+      // NOTA: qui NON passo per addExercise() ma per _exBox.add()
+      // direttamente, come nel codice originale — è deliberato: la
+      // guardia in addExercise() serve a proteggere da chiamate
+      // esterne/di terze parti, mentre questi 110 esercizi di default
+      // sono valori letterali definiti qui sopra, tutti con nome
+      // valorizzato, quindi non necessitano della guardia.
       await _exBox.add(ex);
     }
   }
