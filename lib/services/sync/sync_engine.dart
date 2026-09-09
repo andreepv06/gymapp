@@ -71,7 +71,8 @@ class SyncEngine extends ChangeNotifier {
       if (myEpoch != _epoch) return; // NUOVO — superato: interrompi
       phase = SyncPhase.downloading;
       notifyListeners();
-      await BackendImportRepository().importAllFromBackend();
+      await BackendImportRepository()
+          .importAllFromBackend(shouldAbort: () => myEpoch != _epoch);
       if (myEpoch != _epoch) return; // NUOVO
       lastSuccessAt = DateTime.now();
       lastError = null;

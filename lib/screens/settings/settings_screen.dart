@@ -20,6 +20,7 @@ import '../../widgets/glass_widgets.dart';
 import '../../widgets/shared_sheets.dart';
 import '../import/activity_import_screen.dart';
 import 'cloud_sync_screen.dart';
+import '../../services/sync/sync_trigger.dart';
 
 // ─────────────────────────────────────────────────────────────
 // SettingsScreen — nessun Scaffold (tab di MainShell)
@@ -264,6 +265,19 @@ class SettingsScreen extends StatelessWidget {
   }
 
   // ── Backup import ─────────────────────────────────────────
+  // MODIFICATO — distinzione esplicita tra:
+  //  1. file non valido/non supportato (BackupValidationError) →
+  //     messaggio specifico sul FILE, nessuna modifica ai dati;
+  //  2. errore interno imprevisto durante lettura/import → messaggio
+  //     generico applicativo, dettaglio tecnico solo in debugPrint,
+  //     mai in UI (non deve mai sembrare "colpa del file" un bug
+  //     dell'app);
+  //  3. import riuscito → oltre al reload dei Provider, notifica
+  //     esplicitamente SyncTrigger, così se un account backend è
+  //     collegato i dati appena importati vengono proposti alla
+  //     sincronizzazione automatica (import locale via Hive diretto
+  //     bypassa i Provider, che normalmente sono il punto in cui
+  //     scatta la richiesta di sync dopo ogni scrittura).
   Future<void> _importBackup(BuildContext context) async {
     final c = context.mfc;
     BackupData? data;
@@ -289,15 +303,18 @@ class SettingsScreen extends StatelessWidget {
           ]);
       }
       return;
-    } catch (_) {
+    } catch (e) {
+      // MODIFICATO — errore interno (lettura file, decodifica,
+      // eccezione imprevista) distinto da un file non supportato.
+      debugPrint('[SettingsScreen] Errore interno durante import: $e');
       if (context.mounted) {
-        _showSnack(context, context.mfc, 'Impossibile leggere il file',
+        _showSnack(context, context.mfc,
+            'Si è verificato un errore durante la lettura del file. Riprova.',
             MarkFitColors.red);
       }
       return;
     }
     if (data == null || !context.mounted) return;
-
     final isStructure = data.isStructureOnly;
     final ok = await showGlassDialog<bool>(
       context: context,
@@ -331,7 +348,6 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => Navigator.pop(context, true)),
       ]);
     if (ok != true || !context.mounted) return;
-
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -348,6 +364,15 @@ class SettingsScreen extends StatelessWidget {
           context.read<SportProvider>().loadSessions();
         }
       }
+      // NUOVO — l'import scrive direttamente su Hive tramite
+      // HiveDatabase/GoalDatabase/TrainingModeDatabase, bypassando i
+      // Provider che normalmente chiamano SyncTrigger.requestSync()
+      // dopo ogni mutazione. Senza questa notifica esplicita, se
+      // l'utente ha un account backend collegato, i dati appena
+      // importati non verrebbero mai proposti alla sincronizzazione
+      // automatica finché non avviene una mutazione manuale
+      // successiva. No-op innocuo se nessun account backend è attivo.
+      SyncTrigger.instance.requestSync();
       if (context.mounted) Navigator.pop(context);
       if (context.mounted) {
         _showSnack(
@@ -358,12 +383,14 @@ class SettingsScreen extends StatelessWidget {
         );
       }
     } catch (e) {
+      debugPrint('[SettingsScreen] Errore interno durante restoreBackup: $e');
       if (context.mounted) Navigator.pop(context);
       if (context.mounted) {
         _showSnack(context, context.mfc, "Errore durante l'import", MarkFitColors.red);
       }
     }
   }
+
 
   String _fmtDate(String iso) {
     try {

@@ -10,7 +10,6 @@ import '../models/sport_models.dart';
 import '../models/training_mode.dart';
 import '../providers/auth_provider.dart';
 import 'backup_file.dart';
-
 // ─────────────────────────────────────────────────────────────
 // MODIFICA 3 — Import/Export
 //
@@ -27,7 +26,6 @@ import 'backup_file.dart';
 //                come nuove voci).
 // ─────────────────────────────────────────────────────────────
 enum BackupExportType { full, structure }
-
 // ─────────────────────────────────────────────────────────────
 // BackupData — struttura intermedia del backup
 // ─────────────────────────────────────────────────────────────
@@ -50,7 +48,6 @@ class BackupData {
   final List<Map<String, dynamic>> goalCompletions;
   final List<Map<String, dynamic>> sportSessions;
   final Map<String, dynamic> preferences;
-
   const BackupData({
     required this.version,
     required this.schemaVersion,
@@ -71,9 +68,7 @@ class BackupData {
     required this.sportSessions,
     required this.preferences,
   });
-
   bool get isStructureOnly => exportType == 'structure';
-
   Map<String, dynamic> toJson() => {
         'version': version,
         'schemaVersion': schemaVersion,
@@ -96,14 +91,12 @@ class BackupData {
         'preferences': preferences,
       };
 }
-
 // ─────────────────────────────────────────────────────────────
 // BackupService
 // ─────────────────────────────────────────────────────────────
 class BackupService {
   BackupService._();
   static final instance = BackupService._();
-
   static const _kVersion = '1.1.0';
   // Versione dello SCHEMA DATI (distinta dalla versione applicativa
   // sopra): incrementata ogni volta che la struttura del file di
@@ -112,7 +105,6 @@ class BackupService {
   // exportType/schemaVersion). v2 = introduzione di trainingModes,
   // exportType, trainingModeKey su workoutExercises/sessionSets.
   static const _kSchemaVersion = 2;
-
   // ── EXPORT ────────────────────────────────────────────────
   Future<void> exportBackup({
     required AuthProvider auth,
@@ -129,7 +121,6 @@ class BackupService {
         : 'markfit_struttura_schede_$stamp.json';
     await downloadJsonFile(json, fname);
   }
-
   // ── IMPORT ────────────────────────────────────────────────
   /// Legge un file JSON dal disco e lo valida INTEGRALMENTE prima
   /// di ritornare. Nessuna scrittura su Hive avviene in questo
@@ -140,7 +131,6 @@ class BackupService {
     if (raw == null) return null;
     return _parse(raw);
   }
-
   /// Esegue l'import dal [data] già validato. Se [data.exportType]
   /// è 'structure', l'operazione è ADDITIVA (Parte 39/43): non
   /// cancella né sovrascrive nulla, non tocca storico/obiettivi/
@@ -155,7 +145,6 @@ class BackupService {
       await _importFullData(data);
     }
   }
-
   // ── PRIVATE: build ────────────────────────────────────────
   Future<BackupData> _buildBackupData({
     required AuthProvider auth,
@@ -165,13 +154,11 @@ class BackupService {
     final hdb = HiveDatabase.instance;
     final gdb = GoalDatabase.instance;
     final tmdb = TrainingModeDatabase.instance;
-
     final workouts = hdb.getWorkouts();
     final allWE = <Map<String, dynamic>>[];
     final allCir = <Map<String, dynamic>>[];
     final referencedModeKeys = <dynamic>{};
     final referencedExerciseKeys = <dynamic>{};
-
     for (final w in workouts) {
       for (final we in hdb.getWorkoutExercises(w.key)) {
         allWE.add(_serializeWE(we));
@@ -184,7 +171,6 @@ class BackupService {
         allCir.add(_serializeCircuit(c));
       }
     }
-
     List<Map<String, dynamic>> sessionsOut = [];
     List<Map<String, dynamic>> setsOut = [];
     List<Map<String, dynamic>> notesOut = [];
@@ -194,7 +180,6 @@ class BackupService {
     Map<String, dynamic>? profileOut;
     List<Map<String, dynamic>> modesOut;
     List<Map<String, dynamic>> exercisesOut;
-
     if (type == BackupExportType.full) {
       final sessionsList = hdb.getSessions();
       sessionsOut = sessionsList.map(_serializeSession).toList();
@@ -214,7 +199,6 @@ class BackupService {
       notesOut = notesMap.entries
           .map((e) => {'exerciseKey': e.key, 'note': e.value})
           .toList();
-
       final goals = gdb.getGoals();
       goalsOut = goals.map(_serializeGoal).toList();
       for (final g in goals) {
@@ -245,7 +229,6 @@ class BackupService {
           .map(_serializeExercise)
           .toList();
     }
-
     return BackupData(
       version: _kVersion,
       schemaVersion: _kSchemaVersion,
@@ -267,7 +250,6 @@ class BackupService {
       preferences: type == BackupExportType.full ? {'isDark': isDark} : {},
     );
   }
-
   // ── PRIVATE: serialize ────────────────────────────────────
   Map<String, dynamic> _serializeProfile(AuthProvider auth) {
     final a = auth.currentAccount;
@@ -284,7 +266,6 @@ class BackupService {
       // avatar non incluso — file reference sarebbe invalido tra installazioni
     };
   }
-
   Map<String, dynamic> _serializeExercise(HiveExercise e) => {
         'id': e.key,
         'name': e.name,
@@ -292,7 +273,6 @@ class BackupService {
         'notes': e.notes,
         'isCustom': e.isCustom,
       };
-
   Map<String, dynamic> _serializeWorkout(HiveWorkout w) => {
         'id': w.key,
         'name': w.name,
@@ -300,7 +280,6 @@ class BackupService {
         'iconId': w.iconId,
         'iconColorIndex': w.iconColorIndex,
       };
-
   Map<String, dynamic> _serializeWE(HiveWorkoutExercise we) => {
         'workoutKey': we.workoutKey,
         'exerciseKey': we.exerciseKey,
@@ -314,14 +293,12 @@ class BackupService {
         'sortOrder': we.sortOrder,
         'trainingModeKey': we.trainingModeKey,
       };
-
   Map<String, dynamic> _serializeCircuit(HiveCircuit c) => {
         'workoutKey': c.workoutKey,
         'name': c.name,
         'rounds': c.rounds,
         'sortOrder': c.sortOrder,
       };
-
   Map<String, dynamic> _serializeMode(TrainingMode m) => {
         'id': m.key,
         'name': m.name,
@@ -340,7 +317,6 @@ class BackupService {
                 })
             .toList(),
       };
-
   Map<String, dynamic> _serializeSession(HiveSession s) => {
         'id': s.key,
         'workoutKey': s.workoutKey,
@@ -348,7 +324,6 @@ class BackupService {
         'date': s.date,
         'durationSeconds': s.durationSeconds,
       };
-
   Map<String, dynamic> _serializeSet(HiveSessionSet ss) => {
         'sessionKey': ss.sessionKey,
         'exerciseKey': ss.exerciseKey,
@@ -362,7 +337,6 @@ class BackupService {
         'trainingModeKey': ss.trainingModeKey,
         'executionStatus': ss.executionStatus,
       };
-
   Map<String, dynamic> _serializeGoal(HiveGoal g) => {
         'id': g.key,
         'title': g.title,
@@ -380,7 +354,6 @@ class BackupService {
         'deadlineDate': g.deadlineDate,
         'colorIndex': g.colorIndex,
       };
-
   Map<String, dynamic> _serializeSportSession(HiveSportSession s) => {
         'sportType': s.sportType,
         'date': s.date,
@@ -388,7 +361,6 @@ class BackupService {
         'distanceKm': s.distanceKm,
         'notes': s.notes,
       };
-
   // ── PRIVATE: parse & validate ─────────────────────────────
   BackupData _parse(String raw) {
     Map<String, dynamic> json;
@@ -397,13 +369,11 @@ class BackupService {
     } catch (_) {
       throw BackupValidationError('Il file non è un JSON valido o è corrotto.');
     }
-
     _require(json, 'app');
     if (json['app'] != 'MarkFit') {
       throw BackupValidationError(
           'Il file non è un backup MarkFit (formato non supportato).');
     }
-
     final schemaVersion = (json['schemaVersion'] as num?)?.toInt() ?? 1;
     if (schemaVersion < 1 || schemaVersion > _kSchemaVersion) {
       throw BackupValidationError(
@@ -411,26 +381,57 @@ class BackupService {
           'versione di MarkFit (supportate: v1–v$_kSchemaVersion). '
           'Aggiorna l\'app per importare questo file.');
     }
-
     final exportType = json['exportType'] as String? ?? 'full';
     if (exportType != 'full' && exportType != 'structure') {
       throw BackupValidationError(
           'Tipo di export "$exportType" non riconosciuto.');
     }
-
     _require(json, 'sessions');
     _require(json, 'workouts');
     _require(json, 'exercises');
-
+    // MODIFICATO — validazione fail-fast ESTESA a tutte le liste
+    // realmente lette con cast non protetto (`as num`, `as String`)
+    // durante l'import (sia FULL che STRUCTURE). In precedenza
+    // solo "workoutExercises" e "trainingModes" erano validate qui:
+    // un file con un campo mancante in "workouts", "sessions",
+    // "goals", ecc. superava questo controllo e falliva SOLO durante
+    // _importFullData — cioè DOPO che _clearCurrentUserData() aveva
+    // già cancellato i dati esistenti, lasciando l'utente con un
+    // database vuoto/parziale invece che con i dati originali intatti
+    // e un errore chiaro PRIMA di qualunque scrittura.
+    _validateList(json, 'exercises',
+        requiredKeys: const ['id', 'name', 'muscleGroup']);
+    _validateList(json, 'workouts',
+        requiredKeys: const ['id', 'name', 'createdAt']);
     _validateList(json, 'workoutExercises', requiredKeys: const [
       'workoutKey',
       'exerciseKey',
       'exerciseName',
       'muscleGroup',
     ]);
+    _validateList(json, 'circuits',
+        requiredKeys: const ['workoutKey', 'name']);
     _validateList(json, 'trainingModes',
-        requiredKeys: const ['name', 'category', 'sets']);
-
+        requiredKeys: const ['id', 'name', 'category', 'sets']);
+    _validateList(json, 'sessions',
+        requiredKeys: const ['id', 'workoutKey', 'workoutName', 'date']);
+    _validateList(json, 'sessionSets', requiredKeys: const [
+      'sessionKey',
+      'exerciseKey',
+      'exerciseName',
+      'muscleGroup',
+      'setNumber',
+      'weight',
+      'reps',
+    ]);
+    _validateList(json, 'exerciseNotes',
+        requiredKeys: const ['exerciseKey']);
+    _validateList(json, 'goals',
+        requiredKeys: const ['id', 'title', 'category', 'createdAt', 'scheduleType']);
+    _validateList(json, 'goalCompletions',
+        requiredKeys: const ['goalKey', 'date']);
+    _validateList(json, 'sportSessions',
+        requiredKeys: const ['sportType', 'date', 'durationSeconds']);
     return BackupData(
       version: json['version'] as String? ?? '1.0.0',
       schemaVersion: schemaVersion,
@@ -452,13 +453,11 @@ class BackupService {
       preferences: json['preferences'] as Map<String, dynamic>? ?? {},
     );
   }
-
   void _require(Map<String, dynamic> m, String key) {
     if (!m.containsKey(key)) {
       throw BackupValidationError('Campo obbligatorio mancante: "$key".');
     }
   }
-
   /// Valida in modo fail-fast la lista [key]: se un elemento manca di
   /// un campo obbligatorio, o (per le modalità) ha una struttura di
   /// serie non valida, l'intera importazione viene bloccata PRIMA
@@ -502,48 +501,38 @@ class BackupService {
       }
     }
   }
-
   List<Map<String, dynamic>> _listOf(Map<String, dynamic> m, String key) {
     final raw = m[key];
     if (raw == null) return [];
     if (raw is! List) return [];
     return raw.whereType<Map<String, dynamic>>().toList();
   }
-
   // ── PRIVATE: clear (solo restore FULL) ────────────────────
   Future<void> _clearCurrentUserData() async {
     final hdb = HiveDatabase.instance;
     final gdb = GoalDatabase.instance;
     final sdb = SportDatabase.instance;
-
     await hdb.deleteAllSessions();
     await hdb.deleteAllNotes();
-
     final workouts = hdb.getWorkouts();
     for (final w in workouts) {
       await hdb.deleteWorkout(w.key);
     }
-
     final exercises = hdb.getExercises();
     for (final e in exercises.where((e) => e.isCustom)) {
       await hdb.deleteExercise(e.key);
     }
-
     final goals = gdb.getGoals();
     for (final g in goals) {
       await gdb.deleteGoal(g.key);
     }
-
     final sportSessions = sdb.getSessions();
     for (final s in sportSessions) {
       await sdb.deleteSession(s.key);
     }
-
     await TrainingModeDatabase.instance.clearAllForImport();
   }
-
   // ── PRIVATE: resolver condivisi (full + structure) ────────
-
   /// Trova un esercizio esistente (custom o predefinito) per NOME
   /// (case-insensitive), altrimenti lo crea come custom. Questo è
   /// ciò che rende possibile trasferire una scheda che usa esercizi
@@ -572,7 +561,6 @@ class BackupService {
       return key;
     }
   }
-
   String _modeSignature(
       String name, String category, List<Map<String, dynamic>> sets) {
     final setsSig = sets
@@ -581,7 +569,6 @@ class BackupService {
         .join(',');
     return '${name.trim().toLowerCase()}|${category.trim().toLowerCase()}|$setsSig';
   }
-
   String _modeSignatureFor(TrainingMode m) => _modeSignature(
       m.name,
       m.category,
@@ -593,21 +580,18 @@ class BackupService {
                 'maxReps': s.maxReps,
               })
           .toList());
-
   // ── PRIVATE: import FULL (distruttivo, restore completo) ──
   Future<void> _importFullData(BackupData data) async {
     final hdb = HiveDatabase.instance;
     final gdb = GoalDatabase.instance;
     final tmdb = TrainingModeDatabase.instance;
     final uid = hdb.currentUserId;
-
     final exerciseCache = hdb.getExercises();
     final exKeyMap = <int, int>{};
     final woKeyMap = <int, int>{};
     final sesKeyMap = <int, int>{};
     final goalKeyMap = <int, int>{};
     final modeKeyMap = <int, int>{};
-
     // 1. Esercizi custom esplicitamente esportati (dedup per nome)
     for (final e in data.exercises) {
       final oldId = (e['id'] as num).toInt();
@@ -618,7 +602,6 @@ class BackupService {
           cache: exerciseCache);
       exKeyMap[oldId] = newKey;
     }
-
     // 2. Modalità di allenamento — restore 1:1 (Parte 12/34/50: lo
     //    storico deve poter risolvere esattamente la modalità storica
     //    originale, incluse quelle soft-eliminate).
@@ -656,7 +639,6 @@ class BackupService {
     // Backup legacy senza alcuna modalità esportata: ripristina il
     // catalogo predefinito standard invece di lasciare l'utente senza.
     await tmdb.reseedIfEmptyAfterImport();
-
     // 3. Workouts
     for (final w in data.workouts) {
       final oldId = (w['id'] as num).toInt();
@@ -669,7 +651,6 @@ class BackupService {
       final newKey = await hdb.addWorkout(obj);
       woKeyMap[oldId] = newKey;
     }
-
     // 4. WorkoutExercises
     for (final we in data.workoutExercises) {
       final oldWoKey = (we['workoutKey'] as num).toInt();
@@ -697,7 +678,6 @@ class BackupService {
       );
       await hdb.addWorkoutExercise(obj);
     }
-
     // 5. Circuits
     for (final c in data.circuits) {
       final oldWoKey = (c['workoutKey'] as num).toInt();
@@ -709,7 +689,6 @@ class BackupService {
       );
       await hdb.addCircuit(obj);
     }
-
     // 6. Sessions — accesso diretto al box (createSession imposta date = now)
     final sesBoxName = '${uid}_sessions';
     final sesBox = Hive.box<HiveSession>(sesBoxName);
@@ -725,7 +704,6 @@ class BackupService {
       final newKey = await sesBox.add(obj);
       sesKeyMap[oldId] = newKey;
     }
-
     // 7. Session sets
     for (final ss in data.sessionSets) {
       final oldSesKey = (ss['sessionKey'] as num).toInt();
@@ -753,7 +731,6 @@ class BackupService {
       );
       await hdb.addSessionSet(obj);
     }
-
     // 8. Exercise notes
     for (final n in data.exerciseNotes) {
       final oldKey = (n['exerciseKey'] as num).toInt();
@@ -763,7 +740,6 @@ class BackupService {
         await hdb.saveExerciseNote(newKey, note);
       }
     }
-
     // 9. Goals
     for (final g in data.goals) {
       final oldId = (g['id'] as num).toInt();
@@ -789,7 +765,6 @@ class BackupService {
       ));
       goalKeyMap[oldId] = newKey as int;
     }
-
     // 10. Goal completions
     for (final c in data.goalCompletions) {
       final oldGoalKey = (c['goalKey'] as num).toInt();
@@ -797,7 +772,6 @@ class BackupService {
       await gdb.setCompletion(
           newGoalKey, c['date'] as String, c['completed'] as bool? ?? false);
     }
-
     // 11. Sport sessions — accesso diretto al box
     final sportBoxName = '${uid}_sport_sessions';
     if (Hive.isBoxOpen(sportBoxName)) {
@@ -813,12 +787,10 @@ class BackupService {
       }
     }
   }
-
   // ── PRIVATE: import STRUCTURE (additivo, non distruttivo) ─
   Future<void> _importStructureAdditive(BackupData data) async {
     final hdb = HiveDatabase.instance;
     final tmdb = TrainingModeDatabase.instance;
-
     final exerciseCache = hdb.getExercises();
     final exKeyMap = <int, int>{};
     for (final e in data.exercises) {
@@ -830,7 +802,6 @@ class BackupService {
           cache: exerciseCache);
       exKeyMap[oldId] = newKey;
     }
-
     // Modalità: dedup per struttura EQUIVALENTE (nome+categoria+serie).
     // Il flag isDefault del file di origine viene SEMPRE ignorato: il
     // default dell'utente che importa non deve mai essere alterato da
@@ -870,7 +841,6 @@ class BackupService {
       }
       modeKeyMap[oldId] = newKey;
     }
-
     // Workouts: SEMPRE creati come nuove voci (anche a fronte di nomi
     // uguali a schede già presenti) — è il comportamento corretto per
     // "condividi la mia scheda con un altro utente" (Parte 34/43).
@@ -886,7 +856,6 @@ class BackupService {
       final newKey = await hdb.addWorkout(obj);
       woKeyMap[oldId] = newKey;
     }
-
     for (final we in data.workoutExercises) {
       final oldWoKey = (we['workoutKey'] as num).toInt();
       if (!woKeyMap.containsKey(oldWoKey)) continue; // riga orfana, ignorata
@@ -914,7 +883,6 @@ class BackupService {
       );
       await hdb.addWorkoutExercise(obj);
     }
-
     for (final c in data.circuits) {
       final oldWoKey = (c['workoutKey'] as num).toInt();
       if (!woKeyMap.containsKey(oldWoKey)) continue;
@@ -926,13 +894,11 @@ class BackupService {
       );
       await hdb.addCircuit(obj);
     }
-
     // Storico, obiettivi, profilo, sport: MAI toccati in un import
     // "struttura" — anche se per qualche motivo il file ne contenesse
     // (dati ignorati per contratto, Parte 43).
   }
 }
-
 // ─────────────────────────────────────────────────────────────
 // BackupValidationError
 // ─────────────────────────────────────────────────────────────

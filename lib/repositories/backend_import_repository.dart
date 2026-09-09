@@ -75,18 +75,62 @@ class BackendImportRepository {
       : _api = api ?? ImportApiService(),
         _mapping = mapping ?? SyncMappingStorage();
 
-  Future<ImportSummary> importAllFromBackend() async {
+  Future<ImportSummary> importAllFromBackend({bool Function()? shouldAbort}) async {
     final errors = <String>[];
-
     final exerciseIdMap = await _importExercises(errors);
+    if (shouldAbort?.call() ?? false) {
+      return ImportSummary(
+        exercisesImported: exerciseIdMap.createdCount,
+        trainingModesImported: 0, workoutsImported: 0, workoutExercisesImported: 0,
+        circuitsImported: 0, sessionsImported: 0, sessionSetsImported: 0,
+        goalsImported: 0, goalCompletionsImported: 0, errors: errors);
+    }
     final trainingModeIdMap = await _importTrainingModes(errors);
+    if (shouldAbort?.call() ?? false) {
+      return ImportSummary(
+        exercisesImported: exerciseIdMap.createdCount,
+        trainingModesImported: trainingModeIdMap.createdCount,
+        workoutsImported: 0, workoutExercisesImported: 0, circuitsImported: 0,
+        sessionsImported: 0, sessionSetsImported: 0,
+        goalsImported: 0, goalCompletionsImported: 0, errors: errors);
+    }
     final workoutResult = await _importWorkouts(errors, exerciseIdMap, trainingModeIdMap);
-    // NUOVO — riconciliazione cancellazioni: dopo aver importato ciò
-    // che è nuovo, rimuove localmente ciò che è sparito dal backend.
+    if (shouldAbort?.call() ?? false) {
+      return ImportSummary(
+        exercisesImported: exerciseIdMap.createdCount,
+        trainingModesImported: trainingModeIdMap.createdCount,
+        workoutsImported: workoutResult.workoutsCreated,
+        workoutExercisesImported: workoutResult.exercisesLinked,
+        circuitsImported: workoutResult.circuitsCreated,
+        sessionsImported: 0, sessionSetsImported: 0,
+        goalsImported: 0, goalCompletionsImported: 0, errors: errors);
+    }
     final workoutsPruned = await _pruneDeletedWorkouts(errors);
+    if (shouldAbort?.call() ?? false) {
+      return ImportSummary(
+        exercisesImported: exerciseIdMap.createdCount,
+        trainingModesImported: trainingModeIdMap.createdCount,
+        workoutsImported: workoutResult.workoutsCreated,
+        workoutExercisesImported: workoutResult.exercisesLinked,
+        circuitsImported: workoutResult.circuitsCreated,
+        sessionsImported: 0, sessionSetsImported: 0,
+        goalsImported: 0, goalCompletionsImported: 0, errors: errors,
+        workoutsPruned: workoutsPruned);
+    }
     final sessionResult = await _importSessions(errors, exerciseIdMap, trainingModeIdMap);
+    if (shouldAbort?.call() ?? false) {
+      return ImportSummary(
+        exercisesImported: exerciseIdMap.createdCount,
+        trainingModesImported: trainingModeIdMap.createdCount,
+        workoutsImported: workoutResult.workoutsCreated,
+        workoutExercisesImported: workoutResult.exercisesLinked,
+        circuitsImported: workoutResult.circuitsCreated,
+        sessionsImported: sessionResult.sessionsCreated,
+        sessionSetsImported: sessionResult.setsCreated,
+        goalsImported: 0, goalCompletionsImported: 0, errors: errors,
+        workoutsPruned: workoutsPruned);
+    }
     final goalResult = await _importGoals(errors);
-
     return ImportSummary(
       exercisesImported: exerciseIdMap.createdCount,
       trainingModesImported: trainingModeIdMap.createdCount,
@@ -101,6 +145,7 @@ class BackendImportRepository {
       workoutsPruned: workoutsPruned,
     );
   }
+
 
   // ── Esercizi ─────────────────────────────────────────────
   Future<_RemoteToLocalMap> _importExercises(List<String> errors) async {
