@@ -12,6 +12,7 @@ import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
 import '../../widgets/workout_icon.dart';
 import '../exercises/exercises_screen.dart';
+import '../../widgets/active_session_actions_sheet.dart';
 import '../session/active_session_screen.dart';
 import 'workout_detail_screen.dart';
 import 'workouts_screen.dart';
@@ -516,6 +517,23 @@ class _ActiveRecoveryBanner extends StatelessWidget {
                     color:      Colors.white,
                     fontWeight: FontWeight.w700,
                     fontSize:   13)))),
+            const SizedBox(width: 8),
+            // NUOVO — pulsante secondario: stesso popup unificato
+            // usato in Home (active_session_actions_sheet.dart),
+            // nessuna implementazione duplicata.
+            GestureDetector(
+              onTap: () => showActiveSessionActionsSheet(context),
+              child: Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3B82F6).withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(
+                      color: const Color(0xFF3B82F6).withOpacity(0.4)),
+                ),
+                child: const Icon(Icons.more_horiz_rounded,
+                    color: Color(0xFF60A5FA), size: 20)),
+            ),
           ]),
         ),
       ),

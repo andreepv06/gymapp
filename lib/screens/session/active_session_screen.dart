@@ -160,82 +160,19 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     );
   }
 
+  // MODIFICATO — uscire dalla schermata (back button o swipe back)
+  // NON deve mai mettere in pausa né abbandonare la sessione: la
+  // sessione resta ATTIVA in background, il timer continua a
+  // scorrere (è derivato da _sessionStartTime in SessionProvider,
+  // non da un timer locale a questo widget), e l'utente può
+  // rientrare tramite "Riprendi" da Home/Allenamenti, oppure gestire
+  // esplicitamente pausa/abbandono tramite il pulsante secondario
+  // sulla card attiva (vedi active_session_actions_sheet.dart).
+  // Nessun dialog viene più mostrato in questo punto.
   Future<void> _onBack() async {
-    final sp = context.read<SessionProvider>();
-    if (_sessionError != null || !sp.hasActiveSession) {
-      Navigator.of(context).pop();
-      return;
-    }
-    if (!sp.hasAnyData) {
-      final ok = await showGlassDialog<bool>(
-        context:     context,
-        accentColor: _red,
-        title:       'Abbandonare la sessione?',
-        message:     'Non hai ancora completato nessuna serie. '
-            'La sessione verrà eliminata.',
-        actions: [
-          GlassDialogAction(
-            label: 'Continua',
-            onTap: () => Navigator.pop(context, false),
-          ),
-          GlassDialogAction(
-            label:         'Abbandona',
-            isDestructive: true,
-            onTap:         () => Navigator.pop(context, true),
-          ),
-        ],
-      );
-      if (ok == true && mounted) {
-        await sp.abandonSession();
-        if (mounted) Navigator.of(context).pop();
-      }
-      return;
-    }
-    final result = await showGlassDialog<String>(
-      context:     context,
-      accentColor: _orange,
-      icon: Container(
-        width: 44, height: 44,
-        decoration: BoxDecoration(
-          color:     _orange.withOpacity(0.12),
-          shape:     BoxShape.circle,
-          border:    Border.all(color: _orange.withOpacity(0.4)),
-          boxShadow: [
-            BoxShadow(color: _orange.withOpacity(0.2), blurRadius: 12),
-          ],
-        ),
-        child: const Icon(Icons.pause_circle_outline_rounded,
-            color: _orange, size: 22),
-      ),
-      title:   'Sessione in corso',
-      message: 'Vuoi mettere in pausa o abbandonare '
-          'definitivamente la sessione?',
-      actions: [
-        GlassDialogAction(
-          label: 'Annulla',
-          onTap: () => Navigator.pop(context, 'cancel'),
-        ),
-        GlassDialogAction(
-          label: 'Pausa',
-          color: _orange,
-          onTap: () => Navigator.pop(context, 'pause'),
-        ),
-        GlassDialogAction(
-          label:         'Abbandona',
-          isDestructive: true,
-          onTap:         () => Navigator.pop(context, 'abandon'),
-        ),
-      ],
-    );
-    if (!mounted) return;
-    if (result == 'pause') {
-      await sp.pauseSession();
-      if (mounted) Navigator.of(context).pop();
-    } else if (result == 'abandon') {
-      await sp.abandonSession();
-      if (mounted) Navigator.of(context).pop();
-    }
+    Navigator.of(context).pop();
   }
+
 
   Future<void> _finishSession() async {
     final sp = context.read<SessionProvider>();

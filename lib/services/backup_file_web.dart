@@ -20,41 +20,38 @@ Future<void> downloadJsonFile(String json, String filename) async {
 /// Apre il file picker e restituisce il contenuto del file JSON
 /// selezionato, oppure null se l'utente ha annullato.
 ///
-/// MODIFICATO — risolta una race condition che causava un
-/// comportamento INTERMITTENTE dell'importazione (a volte
-/// funzionava, a volte si interrompeva silenziosamente senza alcun
-/// errore mostrato).
+/// MODIFICATO (round 2) — l'elemento <input type="file"> ora viene
+/// SEMPRE inserito nel DOM (document.body) prima di invocare click()
+/// e rimosso quando la selezione è risolta. In precedenza l'elemento
+/// restava "fluttuante" (mai attaccato al documento): alcuni browser
+/// tollerano il click programmatico su un input non montato solo per
+/// un numero limitato di invocazioni consecutive, dopodiché iniziano
+/// a ignorarlo silenziosamente — nessuna eccezione, nessun evento,
+/// il picker semplicemente smette di aprirsi. Root cause diretta del
+/// comportamento "funziona a volte, poi mai più" segnalato.
 ///
-/// Causa: i browser non emettono un evento "cancel" affidabile per
-/// <input type="file">, quindi il codice usa un trucco diffuso —
-/// ascoltare l'evento "focus" della finestra, che si riattiva sia
-/// quando l'utente seleziona un file SIA quando annulla il picker
-/// nativo del sistema operativo, con un timeout di 600ms per
-/// distinguere i due casi. Il bug: quel timeout gareggiava contro la
-/// lettura asincrona del file (FileReader) — se il file era più
-/// grande o il browser più lento in quel momento, il timeout di
-/// "annullamento presunto" poteva scattare PRIMA che la lettura del
-/// file selezionato fosse completata, facendo risultare `null`
-/// un'importazione in realtà valida, senza alcun errore mostrato.
-/// Il listener "focus" inoltre non veniva MAI rimosso da `window`,
-/// accumulandosi ad ogni apertura del picker.
-///
-/// Fix: un flag `fileSelected` viene impostato SUBITO in `onChange`
-/// (che scatta appena il browser ha processato la selezione, ben
-/// prima che FileReader finisca di leggere) — il listener "focus" ora
-/// considera "annullato" solo se `onChange` non è MAI scattato,
-/// eliminando la competizione con la lettura del file. Il listener
-/// viene inoltre sempre rimosso al termine, evitando l'accumulo.
+/// Mantiene inoltre il fix precedente sul flag `fileSelected` per
+/// evitare che il rilevamento "annullamento" (basato sull'evento
+/// window.focus, unico segnale disponibile per l'annullamento del
+/// picker nativo) corra contro la lettura asincrona del file.
 Future<String?> pickJsonFile() async {
   final completer = Completer<String?>();
   bool resolved = false;
   bool fileSelected = false;
   final input = html.FileUploadInputElement()
-    ..accept = '.json,application/json';
+    ..accept = '.json,application/json'
+    ..style.display = 'none';
+
+  void cleanup() {
+    if (input.isConnected == true) {
+      input.remove();
+    }
+  }
 
   void resolveOnce(String? value) {
     if (!resolved) {
       resolved = true;
+      cleanup();
       completer.complete(value);
     }
   }
@@ -62,10 +59,6 @@ Future<String?> pickJsonFile() async {
   late final void Function(html.Event) focusListener;
   focusListener = (_) {
     Future.delayed(const Duration(milliseconds: 600), () {
-      // NUOVO — se onChange è già scattato (fileSelected == true),
-      // la lettura del file è in corso o già completata: NON è un
-      // annullamento, quindi non risolviamo qui, lasciamo che sia
-      // reader.onLoad/onError a completare il Completer.
       if (!fileSelected) {
         resolveOnce(null);
       }
@@ -79,7 +72,7 @@ Future<String?> pickJsonFile() async {
       resolveOnce(null);
       return;
     }
-    fileSelected = true; // NUOVO — marca la selezione PRIMA di leggere
+    fileSelected = true;
     final reader = html.FileReader();
     reader.readAsText(file);
     reader.onLoad.listen((_) {
@@ -90,6 +83,7 @@ Future<String?> pickJsonFile() async {
     });
   });
 
+  html.document.body?.append(input);
   html.window.addEventListener('focus', focusListener, true);
   input.click();
   return completer.future;

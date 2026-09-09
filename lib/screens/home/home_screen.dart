@@ -11,6 +11,7 @@ import '../../providers/exercise_provider.dart';
 import '../../providers/goal_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../providers/workout_provider.dart';
+import '../../widgets/active_session_actions_sheet.dart';
 import '../../widgets/avatar_picker_sheet.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
@@ -557,7 +558,12 @@ class _PausedSessionsBanner extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _ActiveSessionBanner — invariato
+// _ActiveSessionBanner — MODIFICATO
+//
+// Aggiunto pulsante secondario (icona "altre azioni") accanto a
+// "Riprendi", che apre il popup unificato di gestione sessione
+// (Metti in pausa / Abbandona / Annulla), condiviso con Allenamenti
+// tramite showActiveSessionActionsSheet(). Layout azzurro invariato.
 // ─────────────────────────────────────────────────────────────
 class _ActiveSessionBanner extends StatelessWidget {
   final SessionProvider sp;
@@ -627,6 +633,23 @@ class _ActiveSessionBanner extends StatelessWidget {
                 child: const Text('Riprendi', style: TextStyle(
                     color: Colors.white, fontSize: 12,
                     fontWeight: FontWeight.w700)))),
+            const SizedBox(width: 8),
+            // NUOVO — pulsante secondario: apre il popup unificato
+            // Metti in pausa / Abbandona / Annulla (Parte 5/6/8 della
+            // richiesta). Piccolo, non compete visivamente con
+            // "Riprendi" che resta l'azione principale.
+            GestureDetector(
+              onTap: () => showActiveSessionActionsSheet(context),
+              child: Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  color: _blue.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(color: _blue.withOpacity(0.4)),
+                ),
+                child: const Icon(Icons.more_horiz_rounded,
+                    color: Color(0xFF60A5FA), size: 20)),
+            ),
           ]),
         ),
       ),
