@@ -19,6 +19,11 @@ const _orange = MarkFitColors.orange;
 const _red    = MarkFitColors.red;
 const _green  = MarkFitColors.green;
 
+// NUOVO — modalità di visualizzazione della sessione attiva.
+// Puro stato di presentazione UI, locale allo screen: non altera
+// in alcun modo la sessione/i dati in SessionProvider.
+enum _ViewMode { list, single }
+
 class _TopItem {
   final bool                   isFree;
   final SessionExercise?       exercise;
@@ -73,9 +78,18 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   String? _sessionError;
   bool    _sessionInitialized = false;
 
+  // NUOVO — stato modalità di visualizzazione + controller del
+  // PageView per la modalità esercizio singolo. Creato una sola
+  // volta in initState, eliminato in dispose: nessun controller
+  // creato dentro build().
+  _ViewMode           _viewMode = _ViewMode.list;
+  late PageController _pageController;
+  int                 _currentPageIndex = 0;
+
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _uiTimer = Timer.periodic(
       const Duration(seconds: 1),
       (_) { if (mounted) setState(() {}); },
@@ -86,6 +100,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   @override
   void dispose() {
     _uiTimer?.cancel();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -161,18 +176,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     );
   }
 
-  // MODIFICATO (fix) — se la sessione è completamente vuota
-  // (nessun dato significativo inserito dall'utente — vedi
-  // SessionProvider.hasAnyData) e l'uscita avviene tramite
-  // back/swipe back, la sessione viene eliminata automaticamente
-  // e silenziosamente, senza popup: dal punto di vista dell'utente
-  // equivale ad aver solo aperto la schermata senza iniziare
-  // realmente l'allenamento. Se invece la sessione contiene almeno
-  // un dato significativo, il comportamento resta quello della
-  // modifica precedente: uscire dalla schermata NON mette mai in
-  // pausa né abbandona la sessione. L'azione esplicita sul
-  // pulsante cestino nell'header resta invece SEMPRE protetta dal
-  // popup di conferma, indipendentemente da questo controllo.
   Future<void> _onBack() async {
     final sp = context.read<SessionProvider>();
     if (_sessionError != null || !sp.hasActiveSession) {
@@ -187,22 +190,12 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     Navigator.of(context).pop();
   }
 
-  // NUOVO — pulsante pausa nell'header della sessione attiva.
-  // Richiama la stessa logica centralizzata di pausa già usata dal
-  // popup unificato (SessionProvider.pauseSession()) — nessuna
-  // seconda implementazione. Nessun popup di conferma: la pausa è
-  // reversibile e non distruttiva.
   Future<void> _handlePauseFromHeader() async {
     final sp = context.read<SessionProvider>();
     await sp.pauseSession();
     if (mounted) Navigator.of(context).pop();
   }
 
-  // NUOVO — pulsante cestino nell'header della sessione attiva.
-  // Riusa lo STESSO popup di conferma centralizzato usato
-  // dall'azione "Abbandona sessione" del popup unificato aperto da
-  // Home/Allenamenti (showAbandonSessionConfirmation in
-  // active_session_actions_sheet.dart) — nessuna duplicazione.
   Future<void> _handleAbandonFromHeader() async {
     final abandoned = await showAbandonSessionConfirmation(context);
     if (abandoned && mounted) Navigator.of(context).pop();
@@ -374,6 +367,14 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     ));
   }
 
+  // NUOVO — toggle modalità lista/singolo.
+  void _toggleViewMode() {
+    setState(() {
+      _viewMode =
+          _viewMode == _ViewMode.list ? _ViewMode.single : _ViewMode.list;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.mfc;
@@ -432,12 +433,16 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                                 ),
                               ),
                             )
-                          : _buildReorderableList(sp, topItems, c),
+                          : _viewMode == _ViewMode.list
+                              ? _buildReorderableList(sp, topItems, c)
+                              : _buildSingleModeView(sp, topItems, c),
                     ),
                     _SessionActionsBar(
-                      onAdd:    _showAddMenu,
-                      onFinish: _finishSession,
-                      c:        c,
+                      onAdd:        _showAddMenu,
+                      onFinish:     _finishSession,
+                      onToggleView: _toggleViewMode,
+                      viewMode:     _viewMode,
+                      c:            c,
                     ),
                   ],
                 );
@@ -575,6 +580,145 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     );
   }
 
+  // NUOVO — costruisce la card di un circuito per la modalità
+  // singola: STESSO widget _SessionCircuitCard della modalità
+  // lista, forzato espanso (startExpanded: true), senza il
+  // wrapper Reorderable (il riordino resta gestito solo in
+  // modalità lista, dove è la sede naturale per farlo).
+  Widget _buildSingleCircuitCard(SessionProvider sp, _TopItem item) {
+    final cid    = item.circuitId!;
+    final circEx = item.circuitExercises!;
+    return _SessionCircuitCard(
+      key:          ValueKey('single_${item.key}'),
+      circuitId:    cid,
+      circuitName:  sp.getCircuitName(cid),
+      exercises:    circEx,
+      currentRound: sp.getCurrentRound(cid),
+      totalRounds:  sp.getTotalRounds(cid),
+      getSets:      (exKey) => sp.getCircuitSets(cid, exKey),
+      onGoToRound:  (r) => sp.goToRound(cid, r),
+      onNextRound:  () => sp.nextRound(cid),
+      onPrevRound:  () => sp.prevRound(cid),
+      onToggle:     (exKey, idx) =>
+          sp.toggleSet(exKey, idx, circuitId: cid),
+      onUpdate:     (exKey, idx, w, r) =>
+          sp.updateSet(exKey, idx, w, r, circuitId: cid),
+      onAddSet:     (exKey) => sp.addSetToExercise(exKey, circuitId: cid),
+      onRemoveSet:  (exKey) =>
+          sp.removeSetFromExercise(exKey, circuitId: cid),
+      onRemoveExercise: (exKey) =>
+          sp.removeExerciseFromCircuitInSession(
+              circuitId: cid, exerciseKey: exKey),
+      onRemoveCircuit: () => sp.removeCircuitFromSession(cid),
+      onModify:        () => _showModifyCircuitSheet(cid),
+      onReorderExercises: (reordered) =>
+          sp.reorderCircuitExercises(cid, reordered),
+      startExpanded: true,
+    );
+  }
+
+  // NUOVO — modalità esercizio singolo. PageView.builder costruito
+  // sulla STESSA lista topItems della modalità lista (nessuna
+  // seconda fonte dati). Ogni pagina = un'unità navigabile
+  // (esercizio libero, oppure circuito intero come unità unica).
+  // Frecce + indicatore sopra, swipe riservato esclusivamente al
+  // cambio pagina (mai al cambio modalità).
+  Widget _buildSingleModeView(
+    SessionProvider sp,
+    List<_TopItem> topItems,
+    MarkFitColors c,
+  ) {
+    final clamped = topItems.isEmpty
+        ? 0
+        : _currentPageIndex.clamp(0, topItems.length - 1);
+    if (clamped != _currentPageIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _currentPageIndex = clamped);
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(clamped);
+        }
+      });
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Row(
+            children: [
+              Tooltip(
+                message: 'Esercizio precedente',
+                child: _NavArrowBtn(
+                  icon:    Icons.chevron_left_rounded,
+                  enabled: clamped > 0,
+                  c:       c,
+                  onTap: () => _pageController.previousPage(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOut),
+                ),
+              ),
+              Expanded(
+                child: _ExerciseNavIndicator(
+                    current: clamped, total: topItems.length, c: c),
+              ),
+              Tooltip(
+                message: 'Esercizio successivo',
+                child: _NavArrowBtn(
+                  icon:    Icons.chevron_right_rounded,
+                  enabled: clamped < topItems.length - 1,
+                  c:       c,
+                  onTap: () => _pageController.nextPage(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOut),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount:  topItems.length,
+            onPageChanged: (i) => setState(() => _currentPageIndex = i),
+            itemBuilder: (ctx, i) {
+              final item = topItems[i];
+              return SingleChildScrollView(
+                key:      ValueKey('page_${item.key}'),
+                padding:  const EdgeInsets.fromLTRB(16, 0, 16, 120),
+                physics:  const BouncingScrollPhysics(),
+                child: item.isFree
+                    ? _SessionExerciseCard(
+                        key: ValueKey('single_${item.key}'),
+                        exercise: item.exercise!,
+                        sets:
+                            sp.exerciseSets[item.exercise!.exerciseKey] ?? [],
+                        isRestingHere: sp.isResting &&
+                            sp.restingExerciseId == item.exercise!.exerciseKey,
+                        startExpanded: true,
+                        onToggle: (idx) =>
+                            sp.toggleSet(item.exercise!.exerciseKey, idx),
+                        onUpdate: (idx, w, r) => sp.updateSet(
+                            item.exercise!.exerciseKey, idx, w, r),
+                        onAddSet: () =>
+                            sp.addSetToExercise(item.exercise!.exerciseKey),
+                        onRemoveSet: () => sp
+                            .removeSetFromExercise(item.exercise!.exerciseKey),
+                        onRemove: () => sp
+                            .removeExerciseFromSession(item.exercise!.exerciseKey),
+                        onUpdateNote: (note) => sp.updateExerciseNote(
+                            item.exercise!.exerciseKey, note),
+                        currentNote: item.exercise!.sessionNote ?? '',
+                      )
+                    : _buildSingleCircuitCard(sp, item),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildLoading(MarkFitColors c) {
     return Center(
       child: Column(
@@ -701,8 +845,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   }
 }
 
-// _SessionHeader — MODIFICATO: aggiunti due pulsanti compatti
-// (pausa/cestino) accanto al chip del timer.
 class _SessionHeader extends StatelessWidget {
   final String               workoutName;
   final int                  elapsed, completed, total;
@@ -809,9 +951,6 @@ class _SessionHeader extends StatelessWidget {
                       ]),
                     ),
                     const SizedBox(width: 8),
-                    // NUOVO — pulsante pausa rapido. Stessa logica
-                    // centralizzata di SessionProvider.pauseSession(),
-                    // nessun popup di conferma (azione reversibile).
                     _HeaderIconBtn(
                       icon:  Icons.pause_rounded,
                       color: _orange,
@@ -819,9 +958,6 @@ class _SessionHeader extends StatelessWidget {
                       onTap: onPause,
                     ),
                     const SizedBox(width: 6),
-                    // NUOVO — pulsante abbandona rapido. Apre
-                    // SEMPRE il popup di conferma centralizzato,
-                    // mai un'eliminazione diretta al singolo tap.
                     _HeaderIconBtn(
                       icon:  Icons.delete_outline_rounded,
                       color: _red,
@@ -864,10 +1000,6 @@ class _SessionHeader extends StatelessWidget {
   }
 }
 
-// NUOVO — pulsante icona compatto Glass, usato dai due controlli
-// rapidi (pausa/abbandona) nell'header della sessione attiva.
-// Dimensione visuale compatta (34x34) ma hit area adeguata al
-// tocco su mobile grazie a HitTestBehavior.opaque.
 class _HeaderIconBtn extends StatelessWidget {
   final IconData      icon;
   final Color         color;
@@ -892,6 +1024,92 @@ class _HeaderIconBtn extends StatelessWidget {
         ),
         child: Icon(icon, size: 16, color: color),
       ),
+    );
+  }
+}
+
+// NUOVO — freccia di navigazione compatta per la modalità
+// esercizio singolo. Area touch 40x40, icona 22, hit area piena
+// tramite HitTestBehavior.opaque anche quando disabilitata (in
+// quel caso onTap è null, coerente col pattern _StepBtn già
+// usato altrove nell'app).
+class _NavArrowBtn extends StatelessWidget {
+  final IconData      icon;
+  final bool          enabled;
+  final MarkFitColors c;
+  final VoidCallback  onTap;
+  const _NavArrowBtn({
+    required this.icon, required this.enabled,
+    required this.c,    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 40, height: 40,
+        decoration: BoxDecoration(
+          color: enabled
+              ? c.glassCardInset
+              : c.glassCardInset.withOpacity(0.4),
+          shape: BoxShape.circle,
+          border: Border.all(
+              color: enabled
+                  ? c.glassBorder
+                  : c.glassBorder.withOpacity(0.4)),
+        ),
+        child: Icon(icon, size: 22,
+            color: enabled ? c.iconPrimary : c.textTertiary),
+      ),
+    );
+  }
+}
+
+// NUOVO — indicatore di posizione per la modalità esercizio
+// singolo: dot (nascosti oltre 8 unità per evitare overflow su
+// viewport stretti) + testo "n / totale", stile coerente con
+// l'indicatore round già usato in _SessionCircuitCard.
+class _ExerciseNavIndicator extends StatelessWidget {
+  final int           current, total;
+  final MarkFitColors c;
+  const _ExerciseNavIndicator({
+    required this.current, required this.total, required this.c,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (total > 0 && total <= 8)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(total, (i) {
+              final active = i == current;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width:  active ? 16 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: active ? _teal : c.textTertiary.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(3),
+                  boxShadow: active
+                      ? [BoxShadow(
+                          color: _teal.withOpacity(0.5), blurRadius: 4)]
+                      : null,
+                ),
+              );
+            }),
+          ),
+        if (total > 0 && total <= 8) const SizedBox(height: 4),
+        Text('${total > 0 ? current + 1 : 0} / $total', style: TextStyle(
+            color:      c.textTertiary,
+            fontSize:   11,
+            fontWeight: FontWeight.w600)),
+      ],
     );
   }
 }
@@ -977,11 +1195,17 @@ class _RestTimerBanner extends StatelessWidget {
   }
 }
 
+// _SessionActionsBar — MODIFICATO: aggiunto pulsante compatto per
+// il cambio modalità lista/singolo, coerente con lo stile Glass
+// dei pulsanti Aggiungi/Termina già presenti.
 class _SessionActionsBar extends StatelessWidget {
-  final VoidCallback  onAdd, onFinish;
+  final VoidCallback  onAdd, onFinish, onToggleView;
+  final _ViewMode     viewMode;
   final MarkFitColors c;
   const _SessionActionsBar({
-      required this.onAdd, required this.onFinish, required this.c});
+      required this.onAdd, required this.onFinish,
+      required this.onToggleView, required this.viewMode,
+      required this.c});
 
   @override
   Widget build(BuildContext context) {
@@ -989,6 +1213,37 @@ class _SessionActionsBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: Row(
         children: [
+          Tooltip(
+            message: viewMode == _ViewMode.list
+                ? 'Modalità esercizio singolo'
+                : 'Modalità lista',
+            child: GestureDetector(
+              onTap: onToggleView,
+              behavior: HitTestBehavior.opaque,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    width: 48, height: 48,
+                    decoration: BoxDecoration(
+                      color:        c.glassCardInset,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: c.glassBorder, width: 1),
+                    ),
+                    child: Icon(
+                      viewMode == _ViewMode.list
+                          ? Icons.view_carousel_outlined
+                          : Icons.view_agenda_outlined,
+                      color: c.iconPrimary, size: 19,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: GestureDetector(
               onTap: onAdd,
@@ -1069,13 +1324,19 @@ class _SessionExerciseCard extends StatefulWidget {
   final VoidCallback                   onAddSet, onRemoveSet, onRemove;
   final Future<void> Function(String)  onUpdateNote;
   final String                         currentNote;
+  // NUOVO — quando true la card nasce già espansa (usato dalla
+  // modalità singola). Default false: nessun impatto sulla
+  // modalità lista, che continua a nascere sempre collassata.
+  final bool                           startExpanded;
 
   const _SessionExerciseCard({
+    super.key,
     required this.exercise,     required this.sets,
     required this.isRestingHere, required this.onToggle,
     required this.onUpdate,     required this.onAddSet,
     required this.onRemoveSet,  required this.onRemove,
     required this.onUpdateNote, required this.currentNote,
+    this.startExpanded = false,
   });
 
   @override
@@ -1084,7 +1345,13 @@ class _SessionExerciseCard extends StatefulWidget {
 }
 
 class _SessionExerciseCardState extends State<_SessionExerciseCard> {
-  bool _expanded = false;
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.startExpanded;
+  }
 
   String? _expectedLabelFor(int index) {
     final structure = widget.exercise.expectedStructure;
@@ -1268,8 +1535,13 @@ class _SessionCircuitCard extends StatefulWidget {
   final void Function(dynamic)           onRemoveExercise;
   final VoidCallback                     onModify, onRemoveCircuit;
   final void Function(List<SessionExercise>) onReorderExercises;
+  // NUOVO — usato dalla modalità singola per avviare il circuito
+  // già espanso. Default false: nessun impatto sulla modalità
+  // lista.
+  final bool                             startExpanded;
 
   const _SessionCircuitCard({
+    super.key,
     required this.circuitId,       required this.circuitName,
     required this.exercises,       required this.currentRound,
     required this.totalRounds,     required this.getSets,
@@ -1279,6 +1551,7 @@ class _SessionCircuitCard extends StatefulWidget {
     required this.onRemoveSet,     required this.onRemoveExercise,
     required this.onModify,        required this.onRemoveCircuit,
     required this.onReorderExercises,
+    this.startExpanded = false,
   });
 
   @override
@@ -1286,7 +1559,13 @@ class _SessionCircuitCard extends StatefulWidget {
 }
 
 class _SessionCircuitCardState extends State<_SessionCircuitCard> {
-  bool _expanded = false;
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.startExpanded;
+  }
 
   int get _completedCount {
     int n = 0;
