@@ -8,6 +8,7 @@ import '../../core/theme/markfit_colors.dart';
 import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
 import '../../providers/session_provider.dart';
+import '../../widgets/active_session_actions_sheet.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/shared_sheets.dart';
 
@@ -160,19 +161,52 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     );
   }
 
-  // MODIFICATO — uscire dalla schermata (back button o swipe back)
-  // NON deve mai mettere in pausa né abbandonare la sessione: la
-  // sessione resta ATTIVA in background, il timer continua a
-  // scorrere (è derivato da _sessionStartTime in SessionProvider,
-  // non da un timer locale a questo widget), e l'utente può
-  // rientrare tramite "Riprendi" da Home/Allenamenti, oppure gestire
-  // esplicitamente pausa/abbandono tramite il pulsante secondario
-  // sulla card attiva (vedi active_session_actions_sheet.dart).
-  // Nessun dialog viene più mostrato in questo punto.
+  // MODIFICATO (fix) — se la sessione è completamente vuota
+  // (nessun dato significativo inserito dall'utente — vedi
+  // SessionProvider.hasAnyData) e l'uscita avviene tramite
+  // back/swipe back, la sessione viene eliminata automaticamente
+  // e silenziosamente, senza popup: dal punto di vista dell'utente
+  // equivale ad aver solo aperto la schermata senza iniziare
+  // realmente l'allenamento. Se invece la sessione contiene almeno
+  // un dato significativo, il comportamento resta quello della
+  // modifica precedente: uscire dalla schermata NON mette mai in
+  // pausa né abbandona la sessione. L'azione esplicita sul
+  // pulsante cestino nell'header resta invece SEMPRE protetta dal
+  // popup di conferma, indipendentemente da questo controllo.
   Future<void> _onBack() async {
+    final sp = context.read<SessionProvider>();
+    if (_sessionError != null || !sp.hasActiveSession) {
+      Navigator.of(context).pop();
+      return;
+    }
+    if (!sp.hasAnyData) {
+      await sp.abandonSession();
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
     Navigator.of(context).pop();
   }
 
+  // NUOVO — pulsante pausa nell'header della sessione attiva.
+  // Richiama la stessa logica centralizzata di pausa già usata dal
+  // popup unificato (SessionProvider.pauseSession()) — nessuna
+  // seconda implementazione. Nessun popup di conferma: la pausa è
+  // reversibile e non distruttiva.
+  Future<void> _handlePauseFromHeader() async {
+    final sp = context.read<SessionProvider>();
+    await sp.pauseSession();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  // NUOVO — pulsante cestino nell'header della sessione attiva.
+  // Riusa lo STESSO popup di conferma centralizzato usato
+  // dall'azione "Abbandona sessione" del popup unificato aperto da
+  // Home/Allenamenti (showAbandonSessionConfirmation in
+  // active_session_actions_sheet.dart) — nessuna duplicazione.
+  Future<void> _handleAbandonFromHeader() async {
+    final abandoned = await showAbandonSessionConfirmation(context);
+    if (abandoned && mounted) Navigator.of(context).pop();
+  }
 
   Future<void> _finishSession() async {
     final sp = context.read<SessionProvider>();
@@ -377,6 +411,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                       total:       sp.totalSetsCount,
                       formatTime:  _fmt,
                       onBack:      _onBack,
+                      onPause:     _handlePauseFromHeader,
+                      onAbandon:   _handleAbandonFromHeader,
                       c:           c,
                     ),
                     if (sp.isResting)
@@ -665,22 +701,22 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   }
 }
 
-// _SessionHeader, _RestTimerBanner, _SessionActionsBar,
-// _SessionExerciseCard, _SessionCircuitCard, _CircuitRoundContent,
-// _CircuitExerciseBlock, _SetRow, _SmallBtn: identici alla versione
-// precedente — già tutti theme-aware con context.mfc.
-
+// _SessionHeader — MODIFICATO: aggiunti due pulsanti compatti
+// (pausa/cestino) accanto al chip del timer.
 class _SessionHeader extends StatelessWidget {
   final String               workoutName;
   final int                  elapsed, completed, total;
   final String Function(int) formatTime;
   final VoidCallback         onBack;
+  final VoidCallback         onPause;
+  final VoidCallback         onAbandon;
   final MarkFitColors        c;
 
   const _SessionHeader({
     required this.workoutName, required this.elapsed,
     required this.completed,   required this.total,
     required this.formatTime,  required this.onBack,
+    required this.onPause,     required this.onAbandon,
     required this.c,
   });
 
@@ -750,6 +786,7 @@ class _SessionHeader extends StatelessWidget {
                         ],
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 7),
@@ -770,6 +807,26 @@ class _SessionHeader extends StatelessWidget {
                                 fontSize:   14,
                                 fontWeight: FontWeight.w800)),
                       ]),
+                    ),
+                    const SizedBox(width: 8),
+                    // NUOVO — pulsante pausa rapido. Stessa logica
+                    // centralizzata di SessionProvider.pauseSession(),
+                    // nessun popup di conferma (azione reversibile).
+                    _HeaderIconBtn(
+                      icon:  Icons.pause_rounded,
+                      color: _orange,
+                      c:     c,
+                      onTap: onPause,
+                    ),
+                    const SizedBox(width: 6),
+                    // NUOVO — pulsante abbandona rapido. Apre
+                    // SEMPRE il popup di conferma centralizzato,
+                    // mai un'eliminazione diretta al singolo tap.
+                    _HeaderIconBtn(
+                      icon:  Icons.delete_outline_rounded,
+                      color: _red,
+                      c:     c,
+                      onTap: onAbandon,
                     ),
                   ],
                 ),
@@ -802,6 +859,38 @@ class _SessionHeader extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// NUOVO — pulsante icona compatto Glass, usato dai due controlli
+// rapidi (pausa/abbandona) nell'header della sessione attiva.
+// Dimensione visuale compatta (34x34) ma hit area adeguata al
+// tocco su mobile grazie a HitTestBehavior.opaque.
+class _HeaderIconBtn extends StatelessWidget {
+  final IconData      icon;
+  final Color         color;
+  final MarkFitColors c;
+  final VoidCallback  onTap;
+  const _HeaderIconBtn({
+    required this.icon, required this.color,
+    required this.c,    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 34, height: 34,
+        decoration: BoxDecoration(
+          color:        color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withOpacity(0.35), width: 1),
+        ),
+        child: Icon(icon, size: 16, color: color),
       ),
     );
   }
@@ -997,9 +1086,6 @@ class _SessionExerciseCard extends StatefulWidget {
 class _SessionExerciseCardState extends State<_SessionExerciseCard> {
   bool _expanded = false;
 
-  // FASE 4 — etichetta struttura attesa (fisso o range) per la
-  // serie in posizione [index], se disponibile. Puramente
-  // informativa: non condiziona la modificabilità del valore.
   String? _expectedLabelFor(int index) {
     final structure = widget.exercise.expectedStructure;
     if (structure == null || index >= structure.length) return null;
@@ -1590,8 +1676,6 @@ class _CircuitExerciseBlock extends StatelessWidget {
     required this.onRemove,
   });
 
-  // FASE 4 — etichetta struttura attesa per posizione, letta
-  // direttamente dall'istantanea immutabile su SessionExercise.
   String? _expectedLabelFor(int index) {
     final structure = exercise.expectedStructure;
     if (structure == null || index >= structure.length) return null;
@@ -1700,11 +1784,6 @@ class _SetRow extends StatefulWidget {
   final VoidCallback               onToggle;
   final void Function(double, int) onUpdate;
   final bool                       compact;
-  // FASE 4 — etichetta della struttura attesa per questa posizione
-  // (es. "8" oppure "8-12"), puramente informativa. Non rende il
-  // campo non modificabile: l'utente può sempre discostarsene
-  // durante l'esecuzione (Parte 16 — la sessione registra ciò che è
-  // stato realmente eseguito, non ciò che era previsto).
   final String?                    expectedLabel;
 
   const _SetRow({
@@ -1752,11 +1831,6 @@ class _SetRowState extends State<_SetRow> {
     }
   }
 
-  // FASE 4 — Parte 17: incremento/decremento rapido delle
-  // ripetizioni, indipendente per ogni serie. Aggiorna il
-  // controller per coerenza visiva immediata e propaga il nuovo
-  // valore tramite onUpdate, senza toccare focus/tastiera del
-  // campo peso adiacente.
   void _stepReps(int delta) {
     final current = int.tryParse(_repsCtrl.text) ?? widget.set.reps;
     final next = (current + delta).clamp(0, 999);
@@ -1943,9 +2017,6 @@ class _SmallBtn extends StatelessWidget {
       child: Icon(icon, size: 14, color: color)));
 }
 
-// ─────────────────────────────────────────────────────────────
-// _NoteChip — ADATTIVO (già corretto, usa c.mfc)
-// ─────────────────────────────────────────────────────────────
 class _NoteChip extends StatelessWidget {
   final String                        note;
   final Future<void> Function(String) onSave;
@@ -2009,9 +2080,6 @@ class _NoteChip extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _AddToSessionSheet — sheet usa GlassSheetWrapper (ora theme-aware)
-// ─────────────────────────────────────────────────────────────
 class _AddToSessionSheet extends StatelessWidget {
   final VoidCallback onAddExercise, onAddCircuit;
   const _AddToSessionSheet({
@@ -2043,10 +2111,6 @@ class _AddToSessionSheet extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _SessionMenuOption — FIX: subtitle ora usa c.textTertiary
-// PRIMA: Colors.white.withOpacity(0.4) hardcoded
-// ─────────────────────────────────────────────────────────────
 class _SessionMenuOption extends StatelessWidget {
   final IconData     icon;
   final String       label, subtitle;
@@ -2061,7 +2125,6 @@ class _SessionMenuOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FIX: legge tema corrente
     final c = context.mfc;
     return GestureDetector(
       onTap: onTap,
@@ -2095,7 +2158,6 @@ class _SessionMenuOption extends StatelessWidget {
                         fontSize:   15,
                         fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
-                    // FIX: era Colors.white.withOpacity(0.4)
                     Text(subtitle, style: TextStyle(
                         color:    c.textTertiary,
                         fontSize: 11)),

@@ -8,26 +8,69 @@ const _blue = Color(0xFF3B82F6);
 const _orange = MarkFitColors.orange;
 const _red = MarkFitColors.red;
 
+/// Popup di conferma CENTRALIZZATO per l'abbandono di una sessione
+/// attiva. Punto UNICO usato sia dal pulsante cestino dentro
+/// ActiveSessionScreen (header, controlli rapidi) sia dall'azione
+/// "Abbandona sessione" del popup unificato aperto da Home/
+/// Allenamenti (showActiveSessionActionsSheet, sotto). Nessuna
+/// seconda implementazione, nessun testo duplicato.
+///
+/// Ritorna true SOLO se l'utente ha confermato e la sessione è
+/// stata effettivamente abbandonata (sp.abandonSession() eseguito).
+/// Ritorna false se l'utente ha annullato o chiuso il popup.
+Future<bool> showAbandonSessionConfirmation(BuildContext context) async {
+  final sp = context.read<SessionProvider>();
+  final name = sp.currentWorkout?.name ?? 'la sessione';
+
+  final result = await showGlassDialog<String>(
+    context: context,
+    accentColor: _red,
+    icon: Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: _red.withOpacity(0.12),
+        shape: BoxShape.circle,
+        border: Border.all(color: _red.withOpacity(0.4)),
+        boxShadow: [
+          BoxShadow(color: _red.withOpacity(0.2), blurRadius: 12),
+        ],
+      ),
+      child: const Icon(Icons.delete_outline_rounded,
+          color: _red, size: 22),
+    ),
+    title: 'Abbandonare la sessione?',
+    message: '"$name" verrà eliminata: i dati inseriti andranno '
+        'persi e la sessione non sarà salvata nello storico.',
+    actions: [
+      GlassDialogAction(
+        label: 'Annulla',
+        onTap: () => Navigator.pop(context, 'cancel'),
+      ),
+      GlassDialogAction(
+        label: 'Abbandona sessione',
+        isDestructive: true,
+        onTap: () => Navigator.pop(context, 'abandon'),
+      ),
+    ],
+  );
+
+  if (result == 'abandon') {
+    if (!context.mounted) return false;
+    await context.read<SessionProvider>().abandonSession();
+    return true;
+  }
+  return false;
+}
+
 /// Popup UNICO e centralizzato per la gestione di una sessione
 /// ATTIVA, richiamato dal pulsante secondario presente sulla card
 /// blu sia in Home sia in Allenamenti (stessa identica logica,
-/// nessuna duplicazione — Parte 8/14 della richiesta).
+/// nessuna duplicazione).
 ///
-/// Offre solo due azioni esplicite:
-///  - Metti in pausa: sp.pauseSession() — il timer si ferma, i dati
-///    restano, la sessione diventa "in pausa" (già gestita
-///    dall'app: appare nella lista sp.pausedSessions).
-///  - Abbandona sessione: sp.abandonSession() — cancella la sessione
-///    da Hive (mai salvata come allenamento completato) e ripulisce
-///    lo stato di pausa persistito. Nessuna conferma aggiuntiva:
-///    l'azione è già etichettata come distruttiva nel dialog stesso,
-///    coerente con il pattern isDestructive già usato altrove
-///    nell'app (es. "Abbandona" nel vecchio _onBack di
-///    ActiveSessionScreen).
-///
-/// NON viene mai chiamato automaticamente da uno swipe back o da
-/// una semplice navigazione — solo da un tap esplicito dell'utente
-/// su questo pulsante.
+/// FIX — l'azione "Abbandona sessione" non elimina più
+/// direttamente: riusa showAbandonSessionConfirmation() sopra,
+/// esattamente come il pulsante cestino in ActiveSessionScreen.
 Future<void> showActiveSessionActionsSheet(BuildContext context) async {
   final sp = context.read<SessionProvider>();
   final name = sp.currentWorkout?.name ?? 'Sessione attiva';
@@ -71,7 +114,8 @@ Future<void> showActiveSessionActionsSheet(BuildContext context) async {
   if (result == 'pause') {
     await sp.pauseSession();
   } else if (result == 'abandon') {
-    await sp.abandonSession();
+    // FIX — riusa lo stesso popup di conferma centralizzato del
+    // pulsante cestino, invece di abbandonare direttamente.
+    await showAbandonSessionConfirmation(context);
   }
-  // 'cancel' o null (dismiss): nessuna azione, sessione invariata.
 }

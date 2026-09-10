@@ -226,13 +226,24 @@ class SessionProvider extends ChangeNotifier {
   bool get hasActiveSession =>
       currentSessionKey != null && _sessionExercises.isNotEmpty;
 
+  // ESTESO (fix sessione vuota) — copre anche peso inserito
+  // (weight parte sempre da 0, quindi weight > 0 indica un input
+  // reale dell'utente — le reps invece partono già da un valore
+  // non-zero e non sono un segnale affidabile) e note salvate,
+  // oltre alle serie completate già coperte in precedenza. Usato
+  // da ActiveSessionScreen._onBack() per decidere se una sessione
+  // va eliminata automaticamente in uscita da swipe back.
   bool get hasAnyData {
-    final hasCompleted =
-        _exerciseSets.values.expand((s) => s).any((s) => s.completed);
-    final hasCircuitData = _circuitRoundSets.values.any((rounds) =>
-        rounds.any((round) =>
-            round.values.expand((s) => s).any((s) => s.completed)));
-    return hasCompleted || hasCircuitData;
+    final hasSetProgress = _exerciseSets.values
+        .expand((s) => s)
+        .any((s) => s.completed || s.weight > 0);
+    final hasCircuitProgress = _circuitRoundSets.values.any((rounds) =>
+        rounds.any((round) => round.values
+            .expand((s) => s)
+            .any((s) => s.completed || s.weight > 0)));
+    final hasNotes = _sessionExercises.any((e) =>
+        e.sessionNote != null && e.sessionNote!.trim().isNotEmpty);
+    return hasSetProgress || hasCircuitProgress || hasNotes;
   }
 
   int get elapsedSeconds => _sessionStartTime != null
