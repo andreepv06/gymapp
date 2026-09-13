@@ -27,6 +27,10 @@ import 'screens/workouts/allenamenti_screen.dart';
 import 'services/notification_service.dart';
 import 'providers/backend_auth_provider.dart';
 import 'services/sync/sync_engine.dart';
+// NUOVO (fix provisioning) — serve per ritentare il provisioning
+// backend degli utenti V1 già loggati localmente ma senza sessione
+// backend valida (vedi _AppEntryState._checkAuth()).
+import 'services/sync/cloud_auth_bridge.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,10 +39,6 @@ void main() async {
   await HiveDatabase.instance.init();
   await GoalDatabase.instance.init();
   await SportDatabase.instance.init();
-  // FASE 1 — Sistema Modalità di Allenamento: registra gli adapter
-  // Hive dedicati (TrainingMode/TrainingModeSet). Il box per-utente
-  // viene aperto/seminato in AuthProvider.checkLogin/_loginInternal,
-  // stesso pattern di GoalDatabase/SportDatabase.
   await TrainingModeDatabase.instance.init();
   await NotificationService.instance.init();
   runApp(const MyApp());
@@ -85,11 +85,6 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => GoalProvider()),
         ChangeNotifierProvider(create: (_) => SportProvider()),
-        // FASE 2 — Sistema Modalità di Allenamento: nessun
-        // caricamento eager (stesso motivo di Exercise/Workout/
-        // Goal/SportProvider — il box Hive per-utente è disponibile
-        // solo dopo il login). Le schermate che lo usano (Fase 3+)
-        // chiamano loadModes() nel proprio initState.
         ChangeNotifierProvider(create: (_) => TrainingModeProvider()),
         ChangeNotifierProvider(
           create: (_) => BackendAuthProvider()..restoreSession(),
@@ -211,7 +206,6 @@ class MyApp extends StatelessWidget {
                 .copyWith(statusBarColor: Colors.transparent),
       ),
 
-      // In light mode: elevation ALTA per profondità tramite ombra
       cardTheme: CardThemeData(
         elevation:   isDark ? 0 : 8,
         color:       mfc.glassCard,
@@ -265,7 +259,6 @@ class MyApp extends StatelessWidget {
 
       snackBarTheme: SnackBarThemeData(
         behavior:        SnackBarBehavior.floating,
-        // Dark snackbar in entrambi i temi per leggibilità
         backgroundColor: const Color(0xFF0F1C2E),
         contentTextStyle: const TextStyle(
             color: Colors.white, fontWeight: FontWeight.w500),
@@ -276,7 +269,6 @@ class MyApp extends StatelessWidget {
       dialogTheme: DialogThemeData(
         backgroundColor:  mfc.sheetBg,
         surfaceTintColor: Colors.transparent,
-        // Elevazione alta in light per distinguere il dialog
         elevation:        isDark ? 0 : 32,
         shadowColor:      mfc.elevationColor,
         shape: RoundedRectangleBorder(
@@ -414,8 +406,41 @@ class _AppEntryState extends State<AppEntry> {
 
   Future<void> _checkAuth() async {
     await context.read<AuthProvider>().checkLogin();
-    if (context.read<AuthProvider>().isLoggedIn) {
+    final auth = context.read<AuthProvider>();
+    if (auth.isLoggedIn) {
       await context.read<SessionProvider>().tryRestoreSession();
+
+      // NUOVO (fix provisioning automatico) — riserva contro il
+      // caso in cui il tentativo originale di provisioning (fatto
+      // al momento del login/registrazione, fire-and-forget dentro
+      // AuthProvider._loginInternal → CloudAuthBridge.syncIdentity)
+      // non sia mai riuscito a completarsi: cold start di Render,
+      // rete instabile, tab chiusa troppo presto. In quel caso
+      // l'utente resta perfettamente funzionante in locale ma non
+      // compare mai nel backend/Admin, perché checkLogin() (chiamato
+      // qui ad ogni riapertura) non ritentava mai il provisioning.
+      //
+      // Qui attendiamo la Future (ora cache-abile) di
+      // restoreSession() per sapere con certezza se esiste già una
+      // sessione backend valida; solo se NON esiste, e solo per
+      // l'utente V1 che ha appena effettuato checkLogin() con
+      // successo, ritentiamo lo STESSO meccanismo idempotente già
+      // usato ovunque nell'app (login sul backend, altrimenti
+      // registrazione — CloudAuthBridge.syncIdentity →
+      // BackendAuthProvider.syncFromV1Login). Nessun nuovo endpoint,
+      // nessuna nuova architettura, nessuna modifica al backend:
+      // solo un secondo punto di innesco per il flusso esistente.
+      // Fire-and-forget: non blocca mai l'ingresso nell'app se il
+      // backend è irraggiungibile (offline-first preservato).
+      final backendAuth = context.read<BackendAuthProvider>();
+      await backendAuth.restoreSession();
+      if (!backendAuth.isAuthenticated) {
+        final account = auth.currentAccount;
+        if (account != null) {
+          unawaited(CloudAuthBridge.instance
+              .syncIdentity(account.identifier, account.password));
+        }
+      }
     }
     // NUOVO — registra una sola volta il callback che, ad ogni ciclo
     // di SyncEngine completato con successo, ricarica i Provider dai
@@ -656,3 +681,9 @@ class _LiquidNavItemState extends State<_LiquidNavItem>
         }));
   }
 }
+
+// NUOVO (fix provisioning) — stesso pattern no-op già usato in
+// lib/providers/auth_provider.dart, per evitare di introdurre un
+// nuovo import (dart:async) solo per marcare esplicitamente una
+// chiamata fire-and-forget.
+void unawaited(Future<void> future) {}

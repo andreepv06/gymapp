@@ -11,27 +11,20 @@ enum BackendAuthStatus { unknown, authenticated, unauthenticated }
 /// Provider dedicato alla sessione verso il backend NestJS.
 /// Separato da AuthProvider (autenticazione locale V1).
 ///
-/// NUOVO — nel costruttore si registra su CloudAuthBridge come unico
-/// punto che collega il login V1 (che l'utente vede e usa) al backend
+/// Nel costruttore si registra su CloudAuthBridge come unico punto
+/// che collega il login V1 (che l'utente vede e usa) al backend
 /// cloud (che l'utente non vede mai direttamente). Due ruoli:
 ///  1. syncFromV1Login: dopo ogni login/registrazione V1 riuscito su
 ///     QUESTO dispositivo, allinea la sessione backend in background
 ///     (login, o registrazione se è la prima volta). Fire-and-forget.
 ///  2. verifyRemoteCredentials: quando AuthProvider trova un
 ///     identifier sconosciuto localmente (dispositivo nuovo), prova
-///     login diretto sul backend con quelle credenziali. Se il
-///     backend le riconosce, autentica, scarica subito tutti i dati
-///     dell'utente (schede, esercizi, storico, obiettivi) e fa
-///     partire SyncEngine — TUTTO PRIMA che AuthProvider consideri il
-///     login riuscito, così l'utente vede i propri dati appena entra.
+///     login diretto sul backend con quelle credenziali.
 ///
-/// NUOVO — si registra anche su ApiClient.instance.onSessionExpired:
-/// quando una richiesta autenticata riceve 401 e il refresh token non
+/// Si registra anche su ApiClient.instance.onSessionExpired: quando
+/// una richiesta autenticata riceve 401 e il refresh token non
 /// riesce a rinnovare la sessione, ApiClient non ha modo di sapere
-/// che deve fermare SyncEngine — è compito di questo provider, che
-/// possiede sia lo stato di autenticazione backend sia il riferimento
-/// a SyncEngine. La sessione V1 (AuthProvider) NON viene mai toccata
-/// da questo meccanismo.
+/// che deve fermare SyncEngine — è compito di questo provider.
 class BackendAuthProvider extends ChangeNotifier {
   final AuthApiService _authApi;
   final BackendImportRepository _importRepo;
@@ -40,12 +33,9 @@ class BackendAuthProvider extends ChangeNotifier {
     BackendImportRepository? importRepo,
   })  : _authApi = authApi ?? AuthApiService(),
         _importRepo = importRepo ?? BackendImportRepository() {
-    // NUOVO — collegamento con l'unico login che l'utente usa (V1).
     CloudAuthBridge.instance.register(syncFromV1Login);
     CloudAuthBridge.instance.registerVerifier(verifyRemoteCredentials);
     CloudAuthBridge.instance.registerLogoutHandler(logout);
-    // NUOVO — collegamento con ApiClient per la gestione della
-    // sessione backend scaduta (OPZIONE B).
     ApiClient.instance.onSessionExpired = _handleSessionExpired;
   }
   BackendAuthStatus _status = BackendAuthStatus.unknown;
@@ -56,15 +46,32 @@ class BackendAuthProvider extends ChangeNotifier {
   bool autoImporting = false;
   ImportSummary? lastAutoImportSummary;
   String? lastAutoImportError;
+
+  // NUOVO (fix provisioning) — cache della Future di restoreSession().
+  // La chiamata originale avviene una sola volta all'avvio da
+  // main.dart (create: (_) => BackendAuthProvider()..restoreSession(),
+  // lazy: false). Con questa cache, AppEntry._checkAuth() può
+  // RIATTENDERE la stessa Future una seconda volta — senza scatenare
+  // una seconda chiamata di rete — per sapere con CERTEZZA quando il
+  // controllo della sessione backend è concluso, prima di decidere se
+  // ritentare il provisioning per un utente V1 non ancora sincronizzato.
+  Future<void>? _restoreSessionFuture;
+
   BackendAuthStatus get status => _status;
   BackendUserProfile? get currentUser => _currentUser;
   String? get lastError => _lastError;
   bool get loading => _loading;
   bool get isAuthenticated => _status == BackendAuthStatus.authenticated;
-  // Usato da cloud_sync_screen.dart (strumento di debug/admin) per
-  // mostrare lo stato live del motore di sincronizzazione.
   SyncEngine get syncEngine => SyncEngine.instance;
-  Future<void> restoreSession() async {
+
+  // MODIFICATO (fix provisioning) — ora restituisce/cachea la
+  // Future interna invece di ricrearla ad ogni chiamata. Il corpo
+  // originale del metodo è invariato, spostato in _doRestoreSession().
+  Future<void> restoreSession() {
+    return _restoreSessionFuture ??= _doRestoreSession();
+  }
+
+  Future<void> _doRestoreSession() async {
     _loading = true;
     notifyListeners();
     final hasSession = await _authApi.hasStoredSession();
@@ -88,12 +95,18 @@ class BackendAuthProvider extends ChangeNotifier {
       SyncEngine.instance.start();
     }
   }
-  /// NUOVO — chiamato da CloudAuthBridge subito dopo ogni
-  /// login/registrazione V1 riuscito su questo dispositivo (identità
-  /// già nota localmente). Effettua login sul backend con le stesse
-  /// credenziali; se l'account non esiste ancora lato backend, lo
-  /// registra automaticamente. Fire-and-forget rispetto al login V1:
-  /// un fallimento qui non blocca né invalida il login locale.
+
+  /// Chiamato da CloudAuthBridge subito dopo ogni login/registrazione
+  /// V1 riuscito su questo dispositivo (identità già nota localmente),
+  /// E ORA ANCHE — grazie alla modifica in main.dart — ad ogni
+  /// riapertura dell'app quando l'utente risulta già loggato in V1 ma
+  /// il backend NON ha una sessione valida salvata (fix del problema
+  /// "utente V1 mai comparso nel backend": prima di questa modifica il
+  /// meccanismo scattava una volta sola, senza retry).
+  /// Effettua login sul backend con le stesse credenziali; se
+  /// l'account non esiste ancora lato backend, lo registra
+  /// automaticamente. Fire-and-forget rispetto al chiamante: un
+  /// fallimento qui non blocca né invalida nulla lato V1.
   Future<void> syncFromV1Login(String identifier, String password) async {
     try {
       await _authApi.login(identifier, password);
@@ -116,15 +129,12 @@ class BackendAuthProvider extends ChangeNotifier {
       debugPrint('[BackendAuthProvider] fetchCurrentUser dopo syncFromV1Login fallito: $e');
     }
   }
-  /// NUOVO — chiamato da AuthProvider.login() quando l'identifier NON
-  /// è tra gli account locali di questo dispositivo (primo accesso su
-  /// un dispositivo nuovo). Prova login diretto sul backend con le
+  /// Chiamato da AuthProvider.login() quando l'identifier NON è tra
+  /// gli account locali di questo dispositivo (primo accesso su un
+  /// dispositivo nuovo). Prova login diretto sul backend con le
   /// credenziali fornite. Se valide: autentica, ATTENDE il download
-  /// completo dei dati esistenti (schede, esercizi, storico,
-  /// obiettivi) prima di ritornare true, così quando AuthProvider
-  /// mostra la Home i dati sono già lì. Ritorna false per qualunque
-  /// fallimento (credenziali errate, account inesistente, rete),
-  /// senza distinguerli — AuthProvider mostra un messaggio generico.
+  /// completo dei dati esistenti prima di ritornare true. Ritorna
+  /// false per qualunque fallimento, senza distinguerli.
   Future<bool> verifyRemoteCredentials(String identifier, String password) async {
     try {
       await _authApi.login(identifier, password);
@@ -201,18 +211,10 @@ class BackendAuthProvider extends ChangeNotifier {
     _loading = false;
     notifyListeners();
   }
-  /// NUOVO — OPZIONE B. Chiamato da ApiClient quando una richiesta
-  /// autenticata riceve 401 e il tentativo di refresh del token NON
-  /// riesce a rinnovare la sessione (refresh token assente o rifiutato
-  /// dal server). A differenza di logout(), NON chiama _authApi.logout()
-  /// (eviterebbe una chiamata di rete su una sessione già invalida) e
-  /// NON tocca in alcun modo AuthProvider/la sessione locale V1: qui
-  /// si invalida SOLO lo stato di autenticazione backend.
-  ///
-  /// Guardia idempotente: se lo stato è già unauthenticated, non fa
-  /// nulla — evita lavoro ridondante se il callback scatta più volte
-  /// in rapida successione (es. più chiamate del ciclo di sync che
-  /// falliscono tutte per lo stesso motivo).
+  /// OPZIONE B. Chiamato da ApiClient quando una richiesta autenticata
+  /// riceve 401 e il tentativo di refresh del token NON riesce a
+  /// rinnovare la sessione. Invalida SOLO lo stato di autenticazione
+  /// backend, mai la sessione locale V1.
   Future<void> _handleSessionExpired() async {
     if (_status == BackendAuthStatus.unauthenticated) return;
     debugPrint(
