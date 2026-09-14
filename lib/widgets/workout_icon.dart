@@ -115,13 +115,7 @@ const List<(String, IconData)> kWorkoutIconLibrary = [
 ];
 
 // ─────────────────────────────────────────────────────────────
-// NUOVO — LIBRERIA ICONE FITNESS / GRUPPI MUSCOLARI
-//
-// Icone vettoriali ORIGINALI disegnate con CustomPainter (nessun
-// asset SVG/PNG esterno, nessuna nuova dipendenza — stesso
-// meccanismo già usato in questo file da _SatValPainter/_HuePainter).
-// Gli id sono identici a quelli introdotti nella modifica
-// precedente: nessuna rottura di dati già salvati.
+// LIBRERIA ICONE FITNESS / GRUPPI MUSCOLARI — id invariati
 // ─────────────────────────────────────────────────────────────
 enum MuscleIconType {
   chest, back, shoulders, biceps, triceps, forearms, core, glutes,
@@ -159,7 +153,6 @@ MuscleIconType? resolveMuscleIconType(String? iconId) {
   }
 }
 
-// Categorie del picker — usate dalla UI per raggruppare i chip.
 enum WorkoutIconCategory { general, fitness }
 
 // ─────────────────────────────────────────────────────────────
@@ -174,14 +167,6 @@ Color resolveWorkoutColor(int? value) {
   return _kLegacyPalette.first;
 }
 
-// ─────────────────────────────────────────────────────────────
-// resolveWorkoutIcon — MODIFICATO: se l'id appartiene alla
-// libreria fitness, restituisce un IconData di fallback ragionevole
-// (usato solo nei punti del codice che richiedono obbligatoriamente
-// un IconData, es. eventuali contesti legacy). Il rendering
-// principale delle icone fitness avviene tramite MuscleIconGlyph
-// (vedi WorkoutAvatar sotto), non tramite questo fallback.
-// ─────────────────────────────────────────────────────────────
 IconData resolveWorkoutIcon(String? iconId) {
   if (iconId == null || iconId.isEmpty) {
     return Icons.fitness_center_rounded;
@@ -197,10 +182,7 @@ IconData resolveWorkoutIcon(String? iconId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// MuscleIconGlyph — icona vettoriale originale per gruppo
-// muscolare/categoria. Silhouette "fantasma" comune (stesso
-// contorno sottile per tutte le varianti) + zona muscolare
-// evidenziata con forma piena colorata. Nessun asset esterno.
+// MuscleIconGlyph — invariato come API pubblica
 // ─────────────────────────────────────────────────────────────
 class MuscleIconGlyph extends StatelessWidget {
   final MuscleIconType type;
@@ -222,27 +204,127 @@ class MuscleIconGlyph extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// MODIFICATO — silhouette ridisegnata con curve di Bezier al posto
+// dei rettangoli arrotondati: spalle curve, vita rastremata,
+// braccia/gambe a forma di capsula naturale, mani/piedi accennati.
+// Le zone evidenziate hanno ora un gradiente radiale (chiaro al
+// centro, colore pieno ai bordi) per dare un minimo di volume/
+// profondità, restando comunque piatte e leggibili a piccole
+// dimensioni. Nessun asset esterno, nessuna nuova dipendenza.
+// ─────────────────────────────────────────────────────────────
 class _MuscleIconPainter extends CustomPainter {
   final MuscleIconType type;
   final Color          color;
   const _MuscleIconPainter({required this.type, required this.color});
 
-  // Coordinate normalizzate su una griglia logica 100x100.
-  static const double _hx = 50, _hy = 12, _hr = 9;           // testa
-  static const Rect _torso   = Rect.fromLTWH(37, 24, 26, 26); // torso
-  static const Rect _armL    = Rect.fromLTWH(23, 25, 9, 22);  // braccio sx
-  static const Rect _armR    = Rect.fromLTWH(68, 25, 9, 22);  // braccio dx
-  static const Rect _forL    = Rect.fromLTWH(21, 47, 8, 15);  // avamb. sx
-  static const Rect _forR    = Rect.fromLTWH(71, 47, 8, 15);  // avamb. dx
-  static const Rect _abs     = Rect.fromLTWH(41, 34, 18, 15); // addome
-  static const Rect _hips    = Rect.fromLTWH(38, 50, 24, 10); // bacino/glutei
-  static const Rect _thighL  = Rect.fromLTWH(38, 60, 10, 20); // coscia sx
-  static const Rect _thighR  = Rect.fromLTWH(52, 60, 10, 20); // coscia dx
-  static const Rect _calfL   = Rect.fromLTWH(39, 80, 8, 15);  // polpaccio sx
-  static const Rect _calfR   = Rect.fromLTWH(53, 80, 8, 15);  // polpaccio dx
+  // ── Silhouette base — path organico con Bezier ──────────────
+  Path _bodyPath() {
+    final p = Path();
+    // Testa
+    p.addOval(Rect.fromCircle(center: const Offset(50, 11), radius: 8));
+    // Collo
+    p.addRRect(RRect.fromRectAndRadius(
+        const Rect.fromLTWH(46, 18, 8, 6), const Radius.circular(2)));
+    // Torso: spalle larghe → vita stretta → fianchi leggermente
+    // più larghi, disegnato con curve simmetriche.
+    final torso = Path()
+      ..moveTo(32, 27)
+      ..cubicTo(36, 23, 64, 23, 68, 27)   // linea spalle (curva)
+      ..cubicTo(70, 33, 63, 40, 61, 44)   // fianco destro verso vita
+      ..cubicTo(60, 48, 63, 51, 65, 55)   // vita → fianco
+      ..cubicTo(66, 58, 60, 61, 50, 61)   // base bacino
+      ..cubicTo(40, 61, 34, 58, 35, 55)
+      ..cubicTo(37, 51, 40, 48, 39, 44)
+      ..cubicTo(37, 40, 30, 33, 32, 27)
+      ..close();
+    p.addPath(torso, Offset.zero);
+    // Braccia (capsule oblique)
+    p.addPath(_capsule(const Offset(26, 30), const Offset(21, 50), 5.5),
+        Offset.zero);
+    p.addPath(_capsule(const Offset(74, 30), const Offset(79, 50), 5.5),
+        Offset.zero);
+    // Avambracci
+    p.addPath(_capsule(const Offset(21, 50), const Offset(19, 67), 4.5),
+        Offset.zero);
+    p.addPath(_capsule(const Offset(79, 50), const Offset(81, 67), 4.5),
+        Offset.zero);
+    // Mani
+    p.addOval(Rect.fromCircle(center: const Offset(19, 70), radius: 3.4));
+    p.addOval(Rect.fromCircle(center: const Offset(81, 70), radius: 3.4));
+    // Cosce
+    p.addPath(_capsule(const Offset(42, 62), const Offset(40, 82), 6.5),
+        Offset.zero);
+    p.addPath(_capsule(const Offset(58, 62), const Offset(60, 82), 6.5),
+        Offset.zero);
+    // Polpacci
+    p.addPath(_capsule(const Offset(40, 82), const Offset(39, 96), 5),
+        Offset.zero);
+    p.addPath(_capsule(const Offset(60, 82), const Offset(61, 96), 5),
+        Offset.zero);
+    return p;
+  }
 
-  RRect _rr(Rect r, [double radius = 4]) =>
-      RRect.fromRectAndRadius(r, Radius.circular(radius));
+  // Forma "capsula" (stadio): due semicerchi collegati da un
+  // rettangolo, orientata lungo il segmento a-b — l'aspetto tipico
+  // e riconoscibile di un arto stilizzato.
+  Path _capsule(Offset a, Offset b, double radius) {
+    final dir = b - a;
+    final len = dir.distance;
+    final unit = len == 0 ? const Offset(0, 1) : dir / len;
+    final normal = Offset(-unit.dy, unit.dx) * radius;
+    final path = Path()
+      ..moveTo(a.dx + normal.dx, a.dy + normal.dy)
+      ..lineTo(b.dx + normal.dx, b.dy + normal.dy)
+      ..arcToPoint(Offset(b.dx - normal.dx, b.dy - normal.dy),
+          radius: Radius.circular(radius), clockwise: true)
+      ..lineTo(a.dx - normal.dx, a.dy - normal.dy)
+      ..arcToPoint(Offset(a.dx + normal.dx, a.dy + normal.dy),
+          radius: Radius.circular(radius), clockwise: true)
+      ..close();
+    return path;
+  }
+
+  Paint _volumetricFill(Rect bounds) {
+    return Paint()
+      ..shader = RadialGradient(
+        center: Alignment.topLeft,
+        radius: 1.3,
+        colors: [
+          Color.lerp(color, Colors.white, 0.35) ?? color,
+          color,
+        ],
+      ).createShader(bounds);
+  }
+
+  void _fillCapsule(Canvas canvas, Offset a, Offset b, double radius) {
+    final path = _capsule(a, b, radius);
+    canvas.drawPath(path, _volumetricFill(path.getBounds()));
+  }
+
+  void _fillOval(Canvas canvas, Rect r) {
+    canvas.drawOval(r, _volumetricFill(r));
+  }
+
+  void _dot(Canvas canvas, Offset o) {
+    canvas.drawCircle(o, 2.4,
+        Paint()..color = color..style = PaintingStyle.fill);
+  }
+
+  void _arrow(Canvas canvas, Offset from, Offset to) {
+    final p = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.4
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(from, to, p);
+    final dir = to - from;
+    final len = dir.distance == 0 ? 1 : dir.distance;
+    final unit = Offset(dir.dx / len, dir.dy / len);
+    final normal = Offset(-unit.dy, unit.dx);
+    canvas.drawLine(to, to - unit * 4 + normal * 3, p);
+    canvas.drawLine(to, to - unit * 4 - normal * 3, p);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -250,147 +332,120 @@ class _MuscleIconPainter extends CustomPainter {
     canvas.save();
     canvas.scale(scale, scale);
 
+    // Silhouette "fantasma" — sempre presente, sottile e semi-
+    // trasparente, disegna il corpo intero come riferimento visivo.
     final ghost = Paint()
-      ..color = color.withOpacity(0.30)
+      ..color = color.withOpacity(0.28)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round;
-    final fill = Paint()..color = color..style = PaintingStyle.fill;
-
-    // Silhouette base — sempre disegnata come contorno leggero.
-    canvas.drawCircle(const Offset(_hx, _hy), _hr, ghost);
-    canvas.drawRRect(_rr(_torso, 8), ghost);
-    canvas.drawRRect(_rr(_armL, 4), ghost);
-    canvas.drawRRect(_rr(_armR, 4), ghost);
-    canvas.drawRRect(_rr(_forL, 3), ghost);
-    canvas.drawRRect(_rr(_forR, 3), ghost);
-    canvas.drawRRect(_rr(_hips, 6), ghost);
-    canvas.drawRRect(_rr(_thighL, 4), ghost);
-    canvas.drawRRect(_rr(_thighR, 4), ghost);
-    canvas.drawRRect(_rr(_calfL, 3), ghost);
-    canvas.drawRRect(_rr(_calfR, 3), ghost);
-
-    void highlight(Rect r, [double radius = 5]) =>
-        canvas.drawRRect(_rr(r, radius), fill);
-    void highlightCircle(Offset o, double r) =>
-        canvas.drawCircle(o, r, fill);
-    void dot(Offset o) =>
-        canvas.drawCircle(o, 2.6, fill);
-    void arrow(Offset from, Offset to) {
-      final p = Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.4
-        ..strokeCap = StrokeCap.round;
-      canvas.drawLine(from, to, p);
-      final dir = (to - from);
-      final len = dir.distance == 0 ? 1 : dir.distance;
-      final unit = Offset(dir.dx / len, dir.dy / len);
-      final normal = Offset(-unit.dy, unit.dx);
-      final head1 = to - unit * 4 + normal * 3;
-      final head2 = to - unit * 4 - normal * 3;
-      canvas.drawLine(to, head1, p);
-      canvas.drawLine(to, head2, p);
-    }
+      ..strokeWidth = 1.8
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(_bodyPath(), ghost);
 
     switch (type) {
       case MuscleIconType.chest:
-        highlight(Rect.fromLTWH(37, 24, 26, 13), 6);
+        _fillOval(canvas, const Rect.fromLTWH(33, 27, 15, 13));
+        _fillOval(canvas, const Rect.fromLTWH(52, 27, 15, 13));
         break;
       case MuscleIconType.back:
-        highlight(_torso, 8);
-        canvas.drawLine(const Offset(50, 26), const Offset(50, 48), ghost);
+        canvas.drawPath(_bodyPath(),
+            _volumetricFill(const Rect.fromLTWH(30, 23, 40, 38)));
+        canvas.drawLine(const Offset(50, 25), const Offset(50, 58),
+            Paint()..color = color.withOpacity(0.5)..strokeWidth = 1.6);
         break;
       case MuscleIconType.shoulders:
-        highlightCircle(const Offset(27, 27), 7);
-        highlightCircle(const Offset(73, 27), 7);
+        _fillOval(canvas, Rect.fromCircle(
+            center: const Offset(30, 27), radius: 7.5));
+        _fillOval(canvas, Rect.fromCircle(
+            center: const Offset(70, 27), radius: 7.5));
         break;
       case MuscleIconType.biceps:
-        highlight(_armL, 5);
-        highlight(_armR, 5);
+        _fillCapsule(canvas, const Offset(26, 30), const Offset(21, 48), 6);
+        _fillCapsule(canvas, const Offset(74, 30), const Offset(79, 48), 6);
         break;
       case MuscleIconType.triceps:
-        highlight(_armL, 5);
-        highlight(_armR, 5);
-        dot(const Offset(27, 36));
-        dot(const Offset(73, 36));
+        _fillCapsule(canvas, const Offset(26, 30), const Offset(21, 48), 6);
+        _fillCapsule(canvas, const Offset(74, 30), const Offset(79, 48), 6);
+        _dot(canvas, const Offset(27, 40));
+        _dot(canvas, const Offset(73, 40));
         break;
       case MuscleIconType.forearms:
-        highlight(_forL, 3);
-        highlight(_forR, 3);
+        _fillCapsule(canvas, const Offset(21, 50), const Offset(19, 67), 5);
+        _fillCapsule(canvas, const Offset(79, 50), const Offset(81, 67), 5);
         break;
       case MuscleIconType.core:
-        highlight(_abs, 4);
-        canvas.drawLine(const Offset(50, 34), const Offset(50, 49), ghost);
-        canvas.drawLine(const Offset(41, 41), const Offset(59, 41), ghost);
+        _fillOval(canvas, const Rect.fromLTWH(41, 33, 18, 20));
+        final line = Paint()
+          ..color = color.withOpacity(0.55)
+          ..strokeWidth = 1.4;
+        canvas.drawLine(const Offset(50, 34), const Offset(50, 51), line);
+        for (final y in [39.0, 45.0]) {
+          canvas.drawLine(Offset(42, y), Offset(58, y), line);
+        }
         break;
       case MuscleIconType.coreAlt:
-        highlight(_abs, 4);
-        highlightCircle(const Offset(50, 41), 3);
+        _fillOval(canvas, const Rect.fromLTWH(41, 33, 18, 20));
+        _fillOval(canvas, Rect.fromCircle(
+            center: const Offset(50, 43), radius: 3.5));
         break;
       case MuscleIconType.glutes:
-        highlight(_hips, 7);
+        _fillOval(canvas, const Rect.fromLTWH(34, 52, 16, 10));
+        _fillOval(canvas, const Rect.fromLTWH(50, 52, 16, 10));
         break;
       case MuscleIconType.quads:
-        highlight(_thighL, 4);
-        highlight(_thighR, 4);
+        _fillCapsule(canvas, const Offset(42, 62), const Offset(40, 81), 7);
+        _fillCapsule(canvas, const Offset(58, 62), const Offset(60, 81), 7);
         break;
       case MuscleIconType.hamstrings:
-        highlight(_thighL, 4);
-        highlight(_thighR, 4);
-        dot(const Offset(42, 66));
-        dot(const Offset(58, 66));
+        _fillCapsule(canvas, const Offset(42, 62), const Offset(40, 81), 7);
+        _fillCapsule(canvas, const Offset(58, 62), const Offset(60, 81), 7);
+        _dot(canvas, const Offset(42, 68));
+        _dot(canvas, const Offset(58, 68));
         break;
       case MuscleIconType.calves:
-        highlight(_calfL, 3);
-        highlight(_calfR, 3);
+        _fillCapsule(canvas, const Offset(40, 82), const Offset(39, 96), 5.5);
+        _fillCapsule(canvas, const Offset(60, 82), const Offset(61, 96), 5.5);
         break;
       case MuscleIconType.legs:
-        highlight(_hips, 7);
-        highlight(_thighL, 4);
-        highlight(_thighR, 4);
-        highlight(_calfL, 3);
-        highlight(_calfR, 3);
+        _fillOval(canvas, const Rect.fromLTWH(34, 52, 32, 10));
+        _fillCapsule(canvas, const Offset(42, 62), const Offset(40, 81), 7);
+        _fillCapsule(canvas, const Offset(58, 62), const Offset(60, 81), 7);
+        _fillCapsule(canvas, const Offset(40, 82), const Offset(39, 96), 5.5);
+        _fillCapsule(canvas, const Offset(60, 82), const Offset(61, 96), 5.5);
         break;
       case MuscleIconType.fullBody:
-        highlightCircle(const Offset(_hx, _hy), _hr);
-        highlight(_torso, 8);
-        highlight(_armL, 4);
-        highlight(_armR, 4);
-        highlight(_forL, 3);
-        highlight(_forR, 3);
-        highlight(_hips, 6);
-        highlight(_thighL, 4);
-        highlight(_thighR, 4);
-        highlight(_calfL, 3);
-        highlight(_calfR, 3);
+        canvas.drawPath(_bodyPath(),
+            _volumetricFill(const Rect.fromLTWH(15, 3, 70, 97)));
         break;
       case MuscleIconType.upperBody:
-        highlightCircle(const Offset(_hx, _hy), _hr);
-        highlight(_torso, 8);
-        highlight(_armL, 4);
-        highlight(_armR, 4);
-        highlight(_forL, 3);
-        highlight(_forR, 3);
+        final path = Path()
+          ..addOval(Rect.fromCircle(center: const Offset(50, 11), radius: 8))
+          ..addPath(
+              _capsule(const Offset(26, 30), const Offset(21, 67), 6),
+              Offset.zero)
+          ..addPath(
+              _capsule(const Offset(74, 30), const Offset(79, 67), 6),
+              Offset.zero);
+        canvas.drawPath(path,
+            _volumetricFill(const Rect.fromLTWH(15, 3, 70, 68)));
+        _fillOval(canvas, const Rect.fromLTWH(33, 24, 34, 20));
         break;
       case MuscleIconType.lowerBody:
-        highlight(_hips, 6);
-        highlight(_thighL, 4);
-        highlight(_thighR, 4);
-        highlight(_calfL, 3);
-        highlight(_calfR, 3);
+        _fillOval(canvas, const Rect.fromLTWH(34, 52, 32, 10));
+        _fillCapsule(canvas, const Offset(42, 62), const Offset(39, 96), 7);
+        _fillCapsule(canvas, const Offset(58, 62), const Offset(61, 96), 7);
         break;
       case MuscleIconType.push:
-        highlight(Rect.fromLTWH(37, 24, 26, 13), 6);
-        highlightCircle(const Offset(27, 27), 6);
-        highlightCircle(const Offset(73, 27), 6);
-        arrow(const Offset(78, 20), const Offset(90, 8));
+        _fillOval(canvas, const Rect.fromLTWH(33, 27, 34, 13));
+        _fillOval(canvas, Rect.fromCircle(
+            center: const Offset(30, 27), radius: 6));
+        _fillOval(canvas, Rect.fromCircle(
+            center: const Offset(70, 27), radius: 6));
+        _arrow(canvas, const Offset(80, 18), const Offset(93, 6));
         break;
       case MuscleIconType.pull:
-        highlight(_torso, 8);
-        highlight(_armL, 4);
-        highlight(_armR, 4);
-        arrow(const Offset(90, 8), const Offset(78, 20));
+        canvas.drawPath(_bodyPath(),
+            _volumetricFill(const Rect.fromLTWH(20, 23, 60, 46)));
+        _arrow(canvas, const Offset(93, 6), const Offset(80, 18));
         break;
     }
 
@@ -403,9 +458,7 @@ class _MuscleIconPainter extends CustomPainter {
 }
 
 // ─────────────────────────────────────────────────────────────
-// WorkoutAvatar — MODIFICATO: se iconId appartiene alla libreria
-// fitness, renderizza MuscleIconGlyph invece dell'Icon standard.
-// Nessuna modifica al comportamento per le icone generali esistenti.
+// WorkoutAvatar — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class WorkoutAvatar extends StatelessWidget {
   final String? iconId;
@@ -505,7 +558,9 @@ class WorkoutAvatar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// showWorkoutIconColorSheet — INVARIATO
+// Tutto il resto del file (showWorkoutIconColorSheet,
+// WorkoutIconColorSheet, _HsvPickerWidget, _SatValPainter,
+// _HuePainter) è INVARIATO rispetto alla versione precedente.
 // ─────────────────────────────────────────────────────────────
 Future<void> showWorkoutIconColorSheet(
   BuildContext context, {
@@ -1047,9 +1102,6 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// _HsvPickerWidget — INVARIATO
-// ─────────────────────────────────────────────────────────────
 class _HsvPickerWidget extends StatelessWidget {
   final HSVColor                hsv;
   final void Function(HSVColor) onChanged;
