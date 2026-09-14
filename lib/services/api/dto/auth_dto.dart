@@ -22,6 +22,12 @@ class BackendUserProfile {
   final String? firstName;
   final String? lastName;
   final String? bio;
+  // NUOVO (fix audit sincronizzazione) — mancava completamente: il
+  // backend restituisce già questo campo (UserProfile.avatarUrl in
+  // schema.prisma), ma prima d'ora nessun parsing lo leggeva. Senza
+  // questo campo, anche un avatar correttamente salvato sul backend
+  // non sarebbe mai stato recuperabile da un secondo dispositivo.
+  final String? avatarUrl;
 
   const BackendUserProfile({
     required this.id,
@@ -33,6 +39,7 @@ class BackendUserProfile {
     this.firstName,
     this.lastName,
     this.bio,
+    this.avatarUrl,
   });
 
   factory BackendUserProfile.fromJson(Map<String, dynamic> json) {
@@ -47,6 +54,7 @@ class BackendUserProfile {
       firstName: profile?['firstName'] as String?,
       lastName: profile?['lastName'] as String?,
       bio: profile?['bio'] as String?,
+      avatarUrl: profile?['avatarUrl'] as String?,
     );
   }
 }

@@ -17,6 +17,9 @@ import '../../widgets/workout_icon.dart';
 import '../../main.dart';
 import 'session_detail_screen.dart';
 import 'exercise_progress_screen.dart';
+import '../../services/sync/delete_propagator.dart';
+import '../../services/sync/sync_trigger.dart';
+
 
 // ─────────────────────────────────────────────────────────────
 // Design tokens (accent fissi — uguali in dark/light)
@@ -224,8 +227,18 @@ class _HistoryScreenState extends State<HistoryScreen>
             onTap: () => Navigator.pop(context, true)),
       ]);
     if (ok == true) {
-      await HiveDatabase.instance.deleteSession(s.key);
+      // FIX audit sincronizzazione — prima mancava sia il trigger
+      // di sync sia la propagazione del DELETE al backend: la
+      // sessione eliminata qui poteva "resuscitare" su un altro
+      // dispositivo al successivo download (vedi DeletePropagator).
+      final key = s.key;
+      final intKey = key is int ? key : null;
+      await HiveDatabase.instance.deleteSession(key);
       await _loadData();
+      if (intKey != null) {
+        unawaited(DeletePropagator.propagateSessionDelete(intKey));
+      }
+      SyncTrigger.instance.requestSync();
       if (mounted) _showSnack('Sessione eliminata');
     }
   }
@@ -1682,3 +1695,5 @@ class _EmptyGoals extends StatelessWidget {
             ])))));
   }
 }
+
+void unawaited(Future<void> future) {}

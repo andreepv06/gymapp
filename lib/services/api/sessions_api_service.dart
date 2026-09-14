@@ -40,4 +40,10 @@ class SessionsApiService {
       if (executionStatus != null) 'executionStatus': executionStatus,
     });
   }
+
+  // NUOVO — mancava. Stesso pattern REST già usato da ExercisesApiService/
+  // WorkoutsApiService (DELETE /<risorsa>/:id), corrispondente a
+  // SessionsService.remove() già presente lato backend. Usato da
+  // DeletePropagator.propagateSessionDelete().
+  Future<void> delete(String id) => _client.delete('/sessions/$id');
 }

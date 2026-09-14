@@ -20,14 +20,7 @@ const List<Color> _kLegacyPalette = [
 ];
 
 // ─────────────────────────────────────────────────────────────
-// PALETTE ESTESA
-//
-// Ampliata rispetto alla versione precedente con toni pastello
-// chiari e toni scuri profondi, per offrire una selezione più
-// ricca (standard, vivaci, scuri, chiari) come richiesto.
-// L'ordine e i valori dei colori esistenti NON sono stati
-// alterati: sono stati solo aggiunti nuovi valori in coda,
-// quindi nessun mapping esistente viene rotto.
+// PALETTE ESTESA — invariata
 // ─────────────────────────────────────────────────────────────
 const List<Color> kWorkoutPaletteExtended = [
   Color(0xFF00D4AA), Color(0xFF0FD9B4), Color(0xFF14B8A6), Color(0xFF10B981),
@@ -40,18 +33,12 @@ const List<Color> kWorkoutPaletteExtended = [
   Color(0xFFF97316), Color(0xFFFB923C), Color(0xFFF59E0B), Color(0xFFEAB308),
   Color(0xFFD97706), Color(0xFFB45309),
   Color(0xFF64748B), Color(0xFF475569), Color(0xFF334155), Color(0xFF1E293B),
-  // ── Toni pastello chiari (aggiunti) ──────────────────────
   Color(0xFFFFD3E0), Color(0xFFD1F2EB), Color(0xFFFFF3B0), Color(0xFFD0E8FF),
-  // ── Toni scuri profondi (aggiunti) ───────────────────────
   Color(0xFF4A0E0E), Color(0xFF0B3D2E), Color(0xFF1B1B3A), Color(0xFF3D2645),
 ];
 
 // ─────────────────────────────────────────────────────────────
-// LIBRERIA ICONE ESTESA
-//
-// Ampliata con nuove icone tematiche fitness/sport (nessuna
-// nuova dipendenza: solo Icons.* già inclusi in Flutter).
-// Gli id e le icone esistenti non sono stati toccati.
+// LIBRERIA ICONE GENERALI — INVARIATA (nessuna icona rimossa)
 // ─────────────────────────────────────────────────────────────
 const List<(String, IconData)> kWorkoutIconLibrary = [
   ('dumbbell',      Icons.fitness_center_rounded),
@@ -109,7 +96,6 @@ const List<(String, IconData)> kWorkoutIconLibrary = [
   ('calendar',      Icons.calendar_today_rounded),
   ('person',        Icons.person_rounded),
   ('group',         Icons.group_rounded),
-  // ── Nuove icone aggiunte ──────────────────────────────────
   ('handball',      Icons.sports_handball_rounded),
   ('football',      Icons.sports_football_rounded),
   ('rugby',         Icons.sports_rugby_rounded),
@@ -129,13 +115,55 @@ const List<(String, IconData)> kWorkoutIconLibrary = [
 ];
 
 // ─────────────────────────────────────────────────────────────
-// resolveWorkoutColor — PUNTO UNICO DI VERITÀ
+// NUOVO — LIBRERIA ICONE FITNESS / GRUPPI MUSCOLARI
 //
-// INVARIATO: gestisce sia i vecchi indici legacy (0-7) sia gli
-// ARGB pieni (> 0xFFFF) salvati dal popup. Questo è il motivo
-// per cui non esiste un bug di mapping tra selezione e salvataggio:
-// il popup salva sempre color.value (ARGB pieno), che ricade
-// sempre nel ramo `Color(value)`.
+// Icone vettoriali ORIGINALI disegnate con CustomPainter (nessun
+// asset SVG/PNG esterno, nessuna nuova dipendenza — stesso
+// meccanismo già usato in questo file da _SatValPainter/_HuePainter).
+// Gli id sono identici a quelli introdotti nella modifica
+// precedente: nessuna rottura di dati già salvati.
+// ─────────────────────────────────────────────────────────────
+enum MuscleIconType {
+  chest, back, shoulders, biceps, triceps, forearms, core, glutes,
+  quads, hamstrings, calves, legs, fullBody, upperBody, lowerBody,
+  push, pull, coreAlt,
+}
+
+const List<(String, String, MuscleIconType)> kFitnessMuscleIconLibrary = [
+  ('m_chest',      'Petto',        MuscleIconType.chest),
+  ('m_back',       'Schiena',      MuscleIconType.back),
+  ('m_shoulders',  'Spalle',       MuscleIconType.shoulders),
+  ('m_biceps',     'Bicipiti',     MuscleIconType.biceps),
+  ('m_triceps',    'Tricipiti',    MuscleIconType.triceps),
+  ('m_forearms',   'Avambracci',   MuscleIconType.forearms),
+  ('m_core',       'Addome',       MuscleIconType.core),
+  ('m_glutes',     'Glutei',       MuscleIconType.glutes),
+  ('m_quads',      'Quadricipiti', MuscleIconType.quads),
+  ('m_hamstrings', 'Femorali',     MuscleIconType.hamstrings),
+  ('m_calves',     'Polpacci',     MuscleIconType.calves),
+  ('m_legs',       'Gambe',        MuscleIconType.legs),
+  ('m_fullbody',   'Full body',    MuscleIconType.fullBody),
+  ('m_upperbody',  'Upper body',   MuscleIconType.upperBody),
+  ('m_lowerbody',  'Lower body',   MuscleIconType.lowerBody),
+  ('m_push',       'Push',         MuscleIconType.push),
+  ('m_pull',       'Pull',         MuscleIconType.pull),
+  ('m_core2',      'Core',         MuscleIconType.coreAlt),
+];
+
+MuscleIconType? resolveMuscleIconType(String? iconId) {
+  if (iconId == null) return null;
+  try {
+    return kFitnessMuscleIconLibrary.firstWhere((e) => e.$1 == iconId).$3;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Categorie del picker — usate dalla UI per raggruppare i chip.
+enum WorkoutIconCategory { general, fitness }
+
+// ─────────────────────────────────────────────────────────────
+// resolveWorkoutColor — INVARIATO
 // ─────────────────────────────────────────────────────────────
 Color resolveWorkoutColor(int? value) {
   if (value == null) return _kLegacyPalette.first;
@@ -147,7 +175,12 @@ Color resolveWorkoutColor(int? value) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// resolveWorkoutIcon — fallback sicuro
+// resolveWorkoutIcon — MODIFICATO: se l'id appartiene alla
+// libreria fitness, restituisce un IconData di fallback ragionevole
+// (usato solo nei punti del codice che richiedono obbligatoriamente
+// un IconData, es. eventuali contesti legacy). Il rendering
+// principale delle icone fitness avviene tramite MuscleIconGlyph
+// (vedi WorkoutAvatar sotto), non tramite questo fallback.
 // ─────────────────────────────────────────────────────────────
 IconData resolveWorkoutIcon(String? iconId) {
   if (iconId == null || iconId.isEmpty) {
@@ -156,13 +189,223 @@ IconData resolveWorkoutIcon(String? iconId) {
   try {
     return kWorkoutIconLibrary.firstWhere((e) => e.$1 == iconId).$2;
   } catch (_) {
+    if (resolveMuscleIconType(iconId) != null) {
+      return Icons.accessibility_new_rounded;
+    }
     return Icons.fitness_center_rounded;
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// WorkoutAvatar — usa resolveWorkoutColor (PUNTO UNICO)
-// customImagePath ripristinato per backward compat
+// MuscleIconGlyph — icona vettoriale originale per gruppo
+// muscolare/categoria. Silhouette "fantasma" comune (stesso
+// contorno sottile per tutte le varianti) + zona muscolare
+// evidenziata con forma piena colorata. Nessun asset esterno.
+// ─────────────────────────────────────────────────────────────
+class MuscleIconGlyph extends StatelessWidget {
+  final MuscleIconType type;
+  final Color          color;
+  final double         size;
+  const MuscleIconGlyph({
+    super.key,
+    required this.type,
+    required this.color,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(size, size),
+      painter: _MuscleIconPainter(type: type, color: color),
+    );
+  }
+}
+
+class _MuscleIconPainter extends CustomPainter {
+  final MuscleIconType type;
+  final Color          color;
+  const _MuscleIconPainter({required this.type, required this.color});
+
+  // Coordinate normalizzate su una griglia logica 100x100.
+  static const double _hx = 50, _hy = 12, _hr = 9;           // testa
+  static const Rect _torso   = Rect.fromLTWH(37, 24, 26, 26); // torso
+  static const Rect _armL    = Rect.fromLTWH(23, 25, 9, 22);  // braccio sx
+  static const Rect _armR    = Rect.fromLTWH(68, 25, 9, 22);  // braccio dx
+  static const Rect _forL    = Rect.fromLTWH(21, 47, 8, 15);  // avamb. sx
+  static const Rect _forR    = Rect.fromLTWH(71, 47, 8, 15);  // avamb. dx
+  static const Rect _abs     = Rect.fromLTWH(41, 34, 18, 15); // addome
+  static const Rect _hips    = Rect.fromLTWH(38, 50, 24, 10); // bacino/glutei
+  static const Rect _thighL  = Rect.fromLTWH(38, 60, 10, 20); // coscia sx
+  static const Rect _thighR  = Rect.fromLTWH(52, 60, 10, 20); // coscia dx
+  static const Rect _calfL   = Rect.fromLTWH(39, 80, 8, 15);  // polpaccio sx
+  static const Rect _calfR   = Rect.fromLTWH(53, 80, 8, 15);  // polpaccio dx
+
+  RRect _rr(Rect r, [double radius = 4]) =>
+      RRect.fromRectAndRadius(r, Radius.circular(radius));
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = size.width / 100.0;
+    canvas.save();
+    canvas.scale(scale, scale);
+
+    final ghost = Paint()
+      ..color = color.withOpacity(0.30)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round;
+    final fill = Paint()..color = color..style = PaintingStyle.fill;
+
+    // Silhouette base — sempre disegnata come contorno leggero.
+    canvas.drawCircle(const Offset(_hx, _hy), _hr, ghost);
+    canvas.drawRRect(_rr(_torso, 8), ghost);
+    canvas.drawRRect(_rr(_armL, 4), ghost);
+    canvas.drawRRect(_rr(_armR, 4), ghost);
+    canvas.drawRRect(_rr(_forL, 3), ghost);
+    canvas.drawRRect(_rr(_forR, 3), ghost);
+    canvas.drawRRect(_rr(_hips, 6), ghost);
+    canvas.drawRRect(_rr(_thighL, 4), ghost);
+    canvas.drawRRect(_rr(_thighR, 4), ghost);
+    canvas.drawRRect(_rr(_calfL, 3), ghost);
+    canvas.drawRRect(_rr(_calfR, 3), ghost);
+
+    void highlight(Rect r, [double radius = 5]) =>
+        canvas.drawRRect(_rr(r, radius), fill);
+    void highlightCircle(Offset o, double r) =>
+        canvas.drawCircle(o, r, fill);
+    void dot(Offset o) =>
+        canvas.drawCircle(o, 2.6, fill);
+    void arrow(Offset from, Offset to) {
+      final p = Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.4
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(from, to, p);
+      final dir = (to - from);
+      final len = dir.distance == 0 ? 1 : dir.distance;
+      final unit = Offset(dir.dx / len, dir.dy / len);
+      final normal = Offset(-unit.dy, unit.dx);
+      final head1 = to - unit * 4 + normal * 3;
+      final head2 = to - unit * 4 - normal * 3;
+      canvas.drawLine(to, head1, p);
+      canvas.drawLine(to, head2, p);
+    }
+
+    switch (type) {
+      case MuscleIconType.chest:
+        highlight(Rect.fromLTWH(37, 24, 26, 13), 6);
+        break;
+      case MuscleIconType.back:
+        highlight(_torso, 8);
+        canvas.drawLine(const Offset(50, 26), const Offset(50, 48), ghost);
+        break;
+      case MuscleIconType.shoulders:
+        highlightCircle(const Offset(27, 27), 7);
+        highlightCircle(const Offset(73, 27), 7);
+        break;
+      case MuscleIconType.biceps:
+        highlight(_armL, 5);
+        highlight(_armR, 5);
+        break;
+      case MuscleIconType.triceps:
+        highlight(_armL, 5);
+        highlight(_armR, 5);
+        dot(const Offset(27, 36));
+        dot(const Offset(73, 36));
+        break;
+      case MuscleIconType.forearms:
+        highlight(_forL, 3);
+        highlight(_forR, 3);
+        break;
+      case MuscleIconType.core:
+        highlight(_abs, 4);
+        canvas.drawLine(const Offset(50, 34), const Offset(50, 49), ghost);
+        canvas.drawLine(const Offset(41, 41), const Offset(59, 41), ghost);
+        break;
+      case MuscleIconType.coreAlt:
+        highlight(_abs, 4);
+        highlightCircle(const Offset(50, 41), 3);
+        break;
+      case MuscleIconType.glutes:
+        highlight(_hips, 7);
+        break;
+      case MuscleIconType.quads:
+        highlight(_thighL, 4);
+        highlight(_thighR, 4);
+        break;
+      case MuscleIconType.hamstrings:
+        highlight(_thighL, 4);
+        highlight(_thighR, 4);
+        dot(const Offset(42, 66));
+        dot(const Offset(58, 66));
+        break;
+      case MuscleIconType.calves:
+        highlight(_calfL, 3);
+        highlight(_calfR, 3);
+        break;
+      case MuscleIconType.legs:
+        highlight(_hips, 7);
+        highlight(_thighL, 4);
+        highlight(_thighR, 4);
+        highlight(_calfL, 3);
+        highlight(_calfR, 3);
+        break;
+      case MuscleIconType.fullBody:
+        highlightCircle(const Offset(_hx, _hy), _hr);
+        highlight(_torso, 8);
+        highlight(_armL, 4);
+        highlight(_armR, 4);
+        highlight(_forL, 3);
+        highlight(_forR, 3);
+        highlight(_hips, 6);
+        highlight(_thighL, 4);
+        highlight(_thighR, 4);
+        highlight(_calfL, 3);
+        highlight(_calfR, 3);
+        break;
+      case MuscleIconType.upperBody:
+        highlightCircle(const Offset(_hx, _hy), _hr);
+        highlight(_torso, 8);
+        highlight(_armL, 4);
+        highlight(_armR, 4);
+        highlight(_forL, 3);
+        highlight(_forR, 3);
+        break;
+      case MuscleIconType.lowerBody:
+        highlight(_hips, 6);
+        highlight(_thighL, 4);
+        highlight(_thighR, 4);
+        highlight(_calfL, 3);
+        highlight(_calfR, 3);
+        break;
+      case MuscleIconType.push:
+        highlight(Rect.fromLTWH(37, 24, 26, 13), 6);
+        highlightCircle(const Offset(27, 27), 6);
+        highlightCircle(const Offset(73, 27), 6);
+        arrow(const Offset(78, 20), const Offset(90, 8));
+        break;
+      case MuscleIconType.pull:
+        highlight(_torso, 8);
+        highlight(_armL, 4);
+        highlight(_armR, 4);
+        arrow(const Offset(90, 8), const Offset(78, 20));
+        break;
+    }
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _MuscleIconPainter old) =>
+      old.type != type || old.color != color;
+}
+
+// ─────────────────────────────────────────────────────────────
+// WorkoutAvatar — MODIFICATO: se iconId appartiene alla libreria
+// fitness, renderizza MuscleIconGlyph invece dell'Icon standard.
+// Nessuna modifica al comportamento per le icone generali esistenti.
 // ─────────────────────────────────────────────────────────────
 class WorkoutAvatar extends StatelessWidget {
   final String? iconId;
@@ -185,7 +428,6 @@ class WorkoutAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color    = resolveWorkoutColor(iconColorIndex);
-    final iconData = resolveWorkoutIcon(iconId);
     final hasCustom = customImagePath != null &&
         customImagePath!.isNotEmpty;
 
@@ -195,13 +437,14 @@ class WorkoutAvatar extends StatelessWidget {
         width:  size,
         height: size,
         child: hasCustom
-            ? _buildCustomImage(color, iconData)
-            : _buildIconAvatar(color, iconData),
+            ? _buildCustomImage(color)
+            : _buildIconAvatar(color),
       ),
     );
   }
 
-  Widget _buildIconAvatar(Color color, IconData iconData) {
+  Widget _buildIconAvatar(Color color) {
+    final muscleType = resolveMuscleIconType(iconId);
     return Container(
       width:  size,
       height: size,
@@ -223,11 +466,17 @@ class WorkoutAvatar extends StatelessWidget {
           ),
         ],
       ),
-      child: Icon(iconData, color: Colors.white, size: iconSize),
+      child: Center(
+        child: muscleType != null
+            ? MuscleIconGlyph(
+                type: muscleType, color: Colors.white, size: iconSize)
+            : Icon(resolveWorkoutIcon(iconId),
+                color: Colors.white, size: iconSize),
+      ),
     );
   }
 
-  Widget _buildCustomImage(Color fallbackColor, IconData fallbackIcon) {
+  Widget _buildCustomImage(Color fallbackColor) {
     try {
       final file = File(customImagePath!);
       return Container(
@@ -246,31 +495,17 @@ class WorkoutAvatar extends StatelessWidget {
         child: Image.file(
           file,
           fit:          BoxFit.cover,
-          errorBuilder: (_, _, _) =>
-              _buildIconAvatar(fallbackColor, fallbackIcon),
+          errorBuilder: (_, _, _) => _buildIconAvatar(fallbackColor),
         ),
       );
     } catch (_) {
-      return _buildIconAvatar(fallbackColor, fallbackIcon);
+      return _buildIconAvatar(fallbackColor);
     }
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// showWorkoutIconColorSheet
-//
-// Punto unico di apertura del popup. Usa showModalBottomSheet
-// direttamente (invece di passare per i wrapper generici
-// _openSheet / showKeyboardSafeSheet usati altrove nell'app),
-// perché questo popup ha bisogno di un layout a ALTEZZA FISSA
-// con header/anteprima e footer/pulsanti ancorati e una sola
-// area centrale scrollabile — cosa incompatibile con l'essere
-// annidato in un SingleChildScrollView esterno.
-//
-// enableDrag: true (default) + isDismissible: true forniscono
-// nativamente lo swipe-down-to-dismiss richiesto: se l'utente
-// chiude trascinando verso il basso, `onSelect` NON viene mai
-// invocato, quindi nessuna modifica temporanea viene salvata.
+// showWorkoutIconColorSheet — INVARIATO
 // ─────────────────────────────────────────────────────────────
 Future<void> showWorkoutIconColorSheet(
   BuildContext context, {
@@ -293,29 +528,6 @@ Future<void> showWorkoutIconColorSheet(
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// WorkoutIconColorSheet — componente condiviso
-//
-// LAYOUT (richiesto):
-//   ┌ handle ─────────────────────────────┐
-//   │ ANTEPRIMA (fissa)                    │
-//   │ TAB Icona | Colore (fisso)           │
-//   ├───────────────────────────────────────┤
-//   │      AREA SCORRIBILE                  │
-//   │  (griglia icone OPPURE griglia colori)│
-//   ├───────────────────────────────────────┤
-//   │  ANNULLA           APPLICA (fissi)    │
-//   └───────────────────────────────────────┘
-//
-// STATO TEMPORANEO:
-//   _iconId / _color sono inizializzati dai valori correnti
-//   della scheda e modificati liberamente durante l'uso del
-//   popup. Il valore definitivo cambia SOLO quando l'utente
-//   preme "Applica" (viene chiamato widget.onSelect). Se preme
-//   "Annulla" o chiude con swipe-down, il popup si chiude e
-//   _iconId/_color vengono scartati senza alcuna chiamata a
-//   onSelect: nessun salvataggio parziale/accidentale.
-// ─────────────────────────────────────────────────────────────
 class WorkoutIconColorSheet extends StatefulWidget {
   final String? initialIconId;
   final int?    initialColorValue;
@@ -341,6 +553,7 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
   late HSVColor _hsv;
   bool          _showCustomPicker = false;
   _IconColorTab _tab              = _IconColorTab.icon;
+  WorkoutIconCategory _iconCategory = WorkoutIconCategory.general;
 
   @override
   void initState() {
@@ -348,6 +561,9 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
     _iconId = widget.initialIconId ?? 'dumbbell';
     _color  = resolveWorkoutColor(widget.initialColorValue);
     _hsv    = HSVColor.fromColor(_color);
+    if (resolveMuscleIconType(_iconId) != null) {
+      _iconCategory = WorkoutIconCategory.fitness;
+    }
   }
 
   void _pickPaletteColor(Color c) {
@@ -358,8 +574,6 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
     });
   }
 
-  // Applica: qui e SOLO qui il valore temporaneo diventa
-  // definitivo, tramite la callback del chiamante.
   void _apply() {
     widget.onSelect(_iconId, _color.value);
   }
@@ -369,11 +583,6 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
     final c       = context.mfc;
     final isDark  = context.isDarkMode;
 
-    // Stessa filosofia di opacità/blur di GlassSheetWrapper (usata
-    // in tutto il resto dell'app): superficie OPACA (94-97%) +
-    // BackdropFilter per la texture glass, in modo che il popup
-    // non risulti mai trasparente al punto da rivelare la pagina
-    // sottostante.
     final sheetBg = isDark
         ? const Color(0xEF060B14)
         : Colors.white.withOpacity(0.97);
@@ -408,6 +617,10 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
               _buildPreviewHeader(c),
               const SizedBox(height: 16),
               _buildTabSelector(c),
+              if (_tab == _IconColorTab.icon) ...[
+                const SizedBox(height: 10),
+                _buildIconCategorySelector(c),
+              ],
               const SizedBox(height: 8),
               Expanded(
                 child: _tab == _IconColorTab.icon
@@ -421,8 +634,6 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
       ),
     );
   }
-
-  // ── Handle (drag indicator) ─────────────────────────────────
 
   Widget _buildHandle() {
     return Center(
@@ -443,8 +654,6 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
       ),
     );
   }
-
-  // ── Anteprima sempre visibile ───────────────────────────────
 
   Widget _buildPreviewHeader(MarkFitColors c) {
     return Padding(
@@ -475,8 +684,6 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
       ]),
     );
   }
-
-  // ── Tab selector Icona / Colore ─────────────────────────────
 
   Widget _buildTabSelector(MarkFitColors c) {
     return Padding(
@@ -544,9 +751,97 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
     );
   }
 
-  // ── Tab "Icona" — griglia scrollabile ───────────────────────
+  Widget _buildIconCategorySelector(MarkFitColors c) {
+    Widget chip(WorkoutIconCategory cat, String label, IconData icon) {
+      final sel = _iconCategory == cat;
+      return GestureDetector(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          setState(() => _iconCategory = cat);
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: sel ? _color.withOpacity(0.15) : c.glassCardInset,
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: sel ? _color.withOpacity(0.55) : c.glassBorder,
+              width: sel ? 1.2 : 0.8,
+            ),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 14, color: sel ? _color : c.textTertiary),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(
+                color: sel ? _color : c.textTertiary,
+                fontSize: 12,
+                fontWeight: sel ? FontWeight.w700 : FontWeight.w500)),
+          ]),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(children: [
+        chip(WorkoutIconCategory.general, 'Generali',
+            Icons.apps_rounded),
+        const SizedBox(width: 8),
+        chip(WorkoutIconCategory.fitness, 'Fitness',
+            Icons.fitness_center_rounded),
+      ]),
+    );
+  }
 
   Widget _buildIconGrid(MarkFitColors c) {
+    if (_iconCategory == WorkoutIconCategory.fitness) {
+      return SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+        child: Wrap(
+          spacing:    10,
+          runSpacing: 10,
+          children: kFitnessMuscleIconLibrary.map((entry) {
+            final id   = entry.$1;
+            final type = entry.$3;
+            final sel  = _iconId == id;
+            return GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _iconId = id);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width:  54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: sel ? _color.withOpacity(0.2) : c.glassCardInset,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: sel ? _color.withOpacity(0.75) : c.glassBorder,
+                    width: sel ? 1.6 : 1,
+                  ),
+                  boxShadow: sel
+                      ? [BoxShadow(
+                          color:      _color.withOpacity(0.3),
+                          blurRadius: 10)]
+                      : null,
+                ),
+                child: Center(
+                  child: MuscleIconGlyph(
+                    type:  type,
+                    color: sel ? _color : c.iconSecondary,
+                    size:  26,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
@@ -585,8 +880,6 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
       ),
     );
   }
-
-  // ── Tab "Colore" — palette + custom scrollabile ─────────────
 
   Widget _buildColorContent(MarkFitColors c) {
     return SingleChildScrollView(
@@ -628,8 +921,6 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
                   ),
                 );
               }),
-              // Colore personalizzato (rainbow) — architettura
-              // preservata per eventuale estensione futura.
               GestureDetector(
                 onTap: () => setState(
                     () => _showCustomPicker = !_showCustomPicker),
@@ -687,8 +978,6 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
       ),
     );
   }
-
-  // ── Footer sempre visibile: Annulla / Applica ───────────────
 
   Widget _buildFooter(MarkFitColors c) {
     return Container(
@@ -759,8 +1048,7 @@ class _WorkoutIconColorSheetState extends State<WorkoutIconColorSheet> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _HsvPickerWidget — Color picker puro Flutter (no deps)
-// INVARIATO
+// _HsvPickerWidget — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _HsvPickerWidget extends StatelessWidget {
   final HSVColor                hsv;
@@ -772,7 +1060,6 @@ class _HsvPickerWidget extends StatelessWidget {
     final c = context.mfc;
     return Column(
       children: [
-        // SV selector 2D
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: LayoutBuilder(builder: (_, constraints) {
@@ -793,7 +1080,6 @@ class _HsvPickerWidget extends StatelessWidget {
           }),
         ),
         const SizedBox(height: 12),
-        // Hue strip
         LayoutBuilder(builder: (_, constraints) {
           final w = constraints.maxWidth;
           return GestureDetector(
