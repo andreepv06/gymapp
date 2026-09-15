@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../db/hive_database.dart';
 
@@ -18,6 +19,17 @@ class SyncMappingStorage {
   static String _prefix(String domain) {
     final uid = HiveDatabase.instance.currentUserId;
     return 'sync_map_${uid}_${domain}_';
+  }
+
+  // NUOVO (fix resurrezione schede eliminate) — chiave dedicata ai
+  // "tombstone": elenco di ID REMOTI di elementi eliminati
+  // localmente ma la cui eliminazione sul backend non è ancora
+  // stata confermata (rete offline, cold start Render, app chiusa
+  // durante la chiamata di rete fire-and-forget). Vedi
+  // DeletePropagator per l'uso.
+  static String _tombKey(String domain) {
+    final uid = HiveDatabase.instance.currentUserId;
+    return 'sync_tomb_${uid}_$domain';
   }
 
   Future<String?> getRemoteId(String domain, dynamic localKey) async {
@@ -48,5 +60,38 @@ class SyncMappingStorage {
       }
     }
     return result;
+  }
+
+  // ── NUOVO — Tombstone (guardia contro la resurrezione) ────────
+  //
+  // Finché un ID remoto è presente in questo elenco,
+  // BackendImportRepository deve SEMPRE ignorarlo durante il
+  // download, anche se il backend lo restituisce ancora (perché la
+  // vera cancellazione remota non è ancora andata a buon fine).
+
+  Future<Set<String>> getTombstones(String domain) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_tombKey(domain));
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final list = jsonDecode(raw) as List;
+      return list.map((e) => e.toString()).toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> addTombstone(String domain, String remoteId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = await getTombstones(domain);
+    if (!current.add(remoteId)) return;
+    await prefs.setString(_tombKey(domain), jsonEncode(current.toList()));
+  }
+
+  Future<void> removeTombstone(String domain, String remoteId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = await getTombstones(domain);
+    if (!current.remove(remoteId)) return;
+    await prefs.setString(_tombKey(domain), jsonEncode(current.toList()));
   }
 }

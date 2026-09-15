@@ -17,17 +17,30 @@ import '../../widgets/full_screen_swipe_back.dart';
 //   Ogni pagina pushata viene automaticamente wrappata con
 //   FullScreenSwipeBack, che abilita il pop gesture da qualsiasi
 //   punto dello schermo (non solo dal bordo sinistro).
-//   Il comportamento è identico a quello descritto nell'allegato
-//   SwiftUI: dx > 0 && |dx| > |dy| come in
-//   gestureRecognizerShouldBegin(_:).
 // ─────────────────────────────────────────────────────────────
+
+// NUOVO (fix lentezza back) — variante di CupertinoPageRoute con
+// reverseTransitionDuration più breve. Dopo il fix del flash bianco
+// (che riguardava solo lo sfondo del DOM/browser), il pop stesso
+// impiegava sempre la durata di animazione "standard" pensata per un
+// push a freddo, non per il rilascio di un gesto già in corso —
+// percepita come lentezza. Accorciamo SOLO la direzione "indietro":
+// il push in avanti resta identico a prima. Nessuna modifica al
+// meccanismo anti-flash-bianco (web/index.html, non toccato qui).
+class _FastPopCupertinoPageRoute<T> extends CupertinoPageRoute<T> {
+  _FastPopCupertinoPageRoute({required super.builder});
+
+  @override
+  Duration get reverseTransitionDuration =>
+      const Duration(milliseconds: 220);
+}
 
 /// Pusha una nuova pagina con transizione CupertinoPageRoute
 /// e full-screen swipe back abilitato.
 Future<T?> pushPage<T extends Object?>(
     BuildContext context, Widget page) {
   return Navigator.of(context).push<T>(
-    CupertinoPageRoute<T>(
+    _FastPopCupertinoPageRoute<T>(
       builder: (_) => FullScreenSwipeBack(child: page),
     ),
   );
@@ -37,7 +50,7 @@ Future<T?> pushPage<T extends Object?>(
 Future<T?> pushReplacementPage<T extends Object?,
     TO extends Object?>(BuildContext context, Widget page) {
   return Navigator.of(context).pushReplacement<T, TO>(
-    CupertinoPageRoute<T>(
+    _FastPopCupertinoPageRoute<T>(
       builder: (_) => FullScreenSwipeBack(child: page),
     ),
   );

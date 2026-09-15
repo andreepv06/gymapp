@@ -3,6 +3,7 @@ import '../services/api/api_exception.dart';
 import '../services/api/circuits_api_service.dart';
 import '../services/api/exercises_api_service.dart';
 import '../services/api/workouts_api_service.dart';
+import '../services/sync/delete_propagator.dart';
 import 'sync_mapping_storage.dart';
 
 const _circuitNotesPrefix = '__circuit_';
@@ -22,9 +23,6 @@ class WorkoutSyncResult {
   final int circuitsCreated;
   final int circuitExercisesLinked;
   final List<String> failedWorkoutNames;
-  // NUOVO — esercizi che non si sono collegati anche se la scheda
-  // è stata creata con successo (visibile separatamente dai
-  // fallimenti totali, per diagnosi).
   final int exerciseLinkFailures;
   const WorkoutSyncResult({
     required this.workoutsCreated,
@@ -39,12 +37,13 @@ class WorkoutSyncResult {
 }
 
 /// Sincronizza le schede locali (Hive) verso il backend, in modo
-/// idempotente. MODIFICATO — ogni collegamento esercizio→scheda è
-/// ora avvolto in un try/catch dedicato: prima, un singolo errore
-/// (es. conflitto nome esercizio, mappatura stale) interrompeva
-/// l'intero ciclo di collegamento per quella scheda, che restava poi
-/// "già sincronizzata" per sempre — vuota — senza mai poter
-/// recuperare gli esercizi mancanti nei cicli successivi.
+/// idempotente.
+///
+/// AGGIORNATO (fix resurrezione schede eliminate) — ogni ciclo
+/// ritenta prima le cancellazioni remote ancora pendenti
+/// (retryPendingWorkoutDeletes), sullo stesso principio già usato
+/// per gli upload: un DELETE fallito una volta non è definitivo,
+/// viene ritentato automaticamente qui ad ogni ciclo.
 class WorkoutSyncRepository {
   static const _workoutDomain = 'workout';
   static const _circuitDomain = 'circuit';
@@ -66,6 +65,12 @@ class WorkoutSyncRepository {
         _mapping = mapping ?? SyncMappingStorage();
 
   Future<WorkoutSyncResult> syncLocalWorkoutsToBackend() async {
+    // NUOVO — ritenta eventuali cancellazioni remote non ancora
+    // confermate PRIMA di procedere con l'upload delle schede
+    // attuali (ordine ininfluente per la correttezza, ma coerente
+    // con "cancellazioni prima di tutto" come principio generale).
+    await DeletePropagator.retryPendingWorkoutDeletes();
+
     final localWorkouts = HiveDatabase.instance.getWorkouts();
     final remoteExercises = await _exercisesApi.fetchAll();
     final exerciseIdByName = {
@@ -89,10 +94,6 @@ class WorkoutSyncRepository {
         await _mapping.setRemoteId(_exerciseDomain, exerciseKey, created.id);
         return created.id;
       } on ApiException catch (e) {
-        // Conflitto (409): l'esercizio esiste già remotamente sotto
-        // questo nome, creato tra il fetchAll() iniziale e ora.
-        // Ricarichiamo la lista remota una volta e riproviamo,
-        // invece di propagare l'eccezione e perdere il collegamento.
         if (e.kind == ApiErrorKind.conflict) {
           final refreshed = await _exercisesApi.fetchAll();
           final match = refreshed
@@ -138,9 +139,6 @@ class WorkoutSyncRepository {
             HiveDatabase.instance.getWorkoutExercises(workout.key);
 
         for (final we in allLocalExercises.where((e) => !e.isInCircuit)) {
-          // MODIFICATO — try/catch per singolo esercizio: un
-          // fallimento qui non deve mai impedire il collegamento
-          // degli esercizi successivi della stessa scheda.
           try {
             final exerciseId = await resolveExerciseId(
                 we.exerciseKey, we.exerciseName, we.muscleGroup);
@@ -177,7 +175,7 @@ class WorkoutSyncRepository {
                   _circuitDomain, circuitLocalKey, remoteCircuitId);
               circuitsCreated++;
             } on ApiException {
-              continue; // Salta questo circuito, prova i successivi.
+              continue;
             }
           }
 
@@ -204,9 +202,6 @@ class WorkoutSyncRepository {
           }
         }
       } on ApiException {
-        // Fallita solo la CREAZIONE della scheda stessa (non un
-        // singolo esercizio): qui è corretto marcarla come fallita
-        // per intero, dato che non esiste ancora remotamente.
         failed.add(workout.name);
       }
     }

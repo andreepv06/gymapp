@@ -240,12 +240,21 @@ class BackendImportRepository {
 
     try {
       final remoteWorkouts = await _api.fetchWorkouts();
+      // NUOVO (fix resurrezione schede eliminate) — elenco di ID
+      // remoti "tombstoned": schede eliminate su QUESTO dispositivo
+      // la cui cancellazione sul backend non è ancora stata
+      // confermata. Vanno sempre ignorate in questo download,
+      // altrimenti riappaiono localmente nonostante l'utente le
+      // abbia già eliminate (bug osservato: scheda che ricompare
+      // dopo riavvio app, o insieme a una nuova scheda appena creata).
+      final tombstonedIds = await _mapping.getTombstones(_workoutDomain);
       final localWorkoutNames = HiveDatabase.instance
           .getWorkouts()
           .map((w) => w.name.trim().toLowerCase())
           .toSet();
 
       for (final remoteWorkout in remoteWorkouts) {
+        if (tombstonedIds.contains(remoteWorkout.id)) continue;
         final alreadyImported =
             await _mapping.getRemoteId(_workoutDomain, remoteWorkout.id) != null;
         // Nota: qui il mapping è cercato al contrario (per id remoto)

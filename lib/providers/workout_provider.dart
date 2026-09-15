@@ -45,11 +45,18 @@ class WorkoutProvider extends ChangeNotifier {
     SyncTrigger.instance.requestSync();
   }
 
-  // MODIFICATO — propaga la cancellazione al backend tramite
-  // DeletePropagator (già esistente nel progetto, best-effort e
-  // silenzioso: il delete locale avviene comunque sempre per primo).
+  // MODIFICATO (fix resurrezione schede eliminate) — il tombstone
+  // viene registrato AWAITED, PRIMA della cancellazione da Hive:
+  // una singola scrittura locale rapida che protegge da un
+  // successivo download che ritrovi ancora la scheda sul backend
+  // (DELETE remoto sempre fire-and-forget, può richiedere secondi
+  // con Render in cold start, o non completarsi mai se l'app viene
+  // chiusa subito dopo l'eliminazione).
   Future<void> deleteWorkout(dynamic key) async {
     final intKey = key is int ? key : null;
+    if (intKey != null) {
+      await DeletePropagator.tombstoneWorkout(intKey);
+    }
     await HiveDatabase.instance.deleteWorkout(key);
     loadWorkouts();
     if (intKey != null) {
@@ -125,7 +132,6 @@ class WorkoutProvider extends ChangeNotifier {
           .updateWorkoutExercise(
               exercises[i].key, updated);
     }
-    // FIX: loadWorkoutExercises è void, non Future
     loadWorkoutExercises(workoutId);
   }
 }

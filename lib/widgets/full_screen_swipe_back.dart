@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 
 // ─────────────────────────────────────────────────────────────
 // FullScreenSwipeBack
@@ -6,6 +7,13 @@ import 'package:flutter/material.dart';
 // Replica il comportamento iOS 26 / SwiftUI descritto nell'allegato:
 //   gestureRecognizerShouldBegin → dx > 0 && |dx| > |dy|
 //   Trigger pop: frazione schermo ≥ 30% oppure velocity > 500 px/s
+//
+// MODIFICATO (fix lentezza) — la soglia di velocity, dichiarata ma
+// mai realmente usata nella versione precedente (il pop scattava
+// solo in base alla distanza percorsa), è ora implementata con un
+// vero VelocityTracker. Un flick rapido ma breve — tipico quando lo
+// swipe non parte dal bordo estremo — ora fa scattare il pop subito,
+// invece di richiedere sempre almeno il 30% di trascinamento.
 //
 // Non interferisce con:
 //   • ListView / SingleChildScrollView (scroll verticale)
@@ -31,6 +39,12 @@ class _FullScreenSwipeBackState extends State<FullScreenSwipeBack> {
   Offset      _start = Offset.zero;
   double      _accumulated = 0;
 
+  // NUOVO (fix lentezza) — traccia la velocità reale del gesto in
+  // px/s tramite VelocityTracker (la stessa classe usata
+  // internamente da Flutter per i gesti drag/fling), alimentato ad
+  // ogni movimento fin dal primo istante del gesto.
+  VelocityTracker? _velocityTracker;
+
   // Soglie (identiche all'implementazione UIKit allegata)
   static const double _fractionThreshold  = 0.30; // 30% larghezza
   static const double _velocityThreshold  = 500.0; // px/s
@@ -51,9 +65,10 @@ class _FullScreenSwipeBackState extends State<FullScreenSwipeBack> {
   }
 
   void _reset() {
-    _state       = _SwipeState.idle;
-    _start       = Offset.zero;
-    _accumulated = 0;
+    _state            = _SwipeState.idle;
+    _start            = Offset.zero;
+    _accumulated      = 0;
+    _velocityTracker  = null;
   }
 
   // ── Pointer Listener ───────────────────────────────────────
@@ -74,11 +89,19 @@ class _FullScreenSwipeBackState extends State<FullScreenSwipeBack> {
     _start       = e.position;
     _accumulated = 0;
     _state       = _SwipeState.detecting;
+    // NUOVO — inizializza il tracker fin dal primo tocco.
+    _velocityTracker = VelocityTracker.withKind(e.kind);
+    _velocityTracker!.addPosition(e.timeStamp, e.position);
   }
 
   void _onPointerMove(PointerMoveEvent e) {
     if (_state == _SwipeState.rejected) return;
     if (_state == _SwipeState.idle)     return;
+
+    // NUOVO — alimenta il tracker ad ogni movimento, indipendente-
+    // mente dalla fase (detecting o tracking): garantisce una stima
+    // di velocità accurata anche per gesti brevi e rapidi.
+    _velocityTracker?.addPosition(e.timeStamp, e.position);
 
     final dx = e.position.dx - _start.dx;
     final dy = e.position.dy - _start.dy;
@@ -114,15 +137,19 @@ class _FullScreenSwipeBackState extends State<FullScreenSwipeBack> {
       return;
     }
 
-    final dx       = e.position.dx - _start.dx;
     final width    = MediaQuery.sizeOf(context).width;
     final fraction = (_accumulated / width).clamp(0.0, 1.0);
 
-    // Stima velocity: delta totale / tempo (approssimato)
-    // Per semplicità usiamo solo fraction — la velocity esatta
-    // è disponibile solo su HorizontalDragEnd; qui usiamo
-    // la soglia di frazione che è sufficiente per UX fluida.
-    final shouldPop = fraction >= _fractionThreshold;
+    // NUOVO (fix lentezza) — velocità reale calcolata dal
+    // VelocityTracker, finalmente utilizzata: un flick rapido fa
+    // scattare il pop anche molto sotto il 30% di trascinamento,
+    // esattamente come descritto nel commento originale del file ma
+    // mai realmente implementato prima d'ora.
+    final velocityEstimate = _velocityTracker?.getVelocity();
+    final vx = velocityEstimate?.pixelsPerSecond.dx ?? 0.0;
+
+    final shouldPop =
+        fraction >= _fractionThreshold || vx > _velocityThreshold;
 
     _reset();
 
