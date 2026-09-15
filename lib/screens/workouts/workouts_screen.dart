@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/navigation/app_router.dart';
 import '../../core/theme/markfit_colors.dart';
 import '../../db/hive_database.dart';
 import '../../models/hive_models.dart';
@@ -76,11 +77,15 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       onStartSession: () async {
         Navigator.pop(context);
         context.read<WorkoutProvider>().loadWorkoutExercises(workout.key);
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (_) => ActiveSessionScreen(workout: workout)),
-        );
+        // FIX (navigazione) — prima era Navigator.push +
+        // MaterialPageRoute: bypassava FullScreenSwipeBack e
+        // CupertinoPageRoute, lasciando come unico "back" il gesto
+        // nativo del browser (che non passa per
+        // ActiveSessionScreen._onBack()/PopScope — causa reale del
+        // bug "la sessione non resta attiva"). pushPage() è lo
+        // stesso identico meccanismo già usato correttamente da
+        // Home e Allenamenti.
+        await pushPage(context, ActiveSessionScreen(workout: workout));
         if (mounted) context.read<WorkoutProvider>().loadWorkouts();
       },
       onEdit: () {
@@ -104,13 +109,17 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
 
   Future<void> _openDetailScreen(HiveWorkout workout) async {
     context.read<WorkoutProvider>().loadWorkoutExercises(workout.key);
-    await Navigator.push(
+    // FIX (navigazione) — prima era Navigator.push + MaterialPageRoute:
+    // nessun FullScreenSwipeBack applicato a WorkoutDetailScreen, quindi
+    // il back swipe funzionava SOLO dal bordo estremo (gesto nativo del
+    // browser, non il nostro gesto Flutter). pushPage() risolve
+    // esattamente questo, allineando il comportamento a tutte le altre
+    // schermate dell'app.
+    await pushPage(
       context,
-      MaterialPageRoute(
-        builder: (_) => WorkoutDetailScreen(
-          workoutId:   workout.key,
-          workoutName: workout.name,
-        ),
+      WorkoutDetailScreen(
+        workoutId:   workout.key,
+        workoutName: workout.name,
       ),
     );
     if (mounted) context.read<WorkoutProvider>().loadWorkouts();
@@ -203,7 +212,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // FIX: passa canGoBack per mostrare il pulsante indietro
               _GlassAppBar(
                 onAdd:     _showCreateSheet,
                 canGoBack: Navigator.of(context).canPop(),
@@ -233,12 +241,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                             context
                                 .read<WorkoutProvider>()
                                 .loadWorkoutExercises(w.key);
-                            await Navigator.push(
+                            // FIX (navigazione) — stesso motivo del
+                            // punto sopra: pushPage() al posto di
+                            // Navigator.push + MaterialPageRoute.
+                            await pushPage(
                               context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    ActiveSessionScreen(workout: w),
-                              ),
+                              ActiveSessionScreen(workout: w),
                             );
                             if (mounted) {
                               context.read<WorkoutProvider>().loadWorkouts();
@@ -259,11 +267,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GlassAppBar — FIX: aggiunto pulsante indietro Glass
-//
-// Il pulsante è mostrato quando canGoBack == true
-// (WorkoutsScreen è sempre pushata, non è mai root tab).
-// Coerente con _WorkoutHeader e _SessionHeader già presenti.
+// _GlassAppBar — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _GlassAppBar extends StatelessWidget {
   final VoidCallback onAdd;
@@ -297,7 +301,6 @@ class _GlassAppBar extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // FIX: pulsante indietro Glass (coerente con _WorkoutHeader)
                 if (canGoBack) ...[
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
@@ -318,7 +321,6 @@ class _GlassAppBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                 ],
-                // Titolo
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,7 +335,6 @@ class _GlassAppBar extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Pulsante aggiungi
                 GestureDetector(
                   onTap: onAdd,
                   child: Container(
@@ -362,7 +363,7 @@ class _GlassAppBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutGlassCard — ADATTIVO
+// _WorkoutGlassCard — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _WorkoutGlassCard extends StatelessWidget {
   final HiveWorkout  workout;
@@ -509,7 +510,7 @@ class _CardInfoTag extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _EmptyState
+// _EmptyState — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
   final VoidCallback onAdd;
@@ -564,7 +565,7 @@ class _EmptyState extends StatelessWidget {
 }
 
 // ═════════════════════════════════════════════════════════════
-// SHEET WIDGETS — tutti theme-aware via GlassSheetWrapper
+// SHEET WIDGETS — INVARIATI
 // ═════════════════════════════════════════════════════════════
 
 class _WorkoutOptionsSheet extends StatelessWidget {
