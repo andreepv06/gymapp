@@ -20,8 +20,6 @@ class ImportSummary {
   final int goalsImported;
   final int goalCompletionsImported;
   final List<String> errors;
-  // NUOVO — numero di schede rimosse localmente perché non più
-  // presenti sul backend (cancellate da un altro dispositivo).
   final int workoutsPruned;
 
   const ImportSummary({
@@ -44,22 +42,20 @@ class ImportSummary {
 /// Importa nel Hive locale del dispositivo corrente tutto ciò che
 /// l'utente ha già sincronizzato sul backend da ALTRI dispositivi.
 ///
-/// Regole di sicurezza, identiche in spirito alle sync repository di
-/// invio, ma invertite:
-///  - MAI sovrascrive un elemento locale già esistente (dedup per
-///    nome/firma contro ciò che è già in Hive);
-///  - dopo aver creato un elemento locale, registra subito il
-///    mapping locale↔remoto, così una successiva "Sincronizza tutto"
-///    su questo stesso dispositivo lo riconosce come "già
-///    sincronizzato" invece di rimandarlo al backend (evita un loop
-///    invio→ricezione→reinvio);
-///  - NUOVO: se un elemento locale ha una mappatura verso un ID
-///    remoto che non è più presente nella lista scaricata dal
-///    backend, significa che è stato eliminato da un altro
-///    dispositivo → viene rimosso anche qui (_pruneDeletedWorkouts).
-///
-/// Sport sessions non incluso in questo primo blocco (nessuna
-/// dipendenza da altri domini, aggiunta simmetrica rimandata).
+/// AGGIORNATO (audit eliminazione schede) — _importWorkouts() ora:
+///  1. deduplica per ID REMOTO come criterio primario (tramite la
+///     mappa inversa ricavata da SyncMappingStorage.getAllMappings),
+///     non più per nome. Il vecchio controllo
+///     `getRemoteId(domain, remoteWorkout.id)` era un bug noto (mai
+///     funzionante: quella funzione si aspetta una chiave locale, non
+///     un id remoto) già segnalato nel commento originale del codice.
+///     Il nome resta un fallback SOLO per schede mai mappate prima.
+///  2. legge i tombstone in modo LIVE ad ogni iterazione (non più
+///     come snapshot preso una sola volta a inizio ciclo) e riverifica
+///     subito dopo aver creato un record locale: chiude la finestra
+///     della race "DELETE locale parte → import in corso → import
+///     crea la scheda → DELETE remoto termina", che con uno snapshot
+///     statico poteva lasciare una copia locale orfana.
 class BackendImportRepository {
   static const _exerciseDomain = 'exercise';
   static const _trainingModeDomain = 'trainingMode';
@@ -240,30 +236,37 @@ class BackendImportRepository {
 
     try {
       final remoteWorkouts = await _api.fetchWorkouts();
-      // NUOVO (fix resurrezione schede eliminate) — elenco di ID
-      // remoti "tombstoned": schede eliminate su QUESTO dispositivo
-      // la cui cancellazione sul backend non è ancora stata
-      // confermata. Vanno sempre ignorate in questo download,
-      // altrimenti riappaiono localmente nonostante l'utente le
-      // abbia già eliminate (bug osservato: scheda che ricompare
-      // dopo riavvio app, o insieme a una nuova scheda appena creata).
-      final tombstonedIds = await _mapping.getTombstones(_workoutDomain);
+
+      // FIX (audit eliminazione schede) — dedup primario per ID
+      // REMOTO (affidabile), non più per nome. Costruiamo la mappa
+      // inversa remoteId → localKey dalle mappature già persistite.
+      final existingMappings = await _mapping.getAllMappings(_workoutDomain);
+      final localKeyByRemoteId = <String, int>{
+        for (final entry in existingMappings.entries)
+          entry.value: int.parse(entry.key),
+      };
+
       final localWorkoutNames = HiveDatabase.instance
           .getWorkouts()
           .map((w) => w.name.trim().toLowerCase())
           .toSet();
 
       for (final remoteWorkout in remoteWorkouts) {
-        if (tombstonedIds.contains(remoteWorkout.id)) continue;
-        final alreadyImported =
-            await _mapping.getRemoteId(_workoutDomain, remoteWorkout.id) != null;
-        // Nota: qui il mapping è cercato al contrario (per id remoto)
-        // solo come guardia extra; il controllo principale è per nome,
-        // coerente con l'assenza di un lookup "getLocalIdByRemote" già
-        // pronto in SyncMappingStorage (che indicizza per dominio+
-        // chiave locale, non per id remoto — sufficiente qui perché il
-        // dedup primario è comunque per nome).
-        if (alreadyImported) continue;
+        // FIX — lettura LIVE dei tombstone ad ogni iterazione, non
+        // più uno snapshot preso una sola volta prima del ciclo
+        // (che può durare secondi per via delle chiamate di rete
+        // successive su circuiti/esercizi di ogni scheda).
+        final tombstonedNow = await _mapping.getTombstones(_workoutDomain);
+        if (tombstonedNow.contains(remoteWorkout.id)) continue;
+
+        // Già importata in precedenza per id remoto: salta,
+        // indipendentemente dal nome attuale.
+        if (localKeyByRemoteId.containsKey(remoteWorkout.id)) continue;
+
+        // Fallback SOLO per schede mai mappate prima d'ora (prima
+        // sincronizzazione cross-device di una scheda creata prima
+        // dell'introduzione del mapping, o creata offline su un
+        // altro dispositivo non ancora visto qui).
         if (localWorkoutNames.contains(remoteWorkout.name.trim().toLowerCase())) {
           continue;
         }
@@ -275,9 +278,25 @@ class BackendImportRepository {
           iconColorIndex: remoteWorkout.iconColorIndex,
         );
         final newWorkoutKey = await HiveDatabase.instance.addWorkout(createdWorkout);
-        workoutsCreated++;
         await _mapping.setRemoteId(_workoutDomain, newWorkoutKey, remoteWorkout.id);
+        localKeyByRemoteId[remoteWorkout.id] = newWorkoutKey;
         localWorkoutNames.add(remoteWorkout.name.trim().toLowerCase());
+
+        // FIX — riverifica DOPO la creazione: se nel frattempo (tra
+        // l'inizio di questa iterazione e questo punto) la scheda è
+        // stata eliminata/tombstoned, annulla immediatamente ciò che
+        // è appena stato creato. Chiude la finestra residua della
+        // race "DELETE parte → import in corso → import crea →
+        // DELETE termina".
+        final tombstonedAfter = await _mapping.getTombstones(_workoutDomain);
+        if (tombstonedAfter.contains(remoteWorkout.id)) {
+          await HiveDatabase.instance.deleteWorkout(newWorkoutKey);
+          await _mapping.removeMapping(_workoutDomain, newWorkoutKey);
+          localKeyByRemoteId.remove(remoteWorkout.id);
+          continue;
+        }
+
+        workoutsCreated++;
 
         final remoteCircuits = await _api.fetchCircuits(remoteWorkout.id);
         final circuitIdMap = <String, int>{};
@@ -298,7 +317,7 @@ class BackendImportRepository {
         final remoteExercises = await _api.fetchWorkoutExercises(remoteWorkout.id);
         for (final we in remoteExercises) {
           final localExerciseKey = exerciseMap.getLocal(we.exerciseId);
-          if (localExerciseKey == null) continue; // esercizio non risolto, salta in sicurezza
+          if (localExerciseKey == null) continue;
 
           final localCircuitKey =
               we.circuitId != null ? circuitIdMap[we.circuitId] : null;
@@ -312,8 +331,6 @@ class BackendImportRepository {
             targetReps: we.targetReps,
             targetWeight: we.targetWeight,
             restSeconds: we.restSeconds,
-            // Stesso pattern usato dalla V1: appartenenza al circuito
-            // codificata nel prefisso di "notes".
             notes: localCircuitKey != null ? '__circuit_$localCircuitKey' : we.notes,
             sortOrder: we.sortOrder,
           ));
@@ -331,21 +348,7 @@ class BackendImportRepository {
     );
   }
 
-  // ── NUOVO — Riconciliazione cancellazioni schede ─────────
-  //
-  // Scenario: sul PC l'utente elimina una scheda già sincronizzata.
-  // WorkoutProvider.deleteWorkout propaga subito il DELETE al backend
-  // e rimuove la mappatura locale su quel dispositivo. Ma sul
-  // TELEFONO la scheda esiste ancora in Hive, con una mappatura verso
-  // un remoteId che ORA non esiste più sul backend.
-  //
-  // Qui scarichiamo l'elenco aggiornato delle schede remote e, per
-  // ogni mappatura locale "workout" che punta a un id non più
-  // presente, eliminiamo la scheda anche su questo dispositivo e
-  // ripuliamo la mappatura. Se una scheda non è MAI stata
-  // sincronizzata (nessuna mappatura), non viene mai toccata da
-  // questo meccanismo: solo ciò che era già stato condiviso col
-  // backend può essere rimosso in questo modo.
+  // ── Riconciliazione cancellazioni schede (da altro dispositivo) ──
   Future<int> _pruneDeletedWorkouts(List<String> errors) async {
     int pruned = 0;
     try {
@@ -356,17 +359,12 @@ class BackendImportRepository {
       for (final entry in localMappings.entries) {
         if (remoteIds.contains(entry.value)) continue;
 
-        // La mappatura punta a un id remoto che non esiste più:
-        // la scheda è stata eliminata altrove.
         final localKey = int.tryParse(entry.key);
         if (localKey != null) {
           try {
             await HiveDatabase.instance.deleteWorkout(localKey);
             pruned++;
-          } catch (_) {
-            // La scheda locale potrebbe già non esistere più
-            // (es. eliminata manualmente anche qui): non è un errore.
-          }
+          } catch (_) {}
         }
         await _mapping.removeMapping(_workoutDomain, entry.key);
       }
@@ -391,9 +389,6 @@ class BackendImportRepository {
           .map((s) => '${s.workoutName.trim().toLowerCase()}|${s.date}')
           .toSet();
 
-      // Accesso diretto al box, come già fa BackupService.restoreBackup:
-      // createSession() imposterebbe date=now(), inadatto qui perché
-      // dobbiamo preservare la data storica reale della sessione importata.
       final uid = HiveDatabase.instance.currentUserId;
       final sessionBox = Hive.box<HiveSession>('${uid}_sessions');
 
@@ -518,7 +513,7 @@ class _RemoteToLocalMap {
 
   int? getLocal(String remoteId) => _map[remoteId];
 
-  int? getLocalByName(String name) => null; // riservato per estensioni future
+  int? getLocalByName(String name) => null;
 }
 
 class _WorkoutImportResult {

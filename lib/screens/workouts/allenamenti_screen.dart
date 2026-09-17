@@ -167,17 +167,12 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
         }));
   }
 
-  // FIX: metodo per aprire direttamente l'editor icona/colore
-  // dal tap sull'icona nella card di Allenamenti.
-  // Usa showWorkoutIconColorSheet (nuovo popup a layout fisso:
-  // anteprima + tab Icona/Colore + pulsanti sempre visibili).
   Future<void> _showIconColorSheet(HiveWorkout workout) async {
     await showWorkoutIconColorSheet(
       context,
       initialIconId:     workout.iconId,
       initialColorValue: workout.iconColorIndex,
       onSelect: (iconId, colorArgb) {
-        // Salvataggio identico a WorkoutDetailScreen._showIconColorSheet
         workout.iconId         = iconId;
         workout.iconColorIndex = colorArgb;
         workout.save();
@@ -212,8 +207,19 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
             onTap: () => Navigator.pop(context, true)),
       ]);
     if (confirm == true && mounted) {
-      await HiveDatabase.instance.deleteWorkout(workout.key);
-      context.read<WorkoutProvider>().loadWorkouts();
+      // FIX (audit eliminazione schede) — PRIMA questo metodo
+      // chiamava HiveDatabase.instance.deleteWorkout() DIRETTAMENTE,
+      // esattamente come il bug gemello trovato in workouts_screen.dart
+      // ("Vedi tutte le schede"): bypassava WorkoutProvider.deleteWorkout(),
+      // quindi NESSUN tombstone veniva scritto e NESSUNA chiamata DELETE
+      // veniva inviata al backend. La scheda spariva solo localmente ma
+      // restava viva sul backend, pronta a essere reimportata al
+      // successivo ciclo di sync — causa diretta della resurrezione
+      // osservata passando da questa schermata a "Vedi tutte le schede"
+      // e viceversa. Ora entrambe le schermate condividono lo stesso,
+      // unico punto autorevole di eliminazione (tombstone + DELETE
+      // remoto), eliminando la doppia fonte di verità.
+      await context.read<WorkoutProvider>().deleteWorkout(workout.key);
       final workouts = context.read<WorkoutProvider>().workouts;
       if (_currentPage >= workouts.length && workouts.isNotEmpty) {
         setState(() => _currentPage = workouts.length - 1);
@@ -239,7 +245,6 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header ──────────────────────────────────
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,7 +313,6 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
                 onDelete:       _deleteWorkout,
                 onViewAll:      () => pushPage(context, const WorkoutsScreen()),
                 onCreateNew:    _showCreateWorkoutSheet,
-                // FIX: callback per tap diretto sull'icona della card
                 onIconTap:      _showIconColorSheet,
                 sp:             sp),
             ],
@@ -320,7 +324,7 @@ class _AllenamentiScreenState extends State<AllenamentiScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _GestioneEserciziPill — ADATTIVO
+// _GestioneEserciziPill — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _GestioneEserciziPill extends StatelessWidget {
   final VoidCallback onLibrary, onNewExercise;
@@ -393,7 +397,7 @@ class _PillButtonState extends State<_PillButton> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _SectionLabel
+// _SectionLabel — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _SectionLabel extends StatelessWidget {
   final String   label;
@@ -423,7 +427,7 @@ class _SectionLabel extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _ActiveRecoveryBanner — ADATTIVO
+// _ActiveRecoveryBanner — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _ActiveRecoveryBanner extends StatelessWidget {
   final SessionProvider sp;
@@ -518,9 +522,6 @@ class _ActiveRecoveryBanner extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     fontSize:   13)))),
             const SizedBox(width: 8),
-            // NUOVO — pulsante secondario: stesso popup unificato
-            // usato in Home (active_session_actions_sheet.dart),
-            // nessuna implementazione duplicata.
             GestureDetector(
               onTap: () => showActiveSessionActionsSheet(context),
               child: Container(
@@ -542,7 +543,7 @@ class _ActiveRecoveryBanner extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _PausedSessionPanel — ADATTIVO
+// _PausedSessionPanel — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _PausedSessionPanel extends StatelessWidget {
   final Map<String, dynamic> data;
@@ -713,8 +714,7 @@ class _PausedSessionPanel extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _NuovaSessionePanel — ADATTIVO
-// FIX: aggiunto parametro onIconTap passato a _WorkoutCarouselCard
+// _NuovaSessionePanel — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _NuovaSessionePanel extends StatelessWidget {
   final List<HiveWorkout>           workouts;
@@ -724,7 +724,6 @@ class _NuovaSessionePanel extends StatelessWidget {
   final void Function(HiveWorkout)  onPlay;
   final void Function(HiveWorkout)  onEdit;
   final void Function(HiveWorkout)  onDelete;
-  // FIX: callback tap diretto sull'icona della card
   final void Function(HiveWorkout)  onIconTap;
   final VoidCallback                onViewAll;
   final VoidCallback                onCreateNew;
@@ -738,7 +737,7 @@ class _NuovaSessionePanel extends StatelessWidget {
     required this.onPlay,
     required this.onEdit,
     required this.onDelete,
-    required this.onIconTap,   // FIX
+    required this.onIconTap,
     required this.onViewAll,
     required this.onCreateNew,
     required this.sp,
@@ -840,7 +839,6 @@ class _NuovaSessionePanel extends StatelessWidget {
                           onPlay:    () => onPlay(w),
                           onEdit:    () => onEdit(w),
                           onDelete:  () => onDelete(w),
-                          // FIX: tap sull'icona → apre editor icona
                           onIconTap: () => onIconTap(w),
                         ));
                     })),
@@ -906,8 +904,7 @@ class _NuovaSessionePanel extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _WorkoutCarouselCard — ADATTIVO
-// FIX: aggiunto onIconTap + GestureDetector sull'icona con badge edit
+// _WorkoutCarouselCard — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _WorkoutCarouselCard extends StatelessWidget {
   final HiveWorkout  workout;
@@ -915,7 +912,6 @@ class _WorkoutCarouselCard extends StatelessWidget {
   final VoidCallback onPlay;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  // FIX: callback tap sull'icona → apre WorkoutIconColorSheet
   final VoidCallback onIconTap;
 
   const _WorkoutCarouselCard({
@@ -925,7 +921,7 @@ class _WorkoutCarouselCard extends StatelessWidget {
     required this.onPlay,
     required this.onEdit,
     required this.onDelete,
-    required this.onIconTap,  // FIX
+    required this.onIconTap,
   });
 
   Map<String, int> _stats() {
@@ -993,10 +989,6 @@ class _WorkoutCarouselCard extends StatelessWidget {
                             letterSpacing: 0.5)),
                   ])),
               Row(children: [
-                // FIX: tap sull'icona → _showIconColorSheet
-                // GestureDetector separato dalla card intera per
-                // non interferire con il tap sul resto della card.
-                // Badge edit per comunicare l'interattività.
                 GestureDetector(
                   onTap: onIconTap,
                   child: Stack(
@@ -1010,7 +1002,6 @@ class _WorkoutCarouselCard extends StatelessWidget {
                         iconSize:       22,
                         borderRadius:   12,
                       ),
-                      // Badge edit (come in _WorkoutHeader di workout_detail)
                       Positioned(
                         right:  -3,
                         bottom: -3,
@@ -1102,7 +1093,7 @@ class _WorkoutCarouselCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _EmptyCarouselCard — ADATTIVO
+// _EmptyCarouselCard — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _EmptyCarouselCard extends StatelessWidget {
   final VoidCallback onCreateNew;
@@ -1156,7 +1147,7 @@ class _EmptyCarouselCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _StatChip — accent colors fissi
+// _StatChip — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _StatChip extends StatelessWidget {
   final IconData icon;
@@ -1178,7 +1169,7 @@ class _StatChip extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// _TinyChip — ADATTIVO
+// _TinyChip — INVARIATO
 // ─────────────────────────────────────────────────────────────
 class _TinyChip extends StatelessWidget {
   final String label;

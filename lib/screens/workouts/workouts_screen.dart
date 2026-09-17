@@ -77,14 +77,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       onStartSession: () async {
         Navigator.pop(context);
         context.read<WorkoutProvider>().loadWorkoutExercises(workout.key);
-        // FIX (navigazione) — prima era Navigator.push +
-        // MaterialPageRoute: bypassava FullScreenSwipeBack e
-        // CupertinoPageRoute, lasciando come unico "back" il gesto
-        // nativo del browser (che non passa per
-        // ActiveSessionScreen._onBack()/PopScope — causa reale del
-        // bug "la sessione non resta attiva"). pushPage() è lo
-        // stesso identico meccanismo già usato correttamente da
-        // Home e Allenamenti.
         await pushPage(context, ActiveSessionScreen(workout: workout));
         if (mounted) context.read<WorkoutProvider>().loadWorkouts();
       },
@@ -109,12 +101,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
 
   Future<void> _openDetailScreen(HiveWorkout workout) async {
     context.read<WorkoutProvider>().loadWorkoutExercises(workout.key);
-    // FIX (navigazione) — prima era Navigator.push + MaterialPageRoute:
-    // nessun FullScreenSwipeBack applicato a WorkoutDetailScreen, quindi
-    // il back swipe funzionava SOLO dal bordo estremo (gesto nativo del
-    // browser, non il nostro gesto Flutter). pushPage() risolve
-    // esattamente questo, allineando il comportamento a tutte le altre
-    // schermate dell'app.
     await pushPage(
       context,
       WorkoutDetailScreen(
@@ -141,9 +127,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     ));
   }
 
-  // FIX: usa showWorkoutIconColorSheet — popup a layout fisso
-  // (anteprima + tab Icona/Colore + pulsanti sempre visibili),
-  // aperto direttamente e non annidato in _openSheet.
   Future<void> _showIconColorSheet(HiveWorkout workout) async {
     await showWorkoutIconColorSheet(
       context,
@@ -191,13 +174,20 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       ],
     );
     if (ok == true && mounted) {
-      final exercises =
-          HiveDatabase.instance.getWorkoutExercises(workout.key);
-      for (final ex in exercises) {
-        await HiveDatabase.instance.deleteWorkoutExercise(ex.key);
-      }
-      await HiveDatabase.instance.deleteWorkout(workout.key);
-      if (mounted) context.read<WorkoutProvider>().loadWorkouts();
+      // FIX (audit eliminazione schede) — PRIMA questo metodo
+      // chiamava HiveDatabase.instance.deleteWorkout() DIRETTAMENTE,
+      // bypassando WorkoutProvider.deleteWorkout(): questo significava
+      // NESSUN tombstone scritto e NESSUNA chiamata DELETE inviata al
+      // backend. La scheda spariva solo da QUESTO dispositivo, ma
+      // restava viva sul backend, pronta a essere reimportata al
+      // successivo ciclo di sync — causa diretta e dimostrata della
+      // resurrezione osservata. Ora passa sempre per l'unico punto
+      // autorevole di eliminazione (WorkoutProvider), che già include
+      // tombstone + propagazione DELETE, e che internamente chiama
+      // HiveDatabase.deleteWorkout() — la quale già ripulisce
+      // correttamente esercizi e circuiti collegati, rendendo il
+      // precedente ciclo manuale ridondante.
+      await context.read<WorkoutProvider>().deleteWorkout(workout.key);
     }
   }
 
@@ -241,9 +231,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                             context
                                 .read<WorkoutProvider>()
                                 .loadWorkoutExercises(w.key);
-                            // FIX (navigazione) — stesso motivo del
-                            // punto sopra: pushPage() al posto di
-                            // Navigator.push + MaterialPageRoute.
                             await pushPage(
                               context,
                               ActiveSessionScreen(workout: w),
