@@ -369,22 +369,39 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
     final c         = context.mfc;
     final sysBottom = MediaQuery.of(context).viewPadding.bottom;
 
-    return Scaffold(
-      backgroundColor:          Colors.transparent,
-      resizeToAvoidBottomInset: false,
-      body: CosmicBackground(
-        child: SafeArea(
-          child: Column(children: [
-            _buildAppBar(context, c),
-            Expanded(child: _loading
-                ? Center(child: CircularProgressIndicator(
-                    color: _teal, strokeWidth: 2))
-                : _stats.isEmpty
-                    ? _buildEmptyData(c, sysBottom)
-                    : _selected != null
-                        ? _buildDetailView(context, c, sysBottom)
-                        : _buildListView(context, c, sysBottom)),
-          ]),
+    // FIX (navigazione progressi) — PRIMA il back swipe usciva
+    // sempre dall'intera pagina (tornando a Storico), saltando la
+    // vista "lista esercizi" quando si era nel dettaglio di un
+    // esercizio: la freccia gestiva correttamente i due livelli
+    // (dettaglio → lista → pop), ma FullScreenSwipeBack chiama
+    // Navigator.pop() direttamente, bypassando quella logica interna
+    // basata su setState. PopScope intercetta il pop (gesture E
+    // pulsante indietro di sistema) quando si è in vista dettaglio
+    // e lo trasforma nello stesso setState già usato dalla freccia —
+    // stesso identico pattern già in uso in ActiveSessionScreen.
+    return PopScope(
+      canPop: _selected == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        setState(() => _selectedName = null);
+      },
+      child: Scaffold(
+        backgroundColor:          Colors.transparent,
+        resizeToAvoidBottomInset: false,
+        body: CosmicBackground(
+          child: SafeArea(
+            child: Column(children: [
+              _buildAppBar(context, c),
+              Expanded(child: _loading
+                  ? Center(child: CircularProgressIndicator(
+                      color: _teal, strokeWidth: 2))
+                  : _stats.isEmpty
+                      ? _buildEmptyData(c, sysBottom)
+                      : _selected != null
+                          ? _buildDetailView(context, c, sysBottom)
+                          : _buildListView(context, c, sysBottom)),
+            ]),
+          ),
         ),
       ),
     );
