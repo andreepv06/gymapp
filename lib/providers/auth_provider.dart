@@ -6,6 +6,7 @@ import '../db/goal_database.dart';
 import '../db/sport_database.dart';
 import '../db/training_mode_database.dart';
 import '../services/sync/cloud_auth_bridge.dart';
+import '../services/api/dto/auth_dto.dart';
 
 class UserAccount {
   final String identifier;
@@ -86,6 +87,17 @@ class AuthProvider extends ChangeNotifier {
   String? _currentIdentifier;
   String? _currentType;
   List<UserAccount> _accounts = [];
+
+  // NUOVO (fix audit sincronizzazione) — registra il canale di
+  // download del profilo: quando BackendAuthProvider scarica un
+  // profilo dal backend (login, restore session, import iniziale
+  // su un nuovo dispositivo), questo provider lo riceve e lo
+  // applica all'account locale corrente. Prima d'ora questo
+  // collegamento non esisteva: un profilo presente sul backend
+  // non veniva mai copiato in locale.
+  AuthProvider() {
+    CloudAuthBridge.instance.registerProfileDownloadedHandler(_applyRemoteProfile);
+  }
 
   bool get isLoggedIn => _isLoggedIn;
   String? get userEmail => _currentIdentifier;
@@ -206,15 +218,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // MODIFICATO — FIX CRITICO: prima di chiedere la verifica/import al
-  // backend (che scrive subito nei box Hive "correnti"), passiamo
-  // esplicitamente ai box Hive di questo identifier. In precedenza lo
-  // switchUser avveniva solo DENTRO _loginInternal, DOPO la verifica:
-  // l'import scaricava quindi i dati nei box dell'utente sbagliato (o
-  // di nessun utente), che venivano poi "seppelliti" dallo switchUser
-  // successivo che apre i box (vuoti) del nuovo utente — i dati
-  // sembravano scaricarsi ma sparire subito. Ora l'ordine è corretto:
-  // switch PRIMA, poi verifica+import, poi tutto il resto del login.
   Future<String?> login({
     required String identifier,
     required String password,
@@ -241,12 +244,8 @@ class AuthProvider extends ChangeNotifier {
         return null;
       }
 
-      // Account sconosciuto su questo dispositivo: verifica sul
-      // backend prima di dichiarare fallito il login.
       debugPrint('[AUTH] "$id" non trovato localmente, verifico sul backend...');
 
-      // FIX — passa ai box Hive di "id" PRIMA della verifica, perché
-      // la verifica stessa scarica e scrive subito i dati dell'utente.
       await HiveDatabase.instance.switchUser(id);
       await GoalDatabase.instance.switchUser(id);
       await SportDatabase.instance.switchUser(id);
@@ -257,9 +256,6 @@ class AuthProvider extends ChangeNotifier {
         return 'Account non trovato. Registrati prima.';
       }
 
-      // Credenziali valide sul backend: crea l'account "ombra" su
-      // questo dispositivo. I dati reali sono già stati scaricati
-      // nei box giusti durante la verifica, appena sopra.
       final type = _isEmail(id) ? 'email' : 'username';
       _accounts.add(UserAccount(identifier: id, password: password, type: type));
       await _saveAccounts();
@@ -281,8 +277,6 @@ class AuthProvider extends ChangeNotifier {
     await prefs.setString('current_identifier', identifier);
     await prefs.setString('current_type', type);
     debugPrint('[AUTH] _loginInternal: loggato come $identifier');
-    // Idempotente: se già switchati sopra (caso nuovo dispositivo),
-    // questo è un no-op sicuro sugli stessi box già aperti.
     await HiveDatabase.instance.switchUser(identifier);
     await GoalDatabase.instance.switchUser(identifier);
     await SportDatabase.instance.switchUser(identifier);
@@ -298,8 +292,6 @@ class AuthProvider extends ChangeNotifier {
     _currentIdentifier = null;
     _currentType = null;
     debugPrint('[AUTH] logout eseguito');
-    // NUOVO — chiude anche la sessione backend, per non lasciare un
-    // token orfano che verrebbe riusato dal prossimo account V1.
     unawaited(CloudAuthBridge.instance.notifyLogout());
     notifyListeners();
   }
@@ -310,6 +302,13 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // MODIFICATO (fix audit sincronizzazione) — dopo il salvataggio
+  // locale (invariato), propaga al backend SOLO i campi
+  // effettivamente passati in questa chiamata (update parziale),
+  // fire-and-forget tramite lo stesso canale già usato per login/
+  // logout. Se nessuna sessione backend è attiva, il canale è no-op
+  // (comportamento offline-first invariato — vedi
+  // CloudAuthBridge.notifyProfileUpdated).
   Future<void> updateProfile({
     String? displayName,
     String? firstName,
@@ -336,13 +335,66 @@ class AuthProvider extends ChangeNotifier {
     }
     await _saveAccounts();
     notifyListeners();
+    unawaited(CloudAuthBridge.instance.notifyProfileUpdated({
+      if (displayName != null) 'displayName': displayName,
+      if (firstName != null) 'firstName': firstName,
+      if (lastName != null) 'lastName': lastName,
+      if (birthDate != null) 'birthDate': birthDate,
+      if (birthPlace != null) 'birthPlace': birthPlace,
+      if (phone != null) 'phone': phone,
+      if (bio != null) 'bio': bio,
+      if (avatarBase64 != null) 'avatarBase64': avatarBase64,
+    }));
   }
 
+  // MODIFICATO (fix audit sincronizzazione) — propaga anche la
+  // rimozione dell'avatar (stringa vuota invece di null: il campo
+  // avatarUrl del backend è opzionale ma inviare esplicitamente ''
+  // sovrascrive in modo pulito un valore precedente senza richiedere
+  // gestione speciale di null lato validazione DTO).
   Future<void> clearAvatar() async {
     _accounts = await _readAccountsFromDisk();
     final idx = _accounts.indexWhere((a) => a.identifier == _currentIdentifier);
     if (idx == -1) return;
     _accounts[idx].avatarBase64 = null;
+    await _saveAccounts();
+    notifyListeners();
+    unawaited(CloudAuthBridge.instance.notifyProfileUpdated({
+      'avatarBase64': '',
+    }));
+  }
+
+  // NUOVO (fix audit sincronizzazione) — applica al profilo locale
+  // dell'utente corrente i dati scaricati dal backend. Chiamato da
+  // BackendAuthProvider subito dopo ogni fetchCurrentUser() riuscito
+  // (login, restore session, e soprattutto durante l'import iniziale
+  // su un nuovo dispositivo). Scrive SOLO localmente (_saveAccounts):
+  // non richiama mai notifyProfileUpdated, altrimenti si creerebbe un
+  // loop upload↔download. Solo i campi remoti effettivamente
+  // valorizzati sovrascrivono il dato locale, così un campo assente
+  // sul backend non cancella un valore locale non ancora propagato.
+  Future<void> _applyRemoteProfile(BackendUserProfile profile) async {
+    if (_currentIdentifier == null) return;
+    // Il profilo scaricato deve appartenere all'utente attualmente
+    // loggato su QUESTO dispositivo: BackendAuthProvider scarica
+    // sempre il profilo dell'utente autenticato dal proprio JWT, ma
+    // verifichiamo comunque per coerenza in caso di sequenze di
+    // login/logout molto ravvicinate.
+    if (profile.identifier.trim().toLowerCase() != _currentIdentifier) return;
+
+    _accounts = await _readAccountsFromDisk();
+    final idx = _accounts.indexWhere((a) => a.identifier == _currentIdentifier);
+    if (idx == -1) return;
+    final account = _accounts[idx];
+
+    if (profile.displayName != null) account.displayName = profile.displayName;
+    if (profile.firstName != null) account.firstName = profile.firstName;
+    if (profile.lastName != null) account.lastName = profile.lastName;
+    if (profile.bio != null) account.bio = profile.bio;
+    if (profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty) {
+      account.avatarBase64 = profile.avatarUrl;
+    }
+
     await _saveAccounts();
     notifyListeners();
   }

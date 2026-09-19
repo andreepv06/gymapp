@@ -39,15 +39,31 @@ class WorkoutSyncResult {
 /// Sincronizza le schede locali (Hive) verso il backend, in modo
 /// idempotente.
 ///
-/// AGGIORNATO (fix resurrezione schede eliminate) — ogni ciclo
-/// ritenta prima le cancellazioni remote ancora pendenti
-/// (retryPendingWorkoutDeletes), sullo stesso principio già usato
-/// per gli upload: un DELETE fallito una volta non è definitivo,
-/// viene ritentato automaticamente qui ad ogni ciclo.
+/// RISCRITTO (audit sincronizzazione cross-device) — causa radice
+/// del sintomo "scheda presente sul secondo dispositivo ma senza
+/// esercizi": PRIMA, una volta che una scheda risultava "già
+/// sincronizzata" (mapping locale→remoto presente), l'INTERO blocco
+/// di collegamento esercizi/circuiti veniva saltato per sempre, anche
+/// se il collegamento era fallito al primo tentativo (es. timeout
+/// durante cold start di Render). Il fallimento veniva solo contato
+/// in exerciseLinkFailures, mai più ritentato.
+///
+/// ORA: ogni singolo collegamento esercizio↔scheda ha il proprio
+/// tracking indipendente in SyncMappingStorage (dominio
+/// 'workoutExerciseLink', chiave = HiveWorkoutExercise.key locale).
+/// Il ciclo verifica e ritenta i collegamenti mancanti ad OGNI
+/// esecuzione, indipendentemente dallo stato "scheda già
+/// sincronizzata" — stesso principio di retry incrementale già usato
+/// con successo per DeletePropagator/tombstone.
 class WorkoutSyncRepository {
   static const _workoutDomain = 'workout';
   static const _circuitDomain = 'circuit';
   static const _exerciseDomain = 'exercise';
+  // NUOVO — dominio dedicato al tracking del singolo collegamento.
+  // WorkoutsApiService.addExercise() non restituisce un id del link
+  // creato: usiamo la sola PRESENZA della mappatura come flag di
+  // successo (valore = id remoto della scheda, utile in debug).
+  static const _workoutExerciseDomain = 'workoutExerciseLink';
 
   final WorkoutsApiService _workoutsApi;
   final CircuitsApiService _circuitsApi;
@@ -65,10 +81,6 @@ class WorkoutSyncRepository {
         _mapping = mapping ?? SyncMappingStorage();
 
   Future<WorkoutSyncResult> syncLocalWorkoutsToBackend() async {
-    // NUOVO — ritenta eventuali cancellazioni remote non ancora
-    // confermate PRIMA di procedere con l'upload delle schede
-    // attuali (ordine ininfluente per la correttezza, ma coerente
-    // con "cancellazioni prima di tutto" come principio generale).
     await DeletePropagator.retryPendingWorkoutDeletes();
 
     final localWorkouts = HiveDatabase.instance.getWorkouts();
@@ -119,90 +131,114 @@ class WorkoutSyncRepository {
 
     for (final workout in localWorkouts) {
       final workoutLocalKey = workout.key;
+      String remoteWorkoutId;
+
       final alreadyWorkoutId =
           await _mapping.getRemoteId(_workoutDomain, workoutLocalKey);
       if (alreadyWorkoutId != null) {
+        remoteWorkoutId = alreadyWorkoutId;
         workoutsAlreadySynced++;
-        continue;
+      } else {
+        try {
+          final remoteWorkout = await _workoutsApi.create(
+            name: workout.name,
+            iconId: workout.iconId,
+            iconColorIndex: workout.iconColorIndex,
+          );
+          remoteWorkoutId = remoteWorkout.id;
+          await _mapping.setRemoteId(
+              _workoutDomain, workoutLocalKey, remoteWorkoutId);
+          workoutsCreated++;
+        } on ApiException {
+          // Fallita la creazione della scheda stessa: senza un id
+          // remoto non si può procedere al collegamento esercizi per
+          // questa scheda in questo ciclo — verrà ritentata al
+          // prossimo (stesso comportamento di prima).
+          failed.add(workout.name);
+          continue;
+        }
       }
-      try {
-        final remoteWorkout = await _workoutsApi.create(
-          name: workout.name,
-          iconId: workout.iconId,
-          iconColorIndex: workout.iconColorIndex,
-        );
-        await _mapping.setRemoteId(
-            _workoutDomain, workoutLocalKey, remoteWorkout.id);
-        workoutsCreated++;
 
-        final allLocalExercises =
-            HiveDatabase.instance.getWorkoutExercises(workout.key);
+      // FIX — indipendentemente da "scheda appena creata" o "scheda
+      // già sincronizzata", verifica e collega ogni singolo esercizio
+      // libero non ancora confermato sul backend.
+      final allLocalExercises =
+          HiveDatabase.instance.getWorkoutExercises(workout.key);
 
-        for (final we in allLocalExercises.where((e) => !e.isInCircuit)) {
+      for (final we in allLocalExercises.where((e) => !e.isInCircuit)) {
+        final linkKey = we.key;
+        final alreadyLinked =
+            await _mapping.getRemoteId(_workoutExerciseDomain, linkKey);
+        if (alreadyLinked != null) continue;
+        try {
+          final exerciseId = await resolveExerciseId(
+              we.exerciseKey, we.exerciseName, we.muscleGroup);
+          await _workoutsApi.addExercise(
+            workoutId: remoteWorkoutId,
+            exerciseId: exerciseId,
+            sets: we.sets,
+            targetReps: we.targetReps,
+            targetWeight: we.targetWeight,
+            restSeconds: we.restSeconds,
+            sortOrder: we.sortOrder,
+          );
+          await _mapping.setRemoteId(
+              _workoutExerciseDomain, linkKey, remoteWorkoutId);
+          freeExercisesLinked++;
+        } on ApiException {
+          exerciseLinkFailures++;
+        }
+      }
+
+      final localCircuits = HiveDatabase.instance.getCircuits(workout.key);
+      for (final circuit in localCircuits) {
+        final circuitLocalKey = circuit.key;
+        var remoteCircuitId =
+            await _mapping.getRemoteId(_circuitDomain, circuitLocalKey);
+        if (remoteCircuitId == null) {
+          try {
+            final remoteCircuit = await _circuitsApi.create(
+              workoutId: remoteWorkoutId,
+              name: circuit.name,
+              rounds: circuit.rounds,
+              sortOrder: circuit.sortOrder,
+            );
+            remoteCircuitId = remoteCircuit.id;
+            await _mapping.setRemoteId(
+                _circuitDomain, circuitLocalKey, remoteCircuitId);
+            circuitsCreated++;
+          } on ApiException {
+            continue; // Salta questo circuito, prova i successivi.
+          }
+        }
+
+        final membersForCircuit = allLocalExercises.where((e) =>
+            e.isInCircuit && _circuitKeyFromNotes(e.notes) == circuit.key);
+        for (final we in membersForCircuit) {
+          final linkKey = we.key;
+          final alreadyLinked =
+              await _mapping.getRemoteId(_workoutExerciseDomain, linkKey);
+          if (alreadyLinked != null) continue;
           try {
             final exerciseId = await resolveExerciseId(
                 we.exerciseKey, we.exerciseName, we.muscleGroup);
             await _workoutsApi.addExercise(
-              workoutId: remoteWorkout.id,
+              workoutId: remoteWorkoutId,
               exerciseId: exerciseId,
+              circuitId: remoteCircuitId,
               sets: we.sets,
               targetReps: we.targetReps,
               targetWeight: we.targetWeight,
               restSeconds: we.restSeconds,
               sortOrder: we.sortOrder,
             );
-            freeExercisesLinked++;
+            await _mapping.setRemoteId(
+                _workoutExerciseDomain, linkKey, remoteWorkoutId);
+            circuitExercisesLinked++;
           } on ApiException {
             exerciseLinkFailures++;
           }
         }
-
-        final localCircuits = HiveDatabase.instance.getCircuits(workout.key);
-        for (final circuit in localCircuits) {
-          final circuitLocalKey = circuit.key;
-          var remoteCircuitId =
-              await _mapping.getRemoteId(_circuitDomain, circuitLocalKey);
-          if (remoteCircuitId == null) {
-            try {
-              final remoteCircuit = await _circuitsApi.create(
-                workoutId: remoteWorkout.id,
-                name: circuit.name,
-                rounds: circuit.rounds,
-                sortOrder: circuit.sortOrder,
-              );
-              remoteCircuitId = remoteCircuit.id;
-              await _mapping.setRemoteId(
-                  _circuitDomain, circuitLocalKey, remoteCircuitId);
-              circuitsCreated++;
-            } on ApiException {
-              continue;
-            }
-          }
-
-          final membersForCircuit = allLocalExercises.where((e) =>
-              e.isInCircuit && _circuitKeyFromNotes(e.notes) == circuit.key);
-          for (final we in membersForCircuit) {
-            try {
-              final exerciseId = await resolveExerciseId(
-                  we.exerciseKey, we.exerciseName, we.muscleGroup);
-              await _workoutsApi.addExercise(
-                workoutId: remoteWorkout.id,
-                exerciseId: exerciseId,
-                circuitId: remoteCircuitId,
-                sets: we.sets,
-                targetReps: we.targetReps,
-                targetWeight: we.targetWeight,
-                restSeconds: we.restSeconds,
-                sortOrder: we.sortOrder,
-              );
-              circuitExercisesLinked++;
-            } on ApiException {
-              exerciseLinkFailures++;
-            }
-          }
-        }
-      } on ApiException {
-        failed.add(workout.name);
       }
     }
 

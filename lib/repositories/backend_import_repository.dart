@@ -42,20 +42,22 @@ class ImportSummary {
 /// Importa nel Hive locale del dispositivo corrente tutto ciò che
 /// l'utente ha già sincronizzato sul backend da ALTRI dispositivi.
 ///
-/// AGGIORNATO (audit eliminazione schede) — _importWorkouts() ora:
-///  1. deduplica per ID REMOTO come criterio primario (tramite la
-///     mappa inversa ricavata da SyncMappingStorage.getAllMappings),
-///     non più per nome. Il vecchio controllo
-///     `getRemoteId(domain, remoteWorkout.id)` era un bug noto (mai
-///     funzionante: quella funzione si aspetta una chiave locale, non
-///     un id remoto) già segnalato nel commento originale del codice.
-///     Il nome resta un fallback SOLO per schede mai mappate prima.
-///  2. legge i tombstone in modo LIVE ad ogni iterazione (non più
-///     come snapshot preso una sola volta a inizio ciclo) e riverifica
-///     subito dopo aver creato un record locale: chiude la finestra
-///     della race "DELETE locale parte → import in corso → import
-///     crea la scheda → DELETE remoto termina", che con uno snapshot
-///     statico poteva lasciare una copia locale orfana.
+/// AGGIORNATO (audit sincronizzazione cross-device) — causa radice
+/// dei sintomi "obiettivi assenti" e "2 sessioni invece di 11":
+/// PRIMA, _importGoals() e _importSessions() avvolgevano l'INTERO
+/// ciclo `for` in un unico try/catch. Un errore sull'elaborazione di
+/// UN SOLO elemento (es. fetchGoalCompletions/fetchSessionSets
+/// fallita per timeout durante cold start di Render) interrompeva
+/// l'elaborazione di TUTTI gli elementi successivi nel ciclo — quelli
+/// già processati con successo restavano importati (da qui "2 su
+/// 11": le prime 2 sessioni riuscite, la terza fallita, le restanti 9
+/// mai nemmeno tentate).
+///
+/// ORA: il try/catch è per SINGOLO elemento (stesso pattern già
+/// corretto usato in WorkoutSyncRepository per gli esercizi). Un
+/// fallimento isolato viene registrato in `errors` ma non blocca più
+/// gli elementi successivi. Applicato anche a _importWorkouts() per
+/// coerenza, anche se lì l'impatto osservato era minore.
 class BackendImportRepository {
   static const _exerciseDomain = 'exercise';
   static const _trainingModeDomain = 'trainingMode';
@@ -142,8 +144,7 @@ class BackendImportRepository {
     );
   }
 
-
-  // ── Esercizi ─────────────────────────────────────────────
+  // ── Esercizi — invariato ──────────────────────────────────
   Future<_RemoteToLocalMap> _importExercises(List<String> errors) async {
     final map = _RemoteToLocalMap();
     try {
@@ -179,7 +180,7 @@ class BackendImportRepository {
     return map;
   }
 
-  // ── Modalità di allenamento ──────────────────────────────
+  // ── Modalità di allenamento — invariato ──────────────────
   Future<_RemoteToLocalMap> _importTrainingModes(List<String> errors) async {
     final map = _RemoteToLocalMap();
     try {
@@ -225,6 +226,7 @@ class BackendImportRepository {
   }
 
   // ── Schede + circuiti + esercizi ─────────────────────────
+  // FIX — try/catch per SINGOLA scheda (vedi commento di classe).
   Future<_WorkoutImportResult> _importWorkouts(
     List<String> errors,
     _RemoteToLocalMap exerciseMap,
@@ -234,39 +236,32 @@ class BackendImportRepository {
     int exercisesLinked = 0;
     int circuitsCreated = 0;
 
+    List<dynamic> remoteWorkouts;
     try {
-      final remoteWorkouts = await _api.fetchWorkouts();
+      remoteWorkouts = await _api.fetchWorkouts();
+    } catch (e) {
+      errors.add('Schede: $e');
+      return _WorkoutImportResult(
+          workoutsCreated: 0, exercisesLinked: 0, circuitsCreated: 0);
+    }
 
-      // FIX (audit eliminazione schede) — dedup primario per ID
-      // REMOTO (affidabile), non più per nome. Costruiamo la mappa
-      // inversa remoteId → localKey dalle mappature già persistite.
-      final existingMappings = await _mapping.getAllMappings(_workoutDomain);
-      final localKeyByRemoteId = <String, int>{
-        for (final entry in existingMappings.entries)
-          entry.value: int.parse(entry.key),
-      };
+    final existingMappings = await _mapping.getAllMappings(_workoutDomain);
+    final localKeyByRemoteId = <String, int>{
+      for (final entry in existingMappings.entries)
+        entry.value: int.parse(entry.key),
+    };
+    final localWorkoutNames = HiveDatabase.instance
+        .getWorkouts()
+        .map((w) => w.name.trim().toLowerCase())
+        .toSet();
 
-      final localWorkoutNames = HiveDatabase.instance
-          .getWorkouts()
-          .map((w) => w.name.trim().toLowerCase())
-          .toSet();
-
-      for (final remoteWorkout in remoteWorkouts) {
-        // FIX — lettura LIVE dei tombstone ad ogni iterazione, non
-        // più uno snapshot preso una sola volta prima del ciclo
-        // (che può durare secondi per via delle chiamate di rete
-        // successive su circuiti/esercizi di ogni scheda).
+    for (final remoteWorkout in remoteWorkouts) {
+      try {
         final tombstonedNow = await _mapping.getTombstones(_workoutDomain);
         if (tombstonedNow.contains(remoteWorkout.id)) continue;
 
-        // Già importata in precedenza per id remoto: salta,
-        // indipendentemente dal nome attuale.
         if (localKeyByRemoteId.containsKey(remoteWorkout.id)) continue;
 
-        // Fallback SOLO per schede mai mappate prima d'ora (prima
-        // sincronizzazione cross-device di una scheda creata prima
-        // dell'introduzione del mapping, o creata offline su un
-        // altro dispositivo non ancora visto qui).
         if (localWorkoutNames.contains(remoteWorkout.name.trim().toLowerCase())) {
           continue;
         }
@@ -282,12 +277,6 @@ class BackendImportRepository {
         localKeyByRemoteId[remoteWorkout.id] = newWorkoutKey;
         localWorkoutNames.add(remoteWorkout.name.trim().toLowerCase());
 
-        // FIX — riverifica DOPO la creazione: se nel frattempo (tra
-        // l'inizio di questa iterazione e questo punto) la scheda è
-        // stata eliminata/tombstoned, annulla immediatamente ciò che
-        // è appena stato creato. Chiude la finestra residua della
-        // race "DELETE parte → import in corso → import crea →
-        // DELETE termina".
         final tombstonedAfter = await _mapping.getTombstones(_workoutDomain);
         if (tombstonedAfter.contains(remoteWorkout.id)) {
           await HiveDatabase.instance.deleteWorkout(newWorkoutKey);
@@ -336,9 +325,9 @@ class BackendImportRepository {
           ));
           exercisesLinked++;
         }
+      } catch (e) {
+        errors.add('Scheda "${remoteWorkout.name}": $e');
       }
-    } catch (e) {
-      errors.add('Schede: $e');
     }
 
     return _WorkoutImportResult(
@@ -348,7 +337,7 @@ class BackendImportRepository {
     );
   }
 
-  // ── Riconciliazione cancellazioni schede (da altro dispositivo) ──
+  // ── Riconciliazione cancellazioni schede — invariato ─────
   Future<int> _pruneDeletedWorkouts(List<String> errors) async {
     int pruned = 0;
     try {
@@ -375,6 +364,7 @@ class BackendImportRepository {
   }
 
   // ── Storico + serie ───────────────────────────────────────
+  // FIX — try/catch per SINGOLA sessione (vedi commento di classe).
   Future<_SessionImportResult> _importSessions(
     List<String> errors,
     _RemoteToLocalMap exerciseMap,
@@ -382,17 +372,25 @@ class BackendImportRepository {
   ) async {
     int sessionsCreated = 0;
     int setsCreated = 0;
+
+    List<dynamic> remoteSessions;
     try {
-      final remoteSessions = await _api.fetchSessions();
-      final localSignatures = HiveDatabase.instance
-          .getSessions()
-          .map((s) => '${s.workoutName.trim().toLowerCase()}|${s.date}')
-          .toSet();
+      remoteSessions = await _api.fetchSessions();
+    } catch (e) {
+      errors.add('Storico: $e');
+      return _SessionImportResult(sessionsCreated: 0, setsCreated: 0);
+    }
 
-      final uid = HiveDatabase.instance.currentUserId;
-      final sessionBox = Hive.box<HiveSession>('${uid}_sessions');
+    final localSignatures = HiveDatabase.instance
+        .getSessions()
+        .map((s) => '${s.workoutName.trim().toLowerCase()}|${s.date}')
+        .toSet();
 
-      for (final remoteSession in remoteSessions) {
+    final uid = HiveDatabase.instance.currentUserId;
+    final sessionBox = Hive.box<HiveSession>('${uid}_sessions');
+
+    for (final remoteSession in remoteSessions) {
+      try {
         final signature =
             '${remoteSession.workoutName.trim().toLowerCase()}|${remoteSession.date}';
         if (localSignatures.contains(signature)) continue;
@@ -425,9 +423,10 @@ class BackendImportRepository {
           ));
           setsCreated++;
         }
+      } catch (e) {
+        errors.add('Sessione "${remoteSession.workoutName}" '
+            '(${remoteSession.date}): $e');
       }
-    } catch (e) {
-      errors.add('Storico: $e');
     }
     return _SessionImportResult(sessionsCreated: sessionsCreated, setsCreated: setsCreated);
   }
@@ -444,19 +443,27 @@ class BackendImportRepository {
   }
 
   // ── Obiettivi + completamenti ────────────────────────────
+  // FIX — try/catch per SINGOLO obiettivo (vedi commento di classe).
   Future<_GoalImportResult> _importGoals(List<String> errors) async {
     int goalsCreated = 0;
     int completionsCreated = 0;
 
+    List<dynamic> remoteGoals;
     try {
-      final remoteGoals = await _api.fetchGoals();
-      final localGoals = GoalDatabase.instance.getGoals();
-      final localBySignature = {
-        for (final g in localGoals)
-          '${g.title.trim().toLowerCase()}|${g.category.trim().toLowerCase()}': g.key as int,
-      };
+      remoteGoals = await _api.fetchGoals();
+    } catch (e) {
+      errors.add('Obiettivi: $e');
+      return _GoalImportResult(goalsCreated: 0, completionsCreated: 0);
+    }
 
-      for (final remoteGoal in remoteGoals) {
+    final localGoals = GoalDatabase.instance.getGoals();
+    final localBySignature = {
+      for (final g in localGoals)
+        '${g.title.trim().toLowerCase()}|${g.category.trim().toLowerCase()}': g.key as int,
+    };
+
+    for (final remoteGoal in remoteGoals) {
+      try {
         final signature =
             '${remoteGoal.title.trim().toLowerCase()}|${remoteGoal.category.trim().toLowerCase()}';
         int localGoalKey;
@@ -490,9 +497,9 @@ class BackendImportRepository {
           await GoalDatabase.instance.setCompletion(localGoalKey, c.date, c.completed);
           completionsCreated++;
         }
+      } catch (e) {
+        errors.add('Obiettivo "${remoteGoal.title}": $e');
       }
-    } catch (e) {
-      errors.add('Obiettivi: $e');
     }
 
     return _GoalImportResult(

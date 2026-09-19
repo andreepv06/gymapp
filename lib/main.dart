@@ -433,14 +433,25 @@ class _AppEntryState extends State<AppEntry> {
       // Fire-and-forget: non blocca mai l'ingresso nell'app se il
       // backend è irraggiungibile (offline-first preservato).
       final backendAuth = context.read<BackendAuthProvider>();
-      await backendAuth.restoreSession();
-      if (!backendAuth.isAuthenticated) {
-        final account = auth.currentAccount;
-        if (account != null) {
-          unawaited(CloudAuthBridge.instance
-              .syncIdentity(account.identifier, account.password));
+      // FIX (avvio lento) — PRIMA questa chiamata era AWAITED,
+      // bloccando la comparsa della UI fino al completamento di
+      // restoreSession() (chiamata di rete, fino a 60s in caso di
+      // cold start di Render) — in diretta contraddizione con
+      // l'architettura offline-first dell'app: prima di questa
+      // modifica precedente, l'avvio non aspettava mai il backend.
+      // Ora è fire-and-forget: l'utente vede subito Home/Allenamenti
+      // con i dati locali, mentre la sessione backend (e l'eventuale
+      // retry del provisioning per utenti V1 non ancora sincronizzati)
+      // si risolve in background, senza bloccare nulla.
+      unawaited(backendAuth.restoreSession().then((_) {
+        if (!backendAuth.isAuthenticated) {
+          final account = auth.currentAccount;
+          if (account != null) {
+            unawaited(CloudAuthBridge.instance
+                .syncIdentity(account.identifier, account.password));
+          }
         }
-      }
+      }));
     }
     // NUOVO — registra una sola volta il callback che, ad ogni ciclo
     // di SyncEngine completato con successo, ricarica i Provider dai

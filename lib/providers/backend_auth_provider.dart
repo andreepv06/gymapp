@@ -8,23 +8,6 @@ import '../services/api/token_storage.dart';
 import '../services/sync/sync_engine.dart';
 import '../services/sync/cloud_auth_bridge.dart';
 enum BackendAuthStatus { unknown, authenticated, unauthenticated }
-/// Provider dedicato alla sessione verso il backend NestJS.
-/// Separato da AuthProvider (autenticazione locale V1).
-///
-/// Nel costruttore si registra su CloudAuthBridge come unico punto
-/// che collega il login V1 (che l'utente vede e usa) al backend
-/// cloud (che l'utente non vede mai direttamente). Due ruoli:
-///  1. syncFromV1Login: dopo ogni login/registrazione V1 riuscito su
-///     QUESTO dispositivo, allinea la sessione backend in background
-///     (login, o registrazione se è la prima volta). Fire-and-forget.
-///  2. verifyRemoteCredentials: quando AuthProvider trova un
-///     identifier sconosciuto localmente (dispositivo nuovo), prova
-///     login diretto sul backend con quelle credenziali.
-///
-/// Si registra anche su ApiClient.instance.onSessionExpired: quando
-/// una richiesta autenticata riceve 401 e il refresh token non
-/// riesce a rinnovare la sessione, ApiClient non ha modo di sapere
-/// che deve fermare SyncEngine — è compito di questo provider.
 class BackendAuthProvider extends ChangeNotifier {
   final AuthApiService _authApi;
   final BackendImportRepository _importRepo;
@@ -36,6 +19,9 @@ class BackendAuthProvider extends ChangeNotifier {
     CloudAuthBridge.instance.register(syncFromV1Login);
     CloudAuthBridge.instance.registerVerifier(verifyRemoteCredentials);
     CloudAuthBridge.instance.registerLogoutHandler(logout);
+    // NUOVO (fix audit sincronizzazione) — canale AuthProvider →
+    // questo provider per la propagazione delle modifiche al profilo.
+    CloudAuthBridge.instance.registerProfileUpdateHandler(_handleProfileUpdate);
     ApiClient.instance.onSessionExpired = _handleSessionExpired;
   }
   BackendAuthStatus _status = BackendAuthStatus.unknown;
@@ -47,14 +33,6 @@ class BackendAuthProvider extends ChangeNotifier {
   ImportSummary? lastAutoImportSummary;
   String? lastAutoImportError;
 
-  // NUOVO (fix provisioning) — cache della Future di restoreSession().
-  // La chiamata originale avviene una sola volta all'avvio da
-  // main.dart (create: (_) => BackendAuthProvider()..restoreSession(),
-  // lazy: false). Con questa cache, AppEntry._checkAuth() può
-  // RIATTENDERE la stessa Future una seconda volta — senza scatenare
-  // una seconda chiamata di rete — per sapere con CERTEZZA quando il
-  // controllo della sessione backend è concluso, prima di decidere se
-  // ritentare il provisioning per un utente V1 non ancora sincronizzato.
   Future<void>? _restoreSessionFuture;
 
   BackendAuthStatus get status => _status;
@@ -64,9 +42,6 @@ class BackendAuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _status == BackendAuthStatus.authenticated;
   SyncEngine get syncEngine => SyncEngine.instance;
 
-  // MODIFICATO (fix provisioning) — ora restituisce/cachea la
-  // Future interna invece di ricrearla ad ogni chiamata. Il corpo
-  // originale del metodo è invariato, spostato in _doRestoreSession().
   Future<void> restoreSession() {
     return _restoreSessionFuture ??= _doRestoreSession();
   }
@@ -84,6 +59,12 @@ class BackendAuthProvider extends ChangeNotifier {
     try {
       _currentUser = await _authApi.fetchCurrentUser();
       _status = BackendAuthStatus.authenticated;
+      // NUOVO (fix audit sincronizzazione) — applica subito il
+      // profilo scaricato all'account locale, prima ancora che parta
+      // il resto dell'import. Fire-and-forget: non deve mai bloccare
+      // l'avvio dell'app (coerente col fix di lentezza già applicato
+      // a questo stesso flusso in un turno precedente).
+      unawaited(CloudAuthBridge.instance.notifyProfileDownloaded(_currentUser!));
     } catch (_) {
       _status = BackendAuthStatus.unauthenticated;
       _currentUser = null;
@@ -96,17 +77,6 @@ class BackendAuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Chiamato da CloudAuthBridge subito dopo ogni login/registrazione
-  /// V1 riuscito su questo dispositivo (identità già nota localmente),
-  /// E ORA ANCHE — grazie alla modifica in main.dart — ad ogni
-  /// riapertura dell'app quando l'utente risulta già loggato in V1 ma
-  /// il backend NON ha una sessione valida salvata (fix del problema
-  /// "utente V1 mai comparso nel backend": prima di questa modifica il
-  /// meccanismo scattava una volta sola, senza retry).
-  /// Effettua login sul backend con le stesse credenziali; se
-  /// l'account non esiste ancora lato backend, lo registra
-  /// automaticamente. Fire-and-forget rispetto al chiamante: un
-  /// fallimento qui non blocca né invalida nulla lato V1.
   Future<void> syncFromV1Login(String identifier, String password) async {
     try {
       await _authApi.login(identifier, password);
@@ -123,18 +93,15 @@ class BackendAuthProvider extends ChangeNotifier {
       _status = BackendAuthStatus.authenticated;
       _autoImportDone = false;
       notifyListeners();
+      // NUOVO — vedi commento in _doRestoreSession.
+      unawaited(CloudAuthBridge.instance.notifyProfileDownloaded(_currentUser!));
       unawaited(_triggerAutoImport());
       SyncEngine.instance.start();
     } catch (e) {
       debugPrint('[BackendAuthProvider] fetchCurrentUser dopo syncFromV1Login fallito: $e');
     }
   }
-  /// Chiamato da AuthProvider.login() quando l'identifier NON è tra
-  /// gli account locali di questo dispositivo (primo accesso su un
-  /// dispositivo nuovo). Prova login diretto sul backend con le
-  /// credenziali fornite. Se valide: autentica, ATTENDE il download
-  /// completo dei dati esistenti prima di ritornare true. Ritorna
-  /// false per qualunque fallimento, senza distinguerli.
+
   Future<bool> verifyRemoteCredentials(String identifier, String password) async {
     try {
       await _authApi.login(identifier, password);
@@ -146,6 +113,12 @@ class BackendAuthProvider extends ChangeNotifier {
       _status = BackendAuthStatus.authenticated;
       _autoImportDone = false;
       notifyListeners();
+      // NUOVO — questo è IL caso critico per l'audit: primo login
+      // su un secondo dispositivo. Il profilo scaricato qui viene
+      // applicato PRIMA di await _triggerAutoImport(), quindi è già
+      // presente in locale nel momento in cui AuthProvider considera
+      // il login riuscito e monta la UI.
+      await CloudAuthBridge.instance.notifyProfileDownloaded(_currentUser!);
       await _triggerAutoImport();
       SyncEngine.instance.start();
       return true;
@@ -168,6 +141,8 @@ class BackendAuthProvider extends ChangeNotifier {
       _status = BackendAuthStatus.authenticated;
       _loading = false;
       notifyListeners();
+      // NUOVO — vedi commento in _doRestoreSession.
+      unawaited(CloudAuthBridge.instance.notifyProfileDownloaded(_currentUser!));
       unawaited(_triggerAutoImport());
       SyncEngine.instance.start();
       return true;
@@ -211,10 +186,34 @@ class BackendAuthProvider extends ChangeNotifier {
     _loading = false;
     notifyListeners();
   }
-  /// OPZIONE B. Chiamato da ApiClient quando una richiesta autenticata
-  /// riceve 401 e il tentativo di refresh del token NON riesce a
-  /// rinnovare la sessione. Invalida SOLO lo stato di autenticazione
-  /// backend, mai la sessione locale V1.
+
+  // NUOVO (fix audit sincronizzazione) — riceve dal canale
+  // AuthProvider → questo provider le modifiche al profilo fatte
+  // localmente, e le propaga al backend tramite AuthApiService.
+  // Guardia: se non c'è una sessione backend attiva, non fa nulla
+  // (coerente con l'offline-first — il profilo resta comunque
+  // salvato localmente da AuthProvider, la propagazione avverrà al
+  // prossimo login/sync). Fallimento silenzioso: un errore di rete
+  // qui non deve mai bloccare l'utente, stesso principio già usato
+  // per syncFromV1Login.
+  Future<void> _handleProfileUpdate(Map<String, String?> fields) async {
+    if (_status != BackendAuthStatus.authenticated) return;
+    try {
+      await _authApi.updateProfile(
+        displayName: fields['displayName'],
+        firstName: fields['firstName'],
+        lastName: fields['lastName'],
+        birthDate: fields['birthDate'],
+        birthPlace: fields['birthPlace'],
+        phone: fields['phone'],
+        bio: fields['bio'],
+        avatarUrl: fields['avatarBase64'],
+      );
+    } catch (e) {
+      debugPrint('[BackendAuthProvider] _handleProfileUpdate fallito: $e');
+    }
+  }
+
   Future<void> _handleSessionExpired() async {
     if (_status == BackendAuthStatus.unauthenticated) return;
     debugPrint(

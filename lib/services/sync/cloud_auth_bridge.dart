@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../api/dto/auth_dto.dart';
 
 class CloudAuthBridge {
   CloudAuthBridge._internal();
@@ -7,6 +8,9 @@ class CloudAuthBridge {
   Future<void> Function(String identifier, String password)? _handler;
   Future<bool> Function(String identifier, String password)? _verifyHandler;
   Future<void> Function()? _logoutHandler;
+  // NUOVO — vedi registerProfileUpdateHandler/registerProfileDownloadedHandler
+  Future<void> Function(Map<String, String?> fields)? _profileUpdateHandler;
+  Future<void> Function(BackendUserProfile profile)? _profileDownloadedHandler;
 
   void register(Future<void> Function(String identifier, String password) handler) {
     _handler = handler;
@@ -26,10 +30,8 @@ class CloudAuthBridge {
 
   void unregisterVerifier() {
     _verifyHandler = null;
-    debugPrint('[CLOUD_BRIDGE] verifier deregistrato');
   }
 
-  // NUOVO
   void registerLogoutHandler(Future<void> Function() handler) {
     _logoutHandler = handler;
     debugPrint('[CLOUD_BRIDGE] logout handler registrato');
@@ -37,6 +39,65 @@ class CloudAuthBridge {
 
   void unregisterLogoutHandler() {
     _logoutHandler = null;
+  }
+
+  // NUOVO (fix audit sincronizzazione) — canale AuthProvider →
+  // BackendAuthProvider: "il profilo locale è appena cambiato,
+  // propagalo al backend". Stesso pattern register/notify già usato
+  // per login/logout, applicato al dominio profilo. `fields` contiene
+  // solo le chiavi effettivamente modificate in quella chiamata
+  // (update parziale).
+  void registerProfileUpdateHandler(
+      Future<void> Function(Map<String, String?> fields) handler) {
+    _profileUpdateHandler = handler;
+    debugPrint('[CLOUD_BRIDGE] profile update handler registrato');
+  }
+
+  void unregisterProfileUpdateHandler() {
+    _profileUpdateHandler = null;
+  }
+
+  Future<void> notifyProfileUpdated(Map<String, String?> fields) async {
+    final handler = _profileUpdateHandler;
+    if (handler == null) {
+      debugPrint('[CLOUD_BRIDGE] notifyProfileUpdated SALTATO — nessun handler registrato');
+      return;
+    }
+    try {
+      await handler(fields);
+      debugPrint('[CLOUD_BRIDGE] notifyProfileUpdated completato');
+    } catch (e) {
+      debugPrint('[CLOUD_BRIDGE] notifyProfileUpdated ERRORE: $e');
+    }
+  }
+
+  // NUOVO (fix audit sincronizzazione) — canale inverso:
+  // BackendAuthProvider → AuthProvider: "ho appena scaricato il
+  // profilo dal backend (login, restore, o import iniziale su un
+  // nuovo dispositivo), applicalo all'account locale corrente".
+  // Prima d'ora questo canale non esisteva affatto: anche un profilo
+  // correttamente presente sul backend non veniva mai copiato
+  // nell'account locale, quindi la foto/i dati profilo non
+  // comparivano mai su un secondo dispositivo.
+  void registerProfileDownloadedHandler(
+      Future<void> Function(BackendUserProfile profile) handler) {
+    _profileDownloadedHandler = handler;
+    debugPrint('[CLOUD_BRIDGE] profile downloaded handler registrato');
+  }
+
+  void unregisterProfileDownloadedHandler() {
+    _profileDownloadedHandler = null;
+  }
+
+  Future<void> notifyProfileDownloaded(BackendUserProfile profile) async {
+    final handler = _profileDownloadedHandler;
+    if (handler == null) return;
+    try {
+      await handler(profile);
+      debugPrint('[CLOUD_BRIDGE] notifyProfileDownloaded completato');
+    } catch (e) {
+      debugPrint('[CLOUD_BRIDGE] notifyProfileDownloaded ERRORE: $e');
+    }
   }
 
   Future<void> syncIdentity(String identifier, String password) async {
@@ -70,12 +131,6 @@ class CloudAuthBridge {
     }
   }
 
-  // NUOVO — chiamato da AuthProvider.logout(): chiude anche la
-  // sessione backend (token + SyncEngine). Senza questo, un logout
-  // V1 lasciava il token backend ancora valido in storage, riusato
-  // per errore al prossimo avvio (restoreSession) con un'identità
-  // non corrispondente al nuovo account V1 — causa della
-  // cross-contaminazione osservata sul dispositivo di test.
   Future<void> notifyLogout() async {
     final handler = _logoutHandler;
     if (handler == null) return;

@@ -66,5 +66,46 @@ class AuthApiService {
     return BackendUserProfile.fromJson(json);
   }
 
+  // NUOVO (fix audit sincronizzazione) — mancava completamente:
+  // AuthProvider.updateProfile() scriveva SOLO in locale, nessuna
+  // chiamata di rete esisteva in nessun punto del codice. Backend
+  // endpoint già esistente e funzionante (PATCH /users/me →
+  // UsersService.updateProfile), semplicemente mai chiamato dal
+  // frontend. Ogni parametro è opzionale: si invia solo ciò che è
+  // effettivamente cambiato (update parziale, coerente con la
+  // semantica di UpdateProfileDto lato backend).
+  //
+  // NOTA — avatarUrl: il backend ha solo un campo stringa libera
+  // per l'avatar (nessuna infrastruttura di file storage nello
+  // schema attuale). In assenza di modifiche allo schema Prisma
+  // (fuori scope per questo fix), vi si scrive direttamente il
+  // base64 dell'immagine — funzionale per la sincronizzazione
+  // cross-device, ma non ottimale in termini di dimensione payload
+  // per immagini grandi. Limite noto e accettato per restare nei
+  // vincoli dell'audit ("nessuna modifica allo schema").
+  Future<void> updateProfile({
+    String? displayName,
+    String? firstName,
+    String? lastName,
+    String? birthDate,
+    String? birthPlace,
+    String? phone,
+    String? bio,
+    String? avatarUrl,
+  }) async {
+    final body = <String, dynamic>{
+      if (displayName != null) 'displayName': displayName,
+      if (firstName != null) 'firstName': firstName,
+      if (lastName != null) 'lastName': lastName,
+      if (birthDate != null) 'birthDate': birthDate,
+      if (birthPlace != null) 'birthPlace': birthPlace,
+      if (phone != null) 'phone': phone,
+      if (bio != null) 'bio': bio,
+      if (avatarUrl != null) 'avatarUrl': avatarUrl,
+    };
+    if (body.isEmpty) return;
+    await _client.patch('/users/me', body: body);
+  }
+
   Future<bool> hasStoredSession() => _tokens.hasTokens();
 }
