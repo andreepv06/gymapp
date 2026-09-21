@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../db/training_mode_database.dart';
 import '../services/api/api_exception.dart';
 import '../services/api/dto/training_mode_dto.dart';
@@ -16,16 +17,8 @@ class TrainingModeSyncResult {
   bool get hasFailures => failed > 0;
 }
 
-/// Sincronizza le modalità di allenamento locali (Hive) verso il
-/// backend, idempotente su DUE livelli:
-///  1. mapping locale↔remoto persistito (rapido, funziona sempre
-///     all'interno dello stesso account V1);
-///  2. fallback per nome+categoria contro l'elenco remoto già
-///     esistente (copre il caso in cui l'utente cambi account V1
-///     locale mantenendo lo stesso account backend — le chiavi Hive
-///     locali NON sono uniche tra account V1 diversi, quindi il solo
-///     mapping non basta in quel caso specifico).
-/// Stesso principio già usato con successo in ExerciseSyncRepository.
+/// AGGIORNATO (fix root cause blocco sync) — cattura generica per
+/// singola modalità: stesso principio delle altre repository.
 class TrainingModeSyncRepository {
   static const domain = 'trainingMode';
 
@@ -57,7 +50,6 @@ class TrainingModeSyncRepository {
     for (final mode in localModes) {
       final localKey = mode.key;
 
-      // Livello 1: mapping persistito
       final mapped = await _mapping.getRemoteId(domain, localKey);
       if (mapped != null) {
         alreadySynced++;
@@ -65,7 +57,6 @@ class TrainingModeSyncRepository {
         continue;
       }
 
-      // Livello 2: fallback per nome+categoria contro il remoto
       final signature = _signature(mode.name, mode.category);
       final existingRemoteId = remoteBySignature[signature];
       if (existingRemoteId != null) {
@@ -96,14 +87,20 @@ class TrainingModeSyncRepository {
         if (mode.isDefault) defaultRemoteId = remote.id;
       } on ApiException {
         failed++;
+      } catch (e) {
+        // NUOVO — cattura generica: una modalità problematica non
+        // blocca le successive.
+        debugPrint('[TrainingModeSyncRepository] Modalità "${mode.name}" '
+            'fallita con errore non-API: $e');
+        failed++;
       }
     }
 
     if (defaultRemoteId != null) {
       try {
         await _api.setDefault(defaultRemoteId);
-      } on ApiException {
-        // Non bloccante.
+      } catch (_) {
+        // Non bloccante, nessun impatto sul resto del ciclo.
       }
     }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../db/goal_database.dart';
 import '../services/api/api_exception.dart';
 import '../services/api/goals_api_service.dart';
@@ -21,13 +22,15 @@ class GoalSyncResult {
   bool get hasFailures => goalsFailed > 0 || completionsFailed > 0;
 }
 
-/// Sincronizza obiettivi e completamenti locali (Hive) verso il
-/// backend, idempotente su due livelli come per esercizi/modalità:
-///  1. mapping locale↔remoto persistito;
-///  2. fallback per titolo+categoria contro l'elenco remoto, per
-///     coprire il cambio di account V1 locale mantenendo lo stesso
-///     account backend (le chiavi Hive non sono uniche tra account
-///     V1 diversi — causa già diagnosticata sulle modalità).
+/// AGGIORNATO (fix root cause blocco sync — questo è il dominio
+/// direttamente osservato nel bug "nuovo obiettivo creato sul
+/// telefono non arriva mai al computer"): cattura generica per
+/// singolo obiettivo e per singolo completamento, stesso principio
+/// delle altre repository. PRIMA, un errore non-ApiException su un
+/// singolo obiettivo (o anche su un dominio precedente nella catena
+/// di SyncEngine._uploadAll, ora anch'essa corretta) poteva
+/// impedire per sempre, ad ogni ciclo, che questo repository venisse
+/// anche solo raggiunto.
 class GoalSyncRepository {
   static const domain = 'goal';
 
@@ -91,6 +94,14 @@ class GoalSyncRepository {
           } on ApiException {
             goalsFailed++;
             continue;
+          } catch (e) {
+            // NUOVO — cattura generica: questo era il punto esatto
+            // dove un obiettivo problematico poteva bloccare per
+            // sempre tutti gli obiettivi successivi nel ciclo.
+            debugPrint('[GoalSyncRepository] Obiettivo "${goal.title}" '
+                'fallito con errore non-API: $e');
+            goalsFailed++;
+            continue;
           }
         }
       }
@@ -101,6 +112,10 @@ class GoalSyncRepository {
           await _api.setCompletion(remoteGoalId, completion.date, completion.completed);
           completionsCreated++;
         } on ApiException {
+          completionsFailed++;
+        } catch (e) {
+          debugPrint('[GoalSyncRepository] Completamento fallito con '
+              'errore non-API: $e');
           completionsFailed++;
         }
       }

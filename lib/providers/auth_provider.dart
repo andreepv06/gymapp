@@ -96,8 +96,26 @@ class AuthProvider extends ChangeNotifier {
   // collegamento non esisteva: un profilo presente sul backend
   // non veniva mai copiato in locale.
   AuthProvider() {
-    CloudAuthBridge.instance.registerProfileDownloadedHandler(
-        (profile) => _applyRemoteProfile(profile));
+    CloudAuthBridge.instance.registerProfileDownloadedHandler(_applyRemoteProfile);
+    // NUOVO (fix backfill profilo) — permette a BackendAuthProvider
+    // di leggere lo snapshot del profilo locale corrente, per
+    // capire se contiene dati (es. un avatar) che il backend non ha
+    // ancora ricevuto e propagarli automaticamente ad ogni
+    // connessione riuscita, senza richiedere che l'utente riapra il
+    // form di modifica profilo.
+    CloudAuthBridge.instance.registerLocalProfileProvider(_getLocalProfileSnapshot);
+  }
+
+  Future<Map<String, String?>> _getLocalProfileSnapshot() async {
+    final account = currentAccount;
+    if (account == null) return {};
+    return {
+      'displayName': account.displayName,
+      'firstName': account.firstName,
+      'lastName': account.lastName,
+      'bio': account.bio,
+      'avatarBase64': account.avatarBase64,
+    };
   }
 
   bool get isLoggedIn => _isLoggedIn;
@@ -372,7 +390,7 @@ class AuthProvider extends ChangeNotifier {
   // su un nuovo dispositivo). Scrive SOLO localmente (_saveAccounts):
   // non richiama mai notifyProfileUpdated, altrimenti si creerebbe un
   // loop upload↔download. Solo i campi remoti effettivamente
-  // valorizzati sovrascrivono il dato locale, così un campo assente
+  // valorizzati sovrascrivon il dato locale, così un campo assente
   // sul backend non cancella un valore locale non ancora propagato.
   // FIX (bug reale trovato) — PRIMA questo metodo si basava su
   // _currentIdentifier per sapere "a chi" applicare il profilo

@@ -100,6 +100,34 @@ class CloudAuthBridge {
     }
   }
 
+  // NUOVO (fix backfill profilo) — canale AuthProvider → chiunque
+  // debba conoscere lo stato attuale del profilo locale, usato da
+  // BackendAuthProvider per il backfill automatico: se il backend
+  // non ha ancora un campo che il dispositivo locale ha invece già
+  // popolato (es. un avatar impostato prima che l'upload esistesse),
+  // questo canale permette di recuperarlo e inviarlo.
+  Future<Map<String, String?>> Function()? _localProfileProvider;
+
+  void registerLocalProfileProvider(
+      Future<Map<String, String?>> Function() provider) {
+    _localProfileProvider = provider;
+  }
+
+  void unregisterLocalProfileProvider() {
+    _localProfileProvider = null;
+  }
+
+  Future<Map<String, String?>> getLocalProfile() async {
+    final provider = _localProfileProvider;
+    if (provider == null) return {};
+    try {
+      return await provider();
+    } catch (e) {
+      debugPrint('[CLOUD_BRIDGE] getLocalProfile ERRORE: $e');
+      return {};
+    }
+  }
+
   Future<void> syncIdentity(String identifier, String password) async {
     final handler = _handler;
     if (handler == null) {
@@ -111,7 +139,7 @@ class CloudAuthBridge {
       await handler(identifier, password);
       debugPrint('[CLOUD_BRIDGE] syncIdentity($identifier) completato');
     } catch (e) {
-      debugPrint('[CLOUD_BRIDGE] syncIdentity($identifier) ERRORE: $e');
+      debugPrint('[CLOUD_BRIDGE] syncIdentity($identifier) ERRORE:$e');
     }
   }
 
@@ -123,10 +151,10 @@ class CloudAuthBridge {
     }
     try {
       final ok = await handler(identifier, password);
-      debugPrint('[CLOUD_BRIDGE] verifyRemoteAccount($identifier) = $ok');
+      debugPrint('[CLOUD_BRIDGE] verifyRemoteAccount($identifier) =$ok');
       return ok;
     } catch (e) {
-      debugPrint('[CLOUD_BRIDGE] verifyRemoteAccount($identifier) ERRORE: $e');
+      debugPrint('[CLOUD_BRIDGE] verifyRemoteAccount($identifier) ERRORE:$e');
       return false;
     }
   }

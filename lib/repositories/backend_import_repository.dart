@@ -146,17 +146,43 @@ class BackendImportRepository {
   }
 
   // ── Esercizi — invariato ──────────────────────────────────
+  // ── Esercizi ─────────────────────────────────────────────
+  // RISCRITTO (fix root cause) — PRIMA questo metodo aveva un unico
+  // try/catch attorno all'INTERO ciclo, E lo stesso bug del cast
+  // nullo già trovato e corretto nelle sessioni: se un esercizio
+  // remoto aveva nome vuoto, la guardia di integrità in
+  // HiveDatabase.addExercise() bloccava la scrittura silenziosamente
+  // (nessuna eccezione), ma la riga successiva `created.key as int`
+  // lanciava comunque un TypeError su null — interrompendo l'intero
+  // ciclo, quindi TUTTI gli esercizi successivi non venivano più
+  // importati. Dato che gli esercizi sono la base per collegare
+  // schede e sessioni, questo spiegava direttamente "carica solo
+  // alcuni esercizi" e i cicli/esercizi mancanti nelle schede.
   Future<_RemoteToLocalMap> _importExercises(List<String> errors) async {
     final map = _RemoteToLocalMap();
+    List<dynamic> remoteExercises;
     try {
-      final remoteExercises = await _api.fetchExercises();
-      final localExercises = HiveDatabase.instance.getExercises();
-      final localByName = {
-        for (final e in localExercises) e.name.trim().toLowerCase(): e.key as int,
-      };
+      remoteExercises = await _api.fetchExercises();
+    } catch (e, st) {
+      debugPrint('[BackendImportRepository] fetchExercises() FALLITA: $e\n$st');
+      errors.add('Esercizi: $e');
+      return map;
+    }
 
-      for (final remote in remoteExercises) {
-        final normalized = remote.name.trim().toLowerCase();
+    final localExercises = HiveDatabase.instance.getExercises();
+    final localByName = {
+      for (final e in localExercises) e.name.trim().toLowerCase(): e.key as int,
+    };
+
+    for (final remote in remoteExercises) {
+      try {
+        final trimmedName = remote.name.trim();
+        if (trimmedName.isEmpty) {
+          debugPrint('[BackendImportRepository] Esercizio remoto senza '
+              'nome saltato (id=${remote.id}).');
+          continue;
+        }
+        final normalized = trimmedName.toLowerCase();
         final existingLocalKey = localByName[normalized];
         if (existingLocalKey != null) {
           map.set(remote.id, existingLocalKey);
@@ -164,37 +190,55 @@ class BackendImportRepository {
           continue;
         }
         final created = HiveExercise(
-          name: remote.name,
+          name: trimmedName,
           muscleGroup: remote.muscleGroup,
           notes: remote.notes,
           isCustom: true,
         );
         await HiveDatabase.instance.addExercise(created);
+        if (created.key == null) continue; // difesa aggiuntiva
         final newLocalKey = created.key as int;
         localByName[normalized] = newLocalKey;
         map.set(remote.id, newLocalKey, isNew: true);
         await _mapping.setRemoteId(_exerciseDomain, newLocalKey, remote.id);
+      } catch (e, st) {
+        debugPrint('[BackendImportRepository] Esercizio "${remote.name}" '
+            'FALLITO: $e\n$st');
+        errors.add('Esercizio "${remote.name}": $e');
       }
-    } catch (e) {
-      errors.add('Esercizi: $e');
     }
     return map;
   }
 
-  // ── Modalità di allenamento — invariato ──────────────────
+  // ── Modalità di allenamento ──────────────────────────────
+  // RISCRITTO (fix root cause) — stesso principio di _importExercises.
   Future<_RemoteToLocalMap> _importTrainingModes(List<String> errors) async {
     final map = _RemoteToLocalMap();
+    List<dynamic> remoteModes;
     try {
-      final remoteModes = await _api.fetchTrainingModes();
-      final localModes = TrainingModeDatabase.instance.getAll();
-      final localBySignature = {
-        for (final m in localModes)
-          '${m.name.trim().toLowerCase()}|${m.category.trim().toLowerCase()}': m.key as int,
-      };
+      remoteModes = await _api.fetchTrainingModes();
+    } catch (e, st) {
+      debugPrint('[BackendImportRepository] fetchTrainingModes() FALLITA: $e\n$st');
+      errors.add('Modalità: $e');
+      return map;
+    }
 
-      for (final remote in remoteModes) {
+    final localModes = TrainingModeDatabase.instance.getAll();
+    final localBySignature = {
+      for (final m in localModes)
+        '${m.name.trim().toLowerCase()}|${m.category.trim().toLowerCase()}': m.key as int,
+    };
+
+    for (final remote in remoteModes) {
+      try {
+        final trimmedName = remote.name.trim();
+        if (trimmedName.isEmpty) {
+          debugPrint('[BackendImportRepository] Modalità remota senza '
+              'nome saltata (id=${remote.id}).');
+          continue;
+        }
         final signature =
-            '${remote.name.trim().toLowerCase()}|${remote.category.trim().toLowerCase()}';
+            '${trimmedName.toLowerCase()}|${remote.category.trim().toLowerCase()}';
         final existingLocalKey = localBySignature[signature];
         if (existingLocalKey != null) {
           map.set(remote.id, existingLocalKey);
@@ -202,7 +246,7 @@ class BackendImportRepository {
           continue;
         }
         final created = TrainingMode(
-          name: remote.name,
+          name: trimmedName,
           category: remote.category,
           createdAt: DateTime.now().toIso8601String(),
           origin: 'imported',
@@ -215,13 +259,17 @@ class BackendImportRepository {
                   ))
               .toList(),
         );
-        final newLocalKey = await TrainingModeDatabase.instance.add(created) as int;
+        final newLocalKeyDynamic = await TrainingModeDatabase.instance.add(created);
+        if (newLocalKeyDynamic == null) continue;
+        final newLocalKey = newLocalKeyDynamic as int;
         localBySignature[signature] = newLocalKey;
         map.set(remote.id, newLocalKey, isNew: true);
         await _mapping.setRemoteId(_trainingModeDomain, newLocalKey, remote.id);
+      } catch (e, st) {
+        debugPrint('[BackendImportRepository] Modalità "${remote.name}" '
+            'FALLITA: $e\n$st');
+        errors.add('Modalità "${remote.name}": $e');
       }
-    } catch (e) {
-      errors.add('Modalità: $e');
     }
     return map;
   }

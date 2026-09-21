@@ -7,10 +7,13 @@ import '../services/api/dto/auth_dto.dart';
 import '../services/api/token_storage.dart';
 import '../services/sync/sync_engine.dart';
 import '../services/sync/cloud_auth_bridge.dart';
+
 enum BackendAuthStatus { unknown, authenticated, unauthenticated }
+
 class BackendAuthProvider extends ChangeNotifier {
   final AuthApiService _authApi;
   final BackendImportRepository _importRepo;
+
   BackendAuthProvider({
     AuthApiService? authApi,
     BackendImportRepository? importRepo,
@@ -24,6 +27,7 @@ class BackendAuthProvider extends ChangeNotifier {
     CloudAuthBridge.instance.registerProfileUpdateHandler(_handleProfileUpdate);
     ApiClient.instance.onSessionExpired = _handleSessionExpired;
   }
+
   BackendAuthStatus _status = BackendAuthStatus.unknown;
   BackendUserProfile? _currentUser;
   String? _lastError;
@@ -65,6 +69,7 @@ class BackendAuthProvider extends ChangeNotifier {
       // l'avvio dell'app (coerente col fix di lentezza già applicato
       // a questo stesso flusso in un turno precedente).
       unawaited(CloudAuthBridge.instance.notifyProfileDownloaded(_currentUser!));
+      unawaited(_backfillLocalProfileIfNeeded(_currentUser!));
     } catch (_) {
       _status = BackendAuthStatus.unauthenticated;
       _currentUser = null;
@@ -95,6 +100,7 @@ class BackendAuthProvider extends ChangeNotifier {
       notifyListeners();
       // NUOVO — vedi commento in _doRestoreSession.
       unawaited(CloudAuthBridge.instance.notifyProfileDownloaded(_currentUser!));
+      unawaited(_backfillLocalProfileIfNeeded(_currentUser!));
       unawaited(_triggerAutoImport());
       SyncEngine.instance.start();
     } catch (e) {
@@ -119,6 +125,7 @@ class BackendAuthProvider extends ChangeNotifier {
       // presente in locale nel momento in cui AuthProvider considera
       // il login riuscito e monta la UI.
       await CloudAuthBridge.instance.notifyProfileDownloaded(_currentUser!);
+      unawaited(_backfillLocalProfileIfNeeded(_currentUser!));
       await _triggerAutoImport();
       SyncEngine.instance.start();
       return true;
@@ -127,10 +134,13 @@ class BackendAuthProvider extends ChangeNotifier {
       return false;
     }
   }
+
   Future<bool> register(String identifier, String password) =>
       _runAuthFlow(() => _authApi.register(identifier, password));
+
   Future<bool> login(String identifier, String password) =>
       _runAuthFlow(() => _authApi.login(identifier, password));
+
   Future<bool> _runAuthFlow(Future<AuthTokens> Function() action) async {
     _loading = true;
     _lastError = null;
@@ -143,6 +153,7 @@ class BackendAuthProvider extends ChangeNotifier {
       notifyListeners();
       // NUOVO — vedi commento in _doRestoreSession.
       unawaited(CloudAuthBridge.instance.notifyProfileDownloaded(_currentUser!));
+      unawaited(_backfillLocalProfileIfNeeded(_currentUser!));
       unawaited(_triggerAutoImport());
       SyncEngine.instance.start();
       return true;
@@ -154,6 +165,7 @@ class BackendAuthProvider extends ChangeNotifier {
       return false;
     }
   }
+
   Future<void> _triggerAutoImport() async {
     if (_autoImportDone || autoImporting) return;
     autoImporting = true;
@@ -169,10 +181,12 @@ class BackendAuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
   Future<void> refreshFromBackend() async {
     _autoImportDone = false;
     await _triggerAutoImport();
   }
+
   Future<void> logout() async {
     _loading = true;
     notifyListeners();
@@ -214,6 +228,49 @@ class BackendAuthProvider extends ChangeNotifier {
     }
   }
 
+  // NUOVO (fix backfill profilo) — dopo aver scaricato il profilo
+  // dal backend, confronta con lo snapshot locale: se il backend ha
+  // un campo vuoto/nullo che invece il dispositivo corrente ha già
+  // valorizzato localmente (tipicamente l'avatar, se era stato
+  // impostato prima che l'upload esistesse), lo invia. Non
+  // sovrascrive mai un valore già presente sul backend: aggiunge
+  // solo ciò che manca.
+  Future<void> _backfillLocalProfileIfNeeded(BackendUserProfile remote) async {
+    try {
+      final local = await CloudAuthBridge.instance.getLocalProfile();
+      if (local.isEmpty) return;
+
+      final diff = <String, String?>{};
+      void maybeAdd(String key, String? remoteValue) {
+        final localValue = local[key];
+        if (localValue != null &&
+            localValue.isNotEmpty &&
+            (remoteValue == null || remoteValue.isEmpty)) {
+          diff[key] = localValue;
+        }
+      }
+
+      maybeAdd('displayName', remote.displayName);
+      maybeAdd('firstName', remote.firstName);
+      maybeAdd('lastName', remote.lastName);
+      maybeAdd('bio', remote.bio);
+      maybeAdd('avatarBase64', remote.avatarUrl);
+
+      if (diff.isEmpty) return;
+
+      await _authApi.updateProfile(
+        displayName: diff['displayName'],
+        firstName: diff['firstName'],
+        lastName: diff['lastName'],
+        bio: diff['bio'],
+        avatarUrl: diff['avatarBase64'],
+      );
+      debugPrint('[BackendAuthProvider] Backfill profilo eseguito: ${diff.keys}');
+    } catch (e) {
+      debugPrint('[BackendAuthProvider] Backfill profilo fallito: $e');
+    }
+  }
+
   Future<void> _handleSessionExpired() async {
     if (_status == BackendAuthStatus.unauthenticated) return;
     debugPrint(
@@ -228,4 +285,5 @@ class BackendAuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 }
+
 void unawaited(Future<void> future) {}

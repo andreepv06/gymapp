@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../db/hive_database.dart';
 import '../services/api/api_exception.dart';
 import '../services/api/exercises_api_service.dart';
@@ -22,13 +23,9 @@ class SessionSyncResult {
   bool get hasFailures => sessionsFailed > 0 || setsFailed > 0;
 }
 
-/// Sincronizza lo storico allenamenti locale (Hive) verso il
-/// backend, in modo idempotente: sessioni già sincronizzate vengono
-/// saltate. Collegamento sessione→scheda remota tramite mapping
-/// persistito (session.workoutKey → workout remoto), più affidabile
-/// del matching per nome usato nella prima versione. Esercizi delle
-/// serie risolti tramite mapping (set.exerciseKey). Solo lettura da
-/// Hive, mai scrittura/cancellazione locale.
+/// AGGIORNATO (fix root cause blocco sync) — cattura generica per
+/// singola sessione e per singola serie: stesso principio già
+/// applicato a ExerciseSyncRepository.
 class SessionSyncRepository {
   static const _sessionDomain = 'session';
   static const _workoutDomain = 'workout';
@@ -115,6 +112,13 @@ class SessionSyncRepository {
       } on ApiException {
         sessionsFailed++;
         continue;
+      } catch (e) {
+        // NUOVO — cattura generica: un errore imprevisto sulla
+        // creazione di QUESTA sessione non blocca le successive.
+        debugPrint('[SessionSyncRepository] Sessione "${session.workoutName}" '
+            'fallita con errore non-API: $e');
+        sessionsFailed++;
+        continue;
       }
 
       final localSets = HiveDatabase.instance.getSessionSets(session.key);
@@ -134,6 +138,12 @@ class SessionSyncRepository {
           );
           setsCreated++;
         } on ApiException {
+          setsFailed++;
+        } catch (e) {
+          // NUOVO — cattura generica: una serie problematica non
+          // blocca le successive della stessa sessione.
+          debugPrint('[SessionSyncRepository] Serie fallita con '
+              'errore non-API: $e');
           setsFailed++;
         }
       }

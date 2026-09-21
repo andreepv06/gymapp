@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../db/hive_database.dart';
 import '../services/api/api_exception.dart';
 import '../services/api/exercises_api_service.dart';
@@ -18,6 +19,13 @@ class ExerciseSyncResult {
   int get total => created + alreadySynced + failedNames.length;
 }
 
+/// AGGIORNATO (fix root cause blocco sync) — il catch per singolo
+/// esercizio ora è generico (non più solo ApiException): qualunque
+/// errore isolato su un esercizio (parsing, dato corrotto lato
+/// backend) resta contenuto a QUEL solo esercizio, invece di
+/// propagarsi e interrompere il ciclo — che a sua volta, prima del
+/// fix in SyncEngine, bloccava l'intera sincronizzazione di tutti
+/// gli altri domini (schede, storico, obiettivi).
 class ExerciseSyncRepository {
   static const domain = 'exercise';
 
@@ -50,12 +58,6 @@ class ExerciseSyncRepository {
 
       final normalizedName = exercise.name.trim().toLowerCase();
       if (remoteNames.contains(normalizedName)) {
-        // Esiste già sul backend (creato prima dell'introduzione del
-        // mapping, o da un'altra sorgente): non lo ricreiamo. Non
-        // avendone l'id qui non possiamo registrare il mapping —
-        // verrà ririlevato per nome anche nei prossimi giri: sicuro
-        // (nessun duplicato), non perfettamente ottimizzato solo in
-        // questo caso limite.
         alreadySynced++;
         continue;
       }
@@ -76,6 +78,13 @@ class ExerciseSyncRepository {
         } else {
           failed.add(exercise.name);
         }
+      } catch (e) {
+        // NUOVO — cattura generica: qualsiasi altro errore isolato
+        // su questo esercizio non deve mai propagarsi e bloccare
+        // il resto del ciclo.
+        debugPrint('[ExerciseSyncRepository] Esercizio "${exercise.name}" '
+            'fallito con errore non-API: $e');
+        failed.add(exercise.name);
       }
     }
 
