@@ -413,6 +413,7 @@ class BackendImportRepository {
         for (final set in remoteSets) {
           final localExerciseKey =
               await _ensureExercise(set.exerciseName, set.muscleGroup, exerciseMap);
+          if (localExerciseKey == null) continue; // salta solo questa serie
 
           await HiveDatabase.instance.addSessionSet(HiveSessionSet(
             sessionKey: newSessionKey,
@@ -438,13 +439,35 @@ class BackendImportRepository {
     return _SessionImportResult(sessionsCreated: sessionsCreated, setsCreated: setsCreated);
   }
 
-  Future<int> _ensureExercise(
+  // FIX (bug reale confermato dai log) — se il backend restituisce
+  // una serie il cui riferimento all'esercizio non è popolato (né
+  // 'exercise.name' né 'exerciseName' presenti nella risposta),
+  // RemoteSessionSetDetail.fromJson produce un nome vuoto. Prima
+  // d'ora questo faceva crashare l'INTERA sessione: la guardia di
+  // integrità in HiveDatabase.addExercise() blocca silenziosamente
+  // la scrittura (nessuna eccezione), ma il codice successivo
+  // leggeva comunque `created.key as int` — null, cast fallito,
+  // eccezione non gestita che abortiva tutta la sessione (prova
+  // diretta nei log: "Sessione ... FALLITA: TypeError: null: type
+  // ... is not a subtype of type 'int'", ripetuto per ogni sessione
+  // con almeno una serie orfana di questo tipo).
+  //
+  // Ora: se il nome è vuoto, ritorna null e la SOLA serie orfana
+  // viene saltata (il resto della sessione, con tutte le altre serie
+  // valide, viene comunque importato correttamente).
+  Future<int?> _ensureExercise(
       String name, String muscleGroup, _RemoteToLocalMap exerciseMap) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      debugPrint('[BackendImportRepository] Serie con esercizio senza nome '
+          'saltata (dato remoto incompleto).');
+      return null;
+    }
     final existing = HiveDatabase.instance
         .getExercises()
-        .where((e) => e.name.trim().toLowerCase() == name.trim().toLowerCase());
+        .where((e) => e.name.trim().toLowerCase() == trimmedName.toLowerCase());
     if (existing.isNotEmpty) return existing.first.key as int;
-    final created = HiveExercise(name: name, muscleGroup: muscleGroup, isCustom: true);
+    final created = HiveExercise(name: trimmedName, muscleGroup: muscleGroup, isCustom: true);
     await HiveDatabase.instance.addExercise(created);
     return created.key as int;
   }

@@ -389,8 +389,20 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _applyRemoteProfile(BackendUserProfile profile) async {
     final targetIdentifier = profile.identifier.trim().toLowerCase();
 
+    // NUOVO — diagnostica temporanea: mostra esattamente cosa arriva
+    // dal backend e se l'account di destinazione esiste già
+    // localmente in questo momento (il bug osservato è un problema
+    // di ORDINE: questo metodo può essere chiamato prima che
+    // l'account sia stato salvato su disco — vedi commento in
+    // AuthProvider.login()).
+    debugPrint('[AUTH] _applyRemoteProfile per "$targetIdentifier": '
+        'displayName=${profile.displayName}, avatarUrl='
+        '${profile.avatarUrl != null ? "presente (${profile.avatarUrl!.length} char)" : "NULL"}');
+
     _accounts = await _readAccountsFromDisk();
     final idx = _accounts.indexWhere((a) => a.identifier == targetIdentifier);
+    debugPrint('[AUTH] _applyRemoteProfile: account "$targetIdentifier" '
+        'trovato localmente? ${idx != -1} (${_accounts.length} account su disco)');
     if (idx == -1) return;
     final account = _accounts[idx];
 
@@ -400,6 +412,8 @@ class AuthProvider extends ChangeNotifier {
     if (profile.bio != null) account.bio = profile.bio;
     if (profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty) {
       account.avatarBase64 = profile.avatarUrl;
+      debugPrint('[AUTH] _applyRemoteProfile: avatarBase64 applicato '
+          'per "$targetIdentifier"');
     }
 
     await _saveAccounts();
