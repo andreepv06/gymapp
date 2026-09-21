@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 import '../db/hive_database.dart';
@@ -325,7 +326,9 @@ class BackendImportRepository {
           ));
           exercisesLinked++;
         }
-      } catch (e) {
+      } catch (e, st) {
+        debugPrint('[BackendImportRepository] Scheda '
+            '"${remoteWorkout.name}" FALLITA: $e\n$st');
         errors.add('Scheda "${remoteWorkout.name}": $e');
       }
     }
@@ -376,7 +379,8 @@ class BackendImportRepository {
     List<dynamic> remoteSessions;
     try {
       remoteSessions = await _api.fetchSessions();
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[BackendImportRepository] fetchSessions() FALLITA: $e\n$st');
       errors.add('Storico: $e');
       return _SessionImportResult(sessionsCreated: 0, setsCreated: 0);
     }
@@ -423,7 +427,10 @@ class BackendImportRepository {
           ));
           setsCreated++;
         }
-      } catch (e) {
+      } catch (e, st) {
+        debugPrint('[BackendImportRepository] Sessione '
+            '"${remoteSession.workoutName}" (${remoteSession.date}) '
+            'FALLITA: $e\n$st');
         errors.add('Sessione "${remoteSession.workoutName}" '
             '(${remoteSession.date}): $e');
       }
@@ -451,7 +458,14 @@ class BackendImportRepository {
     List<dynamic> remoteGoals;
     try {
       remoteGoals = await _api.fetchGoals();
-    } catch (e) {
+    } catch (e, st) {
+      // NUOVO — diagnostica temporanea (audit sincronizzazione):
+      // gli obiettivi risultano a ZERO totale anche dopo il fix
+      // per-elemento, il che indica che fetchGoals() stessa fallisce
+      // PRIMA di entrare nel ciclo — probabile bug di parsing in
+      // RemoteGoalDetail.fromJson su un campo nullo/mancante. Questo
+      // log mostra l'errore reale, da rimuovere una volta risolto.
+      debugPrint('[BackendImportRepository] fetchGoals() FALLITA: $e\n$st');
       errors.add('Obiettivi: $e');
       return _GoalImportResult(goalsCreated: 0, completionsCreated: 0);
     }
@@ -497,7 +511,9 @@ class BackendImportRepository {
           await GoalDatabase.instance.setCompletion(localGoalKey, c.date, c.completed);
           completionsCreated++;
         }
-      } catch (e) {
+      } catch (e, st) {
+        debugPrint('[BackendImportRepository] Obiettivo '
+            '"${remoteGoal.title}" FALLITO: $e\n$st');
         errors.add('Obiettivo "${remoteGoal.title}": $e');
       }
     }

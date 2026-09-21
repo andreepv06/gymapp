@@ -96,7 +96,8 @@ class AuthProvider extends ChangeNotifier {
   // collegamento non esisteva: un profilo presente sul backend
   // non veniva mai copiato in locale.
   AuthProvider() {
-    CloudAuthBridge.instance.registerProfileDownloadedHandler(_applyRemoteProfile);
+    CloudAuthBridge.instance.registerProfileDownloadedHandler(
+        (profile) => _applyRemoteProfile(profile));
   }
 
   bool get isLoggedIn => _isLoggedIn;
@@ -373,17 +374,23 @@ class AuthProvider extends ChangeNotifier {
   // loop upload↔download. Solo i campi remoti effettivamente
   // valorizzati sovrascrivono il dato locale, così un campo assente
   // sul backend non cancella un valore locale non ancora propagato.
+  // FIX (bug reale trovato) — PRIMA questo metodo si basava su
+  // _currentIdentifier per sapere "a chi" applicare il profilo
+  // scaricato. Ma nel flusso di login su un telefono NUOVO
+  // (AuthProvider.login() → verifyRemoteAccount() →
+  // verifyRemoteCredentials() → notifyProfileDownloaded()), questa
+  // chiamata avviene PRIMA che _loginInternal() imposti
+  // _currentIdentifier — quindi la guardia "if (_currentIdentifier
+  // == null) return" scartava SEMPRE il profilo appena scaricato, su
+  // ogni telefono nuovo, senza eccezioni. Ora si usa
+  // profile.identifier (già presente nella risposta del backend)
+  // come sorgente di verità su quale account aggiornare, invece di
+  // dipendere da uno stato locale non ancora aggiornato.
   Future<void> _applyRemoteProfile(BackendUserProfile profile) async {
-    if (_currentIdentifier == null) return;
-    // Il profilo scaricato deve appartenere all'utente attualmente
-    // loggato su QUESTO dispositivo: BackendAuthProvider scarica
-    // sempre il profilo dell'utente autenticato dal proprio JWT, ma
-    // verifichiamo comunque per coerenza in caso di sequenze di
-    // login/logout molto ravvicinate.
-    if (profile.identifier.trim().toLowerCase() != _currentIdentifier) return;
+    final targetIdentifier = profile.identifier.trim().toLowerCase();
 
     _accounts = await _readAccountsFromDisk();
-    final idx = _accounts.indexWhere((a) => a.identifier == _currentIdentifier);
+    final idx = _accounts.indexWhere((a) => a.identifier == targetIdentifier);
     if (idx == -1) return;
     final account = _accounts[idx];
 
@@ -396,6 +403,12 @@ class AuthProvider extends ChangeNotifier {
     }
 
     await _saveAccounts();
+    // Se il profilo scaricato riguarda l'utente attualmente
+    // visualizzato, notifica la UI. Se riguarda un login in corso su
+    // un identifier diverso da quello ancora "attivo" (raro, solo
+    // nella finestra tra verify e _loginInternal), la UI si
+    // aggiornerà comunque al notifyListeners() successivo chiamato
+    // da _loginInternal.
     notifyListeners();
   }
 }
