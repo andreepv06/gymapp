@@ -4,6 +4,7 @@ import '../services/api/api_exception.dart';
 import '../services/api/exercises_api_service.dart';
 import '../services/api/sessions_api_service.dart';
 import 'sync_mapping_storage.dart';
+import '../services/sync/delete_propagator.dart';
 
 class SessionSyncResult {
   final int sessionsCreated;
@@ -44,8 +45,8 @@ class SessionSyncRepository {
         _mapping = mapping ?? SyncMappingStorage();
 
   Future<SessionSyncResult> syncLocalHistoryToBackend() async {
+    await DeletePropagator.retryPendingSessionDeletes();
     final localSessions = HiveDatabase.instance.getSessions();
-
     final remoteExercises = await _exercisesApi.fetchAll();
     final exerciseIdByName = {
       for (final e in remoteExercises) e.name.trim().toLowerCase(): e.id,

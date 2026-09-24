@@ -101,6 +101,28 @@ class DeletePropagator {
     }
   }
 
+    // NUOVO (fix bug confermato: "Elimina sessioni" mai sincronizzato)
+  // — stesso identico pattern tombstone già usato per le schede.
+  static const _sessionDomain2 = 'session'; // stesso dominio già usato altrove
+
+  static Future<void> tombstoneSession(int localKey) async {
+    try {
+      final remoteId = await _mapping.getRemoteId(_sessionDomain, localKey);
+      if (remoteId == null) return;
+      await _mapping.addTombstone(_sessionDomain, remoteId);
+    } catch (_) {}
+  }
+
+  static Future<void> retryPendingSessionDeletes() async {
+    final tombstones = await _mapping.getTombstones(_sessionDomain);
+    for (final remoteId in tombstones) {
+      try {
+        await SessionsApiService().delete(remoteId);
+        await _mapping.removeTombstone(_sessionDomain, remoteId);
+      } catch (_) {}
+    }
+  }
+
   static Future<void> propagateGoalDelete(int localKey) async {
     try {
       final remoteId = await _mapping.getRemoteId(_goalDomain, localKey);
@@ -123,6 +145,7 @@ class DeletePropagator {
       if (remoteId == null) return;
       await SessionsApiService().delete(remoteId);
       await _mapping.removeMapping(_sessionDomain, localKey);
+      await _mapping.removeTombstone(_sessionDomain, remoteId);
     } catch (_) {}
   }
 }

@@ -21,6 +21,7 @@ import '../../widgets/shared_sheets.dart';
 import '../import/activity_import_screen.dart';
 import 'cloud_sync_screen.dart';
 import '../../services/sync/sync_trigger.dart';
+import '../../services/sync/delete_propagator.dart';
 
 // ─────────────────────────────────────────────────────────────
 // SettingsScreen — nessun Scaffold (tab di MainShell)
@@ -458,7 +459,30 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => Navigator.pop(context, true)),
       ]);
     if (ok == true && context.mounted) {
+      // FIX (bug confermato) — PRIMA questo metodo chiamava
+      // HiveDatabase.deleteAllSessions() (semplice box.clear() locale),
+      // senza mai propagare la cancellazione al backend: le sessioni
+      // eliminate qui restavano vive sul backend e venivano
+      // reimportate su ogni nuovo dispositivo. Ora ogni sessione
+      // viene tombstoned PRIMA di essere cancellata (stesso pattern
+      // già usato con successo per le schede), poi cancellata
+      // localmente, poi la cancellazione remota viene propagata
+      // (fire-and-forget, con retry automatico ai cicli successivi
+      // se fallisce).
+      final sessions = HiveDatabase.instance.getSessions();
+      for (final s in sessions) {
+        final key = s.key;
+        if (key is int) {
+          await DeletePropagator.tombstoneSession(key);
+        }
+      }
       await HiveDatabase.instance.deleteAllSessions();
+      for (final s in sessions) {
+        final key = s.key;
+        if (key is int) {
+          unawaited(DeletePropagator.propagateSessionDelete(key));
+        }
+      }
       if (context.mounted) {
         _showSnack(context, c, 'Sessioni eliminate', MarkFitColors.teal);
       }
@@ -1539,3 +1563,4 @@ class _DateField extends StatelessWidget {
     );
   }
 }
+void unawaited(Future<void> future) {}

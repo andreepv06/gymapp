@@ -437,12 +437,14 @@ class BackendImportRepository {
         .getSessions()
         .map((s) => '${s.workoutName.trim().toLowerCase()}|${s.date}')
         .toSet();
+    final tombstonedSessionIds = await _mapping.getTombstones(_sessionDomain);
 
     final uid = HiveDatabase.instance.currentUserId;
     final sessionBox = Hive.box<HiveSession>('${uid}_sessions');
 
     for (final remoteSession in remoteSessions) {
       try {
+        if (tombstonedSessionIds.contains(remoteSession.id)) continue;
         final signature =
             '${remoteSession.workoutName.trim().toLowerCase()}|${remoteSession.date}';
         if (localSignatures.contains(signature)) continue;
