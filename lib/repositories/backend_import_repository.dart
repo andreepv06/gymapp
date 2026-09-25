@@ -43,22 +43,36 @@ class ImportSummary {
 /// Importa nel Hive locale del dispositivo corrente tutto ciò che
 /// l'utente ha già sincronizzato sul backend da ALTRI dispositivi.
 ///
-/// AGGIORNATO (audit sincronizzazione cross-device) — causa radice
-/// dei sintomi "obiettivi assenti" e "2 sessioni invece di 11":
-/// PRIMA, _importGoals() e _importSessions() avvolgevano l'INTERO
-/// ciclo `for` in un unico try/catch. Un errore sull'elaborazione di
-/// UN SOLO elemento (es. fetchGoalCompletions/fetchSessionSets
-/// fallita per timeout durante cold start di Render) interrompeva
-/// l'elaborazione di TUTTI gli elementi successivi nel ciclo — quelli
-/// già processati con successo restavano importati (da qui "2 su
-/// 11": le prime 2 sessioni riuscite, la terza fallita, le restanti 9
-/// mai nemmeno tentate).
+/// AGGIORNATO (audit sincronizzazione — STEP 1, race condition di
+/// avvio) — causa radice individuata: sia
+/// BackendAuthProvider._triggerAutoImport() sia
+/// SyncEngine.runOnce() (avviato subito dopo da
+/// BackendAuthProvider stesso, tramite SyncEngine.start()) creavano
+/// CIASCUNO una propria istanza di BackendImportRepository e
+/// chiamavano importAllFromBackend() in modo completamente
+/// indipendente — nessuno dei due sapeva dell'esistenza dell'altro.
+/// Il risultato erano DUE esecuzioni concorrenti dell'intero
+/// processo di download/import, che scrivevano contemporaneamente
+/// sulle stesse box Hive e sullo stesso SyncMappingStorage
+/// (SharedPreferences, privo di lock), producendo risultati non
+/// deterministici ad ogni avvio (conteggi diversi di sessioni/
+/// obiettivi/esercizi tra un tentativo e l'altro, con lo stesso
+/// identico stato del backend).
 ///
-/// ORA: il try/catch è per SINGOLO elemento (stesso pattern già
-/// corretto usato in WorkoutSyncRepository per gli esercizi). Un
-/// fallimento isolato viene registrato in `errors` ma non blocca più
-/// gli elementi successivi. Applicato anche a _importWorkouts() per
-/// coerenza, anche se lì l'impatto osservato era minore.
+/// FIX — importAllFromBackend() è ora un "single-flight lock": se
+/// per l'UTENTE CORRENTE (HiveDatabase.instance.currentUserId,
+/// stesso identificatore già usato per isolare i dati tra account
+/// in tutta l'app) è già in corso un'esecuzione, ogni nuovo
+/// chiamante si aggancia alla STESSA Future invece di avviarne una
+/// seconda in parallelo — indipendentemente da quale componente
+/// (BackendAuthProvider o SyncEngine) lo abbia richiesto. Il lock è
+/// scoped per utente (non globale) per evitare che un cambio
+/// account mentre un import è in volo possa far "agganciare"
+/// erroneamente il nuovo utente ai dati di quello precedente.
+///
+/// Nessuna modifica ai call site esistenti: il comportamento
+/// pubblico (firma del metodo, tipo di ritorno, gestione di
+/// shouldAbort per il chiamante originale) resta identico.
 class BackendImportRepository {
   static const _exerciseDomain = 'exercise';
   static const _trainingModeDomain = 'trainingMode';
@@ -74,7 +88,40 @@ class BackendImportRepository {
       : _api = api ?? ImportApiService(),
         _mapping = mapping ?? SyncMappingStorage();
 
-  Future<ImportSummary> importAllFromBackend({bool Function()? shouldAbort}) async {
+  // NUOVO (fix Step 1) — mappa statica userId → import in corso.
+  // Static perché il lock deve valere per TUTTE le istanze di
+  // BackendImportRepository create nell'app (BackendAuthProvider e
+  // SyncEngine ne creano ciascuno la propria), non solo per una
+  // singola istanza.
+  static final Map<String, Future<ImportSummary>> _inFlightImports = {};
+
+  Future<ImportSummary> importAllFromBackend({bool Function()? shouldAbort}) {
+    final uid = HiveDatabase.instance.currentUserId;
+    final existing = _inFlightImports[uid];
+    if (existing != null) {
+      debugPrint('[BackendImportRepository] Import già in corso per '
+          'l\'utente corrente: mi aggancio al ciclo esistente invece '
+          'di avviarne uno nuovo in parallelo (fix race condition avvio).');
+      return existing;
+    }
+    final future = _runImport(shouldAbort: shouldAbort);
+    _inFlightImports[uid] = future;
+    future.whenComplete(() {
+      // Rimuove il lock solo se è ancora questa la Future registrata
+      // per questo utente (protegge da edge case di rimozioni
+      // incrociate se nel frattempo l'utente è cambiato e una nuova
+      // Future è già stata registrata per lo stesso uid).
+      if (identical(_inFlightImports[uid], future)) {
+        _inFlightImports.remove(uid);
+      }
+    });
+    return future;
+  }
+
+  // RINOMINATO da importAllFromBackend() — corpo identico a prima,
+  // ora eseguito sempre e solo dall'UNICA istanza "proprietaria"
+  // registrata nel lock sopra.
+  Future<ImportSummary> _runImport({bool Function()? shouldAbort}) async {
     final errors = <String>[];
     final exerciseIdMap = await _importExercises(errors);
     if (shouldAbort?.call() ?? false) {
@@ -145,19 +192,7 @@ class BackendImportRepository {
     );
   }
 
-  // ── Esercizi — invariato ──────────────────────────────────
   // ── Esercizi ─────────────────────────────────────────────
-  // RISCRITTO (fix root cause) — PRIMA questo metodo aveva un unico
-  // try/catch attorno all'INTERO ciclo, E lo stesso bug del cast
-  // nullo già trovato e corretto nelle sessioni: se un esercizio
-  // remoto aveva nome vuoto, la guardia di integrità in
-  // HiveDatabase.addExercise() bloccava la scrittura silenziosamente
-  // (nessuna eccezione), ma la riga successiva `created.key as int`
-  // lanciava comunque un TypeError su null — interrompendo l'intero
-  // ciclo, quindi TUTTI gli esercizi successivi non venivano più
-  // importati. Dato che gli esercizi sono la base per collegare
-  // schede e sessioni, questo spiegava direttamente "carica solo
-  // alcuni esercizi" e i cicli/esercizi mancanti nelle schede.
   Future<_RemoteToLocalMap> _importExercises(List<String> errors) async {
     final map = _RemoteToLocalMap();
     List<dynamic> remoteExercises;
@@ -211,7 +246,6 @@ class BackendImportRepository {
   }
 
   // ── Modalità di allenamento ──────────────────────────────
-  // RISCRITTO (fix root cause) — stesso principio di _importExercises.
   Future<_RemoteToLocalMap> _importTrainingModes(List<String> errors) async {
     final map = _RemoteToLocalMap();
     List<dynamic> remoteModes;
@@ -275,7 +309,6 @@ class BackendImportRepository {
   }
 
   // ── Schede + circuiti + esercizi ─────────────────────────
-  // FIX — try/catch per SINGOLA scheda (vedi commento di classe).
   Future<_WorkoutImportResult> _importWorkouts(
     List<String> errors,
     _RemoteToLocalMap exerciseMap,
@@ -388,7 +421,7 @@ class BackendImportRepository {
     );
   }
 
-  // ── Riconciliazione cancellazioni schede — invariato ─────
+  // ── Riconciliazione cancellazioni schede ─────────────────
   Future<int> _pruneDeletedWorkouts(List<String> errors) async {
     int pruned = 0;
     try {
@@ -415,7 +448,6 @@ class BackendImportRepository {
   }
 
   // ── Storico + serie ───────────────────────────────────────
-  // FIX — try/catch per SINGOLA sessione (vedi commento di classe).
   Future<_SessionImportResult> _importSessions(
     List<String> errors,
     _RemoteToLocalMap exerciseMap,
@@ -489,22 +521,6 @@ class BackendImportRepository {
     return _SessionImportResult(sessionsCreated: sessionsCreated, setsCreated: setsCreated);
   }
 
-  // FIX (bug reale confermato dai log) — se il backend restituisce
-  // una serie il cui riferimento all'esercizio non è popolato (né
-  // 'exercise.name' né 'exerciseName' presenti nella risposta),
-  // RemoteSessionSetDetail.fromJson produce un nome vuoto. Prima
-  // d'ora questo faceva crashare l'INTERA sessione: la guardia di
-  // integrità in HiveDatabase.addExercise() blocca silenziosamente
-  // la scrittura (nessuna eccezione), ma il codice successivo
-  // leggeva comunque `created.key as int` — null, cast fallito,
-  // eccezione non gestita che abortiva tutta la sessione (prova
-  // diretta nei log: "Sessione ... FALLITA: TypeError: null: type
-  // ... is not a subtype of type 'int'", ripetuto per ogni sessione
-  // con almeno una serie orfana di questo tipo).
-  //
-  // Ora: se il nome è vuoto, ritorna null e la SOLA serie orfana
-  // viene saltata (il resto della sessione, con tutte le altre serie
-  // valide, viene comunque importato correttamente).
   Future<int?> _ensureExercise(
       String name, String muscleGroup, _RemoteToLocalMap exerciseMap) async {
     final trimmedName = name.trim();
@@ -523,7 +539,6 @@ class BackendImportRepository {
   }
 
   // ── Obiettivi + completamenti ────────────────────────────
-  // FIX — try/catch per SINGOLO obiettivo (vedi commento di classe).
   Future<_GoalImportResult> _importGoals(List<String> errors) async {
     int goalsCreated = 0;
     int completionsCreated = 0;
@@ -532,12 +547,6 @@ class BackendImportRepository {
     try {
       remoteGoals = await _api.fetchGoals();
     } catch (e, st) {
-      // NUOVO — diagnostica temporanea (audit sincronizzazione):
-      // gli obiettivi risultano a ZERO totale anche dopo il fix
-      // per-elemento, il che indica che fetchGoals() stessa fallisce
-      // PRIMA di entrare nel ciclo — probabile bug di parsing in
-      // RemoteGoalDetail.fromJson su un campo nullo/mancante. Questo
-      // log mostra l'errore reale, da rimuovere una volta risolto.
       debugPrint('[BackendImportRepository] fetchGoals() FALLITA: $e\n$st');
       errors.add('Obiettivi: $e');
       return _GoalImportResult(goalsCreated: 0, completionsCreated: 0);
