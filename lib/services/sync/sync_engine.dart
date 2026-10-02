@@ -11,28 +11,6 @@ import 'sync_trigger.dart';
 
 enum SyncPhase { idle, uploading, downloading, error }
 
-/// Motore di sincronizzazione: ciclo periodico (rete di sicurezza) +
-/// ciclo immediato quando SyncTrigger.requestSync() viene chiamato da
-/// un Provider dopo una mutazione locale, con debounce di 3s. Upload
-/// sempre prima del download.
-///
-/// AGGIORNATO (fix root cause blocco sync cross-device) — PRIMA,
-/// _uploadAll() chiamava le 6 repository in sequenza SENZA alcun
-/// isolamento tra loro: un'eccezione non gestita lanciata da UNA
-/// SOLA repository (es. un dato corrotto lato backend che fa
-/// fallire ExerciseSyncRepository) interrompeva l'intero
-/// _uploadAll(), e di conseguenza l'intero ciclo runOnce() falliva
-/// PRIMA ANCORA di arrivare al download — bloccando la
-/// sincronizzazione di TUTTI i domini successivi (schede, storico,
-/// modalità, obiettivi), ad OGNI ciclo, in modo deterministico e
-/// permanente finché il dato corrotto non veniva rimosso. Questo
-/// spiegava perché un nuovo obiettivo creato su un dispositivo non
-/// arrivava mai su un altro anche aspettando: il ciclo di sync non
-/// falliva "a volte", falliva SEMPRE nello stesso punto.
-///
-/// Ora ogni repository è isolata: un fallimento in una non impedisce
-/// alle altre di essere tentate, né impedisce alla fase di download
-/// di essere comunque eseguita in questo stesso ciclo.
 class SyncEngine extends ChangeNotifier {
   static final SyncEngine instance = SyncEngine();
 
@@ -49,9 +27,28 @@ class SyncEngine extends ChangeNotifier {
 
   bool get isActive => _timer != null;
 
+  // FIX (Step 1 — bug B confermato dal test di cambio account) —
+  // PRIMA, se il timer periodico era già attivo (ereditato da un
+  // account precedente mai fermato esplicitamente — es. cambio
+  // account tramite "Cambia account" in Impostazioni, che chiama
+  // AuthProvider.login() SENZA mai passare da logout()/
+  // SyncEngine.stop()), start() era un NO-OP: incrementava solo
+  // l'epoch e usciva, senza eseguire alcun tentativo di sync
+  // immediato. Il nuovo account doveva quindi aspettare fino a 8
+  // secondi il prossimo tick del vecchio timer periodico per vedere
+  // anche solo tentato un primo import — spiegando i dati del
+  // vecchio profilo ancora visibili subito dopo il cambio account.
+  //
+  // Ora start() CANCELLA sempre il timer esistente e ne crea uno
+  // nuovo, eseguendo SEMPRE un tentativo di sync immediato alla
+  // chiamata — indipendentemente da uno stato precedente ereditato
+  // da un altro account. L'epoch (già esistente) continua a
+  // garantire che eventuali cicli ancora in volo per l'account
+  // precedente si interrompano in sicurezza senza scrivere dati
+  // nel contesto del nuovo utente.
   void start() {
     _epoch++;
-    if (_timer != null) return;
+    _timer?.cancel();
     SyncTrigger.instance.register(runOnce);
     unawaited(runOnce());
     _timer = Timer.periodic(_interval, (_) => runOnce());
@@ -97,11 +94,6 @@ class SyncEngine extends ChangeNotifier {
     }
   }
 
-  // MODIFICATO (fix root cause) — ogni chiamata è ora avvolta in un
-  // try/catch dedicato tramite _safeUpload: il fallimento di UNA
-  // repository viene loggato e contenuto, senza impedire il
-  // tentativo delle successive né bloccare la fase di download che
-  // segue in runOnce().
   Future<void> _uploadAll(int myEpoch) async {
     await _safeUpload('esercizi', () =>
         ExerciseSyncRepository().syncLocalLibraryToBackend());

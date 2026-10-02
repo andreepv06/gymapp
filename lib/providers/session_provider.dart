@@ -59,15 +59,6 @@ class SessionExercise {
   final String? notes;
   String? sessionNote;
   final String? circuitId;
-  // ── FASE 4 Sistema Modalità di Allenamento ──────────────────
-  // Riferimento alla modalità utilizzata per QUESTO esercizio in
-  // QUESTA sessione, e istantanea IMMUTABILE della struttura
-  // prevista al momento dell'avvio (Parte 12 del piano: la
-  // sessione non deve mai cambiare se la modalità viene
-  // successivamente modificata/eliminata). Entrambi nullable per
-  // compatibilità con esercizi legacy senza modalità assegnata o
-  // aggiunti ad-hoc durante la sessione (che non hanno un contesto
-  // di modalità da cui ereditare).
   final dynamic trainingModeKey;
   final List<TrainingModeSet>? expectedStructure;
 
@@ -129,9 +120,6 @@ class SessionExercise {
   }
 }
 
-// FASE 4 — helper locale per conversione sicura della chiave
-// dinamica di Hive in int? (mai un cast diretto che possa
-// lanciare un'eccezione — Parte 63, nessun crash).
 int? _sessionAsIntKey(dynamic k) => k is int ? k : null;
 
 class SessionProvider extends ChangeNotifier {
@@ -149,7 +137,28 @@ class SessionProvider extends ChangeNotifier {
   final Map<String, String> _sessionCircuitNames = {};
 
   Box? _pauseBox;
-  static const _pauseBoxName = 'paused_session';
+  // FIX (Step 1 — bug A confermato dal test di cambio account) —
+  // PRIMA il nome del box era una costante FISSA e GLOBALE
+  // ('paused_session'), identica per qualsiasi utente sullo stesso
+  // dispositivo — a differenza di TUTTI gli altri box Hive dell'app
+  // (HiveDatabase, GoalDatabase, ecc.), che sono sempre scoped per
+  // utente (${uid}_...). Questo significava che la sessione attiva/
+  // in pausa era condivisa letteralmente tra account diversi sullo
+  // stesso dispositivo: passando da un account all'altro,
+  // SessionProvider continuava a leggere/scrivere lo stesso box,
+  // causando la corruzione/perdita della sessione attiva osservata
+  // nel test (sessione presente, poi sparita dopo il cambio account,
+  // mai più recuperata nemmeno tornando all'account originale).
+  //
+  // Ora il nome del box è scoped per utente, risolto tramite un
+  // getter dinamico che legge HiveDatabase.instance.currentUserId
+  // (stesso identificatore già usato ovunque nell'app per isolare i
+  // dati tra account) al momento dell'apertura/accesso al box.
+  String get _pauseBoxName {
+    final uid = HiveDatabase.instance.currentUserId;
+    return uid.isEmpty ? 'paused_session' : '${uid}_paused_session';
+  }
+
   static const _activeSaveKey = 'active';
   static const _legacyKey = 'current';
   static const _pausedListKey = 'paused_list';
@@ -226,13 +235,6 @@ class SessionProvider extends ChangeNotifier {
   bool get hasActiveSession =>
       currentSessionKey != null && _sessionExercises.isNotEmpty;
 
-  // ESTESO (fix sessione vuota) — copre anche peso inserito
-  // (weight parte sempre da 0, quindi weight > 0 indica un input
-  // reale dell'utente — le reps invece partono già da un valore
-  // non-zero e non sono un segnale affidabile) e note salvate,
-  // oltre alle serie completate già coperte in precedenza. Usato
-  // da ActiveSessionScreen._onBack() per decidere se una sessione
-  // va eliminata automaticamente in uscita da swipe back.
   bool get hasAnyData {
     final hasSetProgress = _exerciseSets.values
         .expand((s) => s)
@@ -285,7 +287,6 @@ class SessionProvider extends ChangeNotifier {
   String getCircuitName(String circuitId) =>
       _sessionCircuitNames[circuitId] ?? 'Circuito';
 
-  // Restituisce le serie di un esercizio per il round corrente di un circuito
   List<ActiveSet> getCircuitSets(String circuitId, dynamic exerciseKey) {
     final round = _currentRound[circuitId] ?? 0;
     return _circuitRoundSets[circuitId]?[round][exerciseKey] ?? [];
@@ -353,7 +354,6 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Mod 4: rimuove l'intero circuito dalla sessione runtime (mai da Hive)
   Future<void> removeCircuitFromSession(String circuitId) async {
     _sessionExercises.removeWhere((e) => e.circuitId == circuitId);
     _circuitRoundSets.remove(circuitId);
@@ -472,9 +472,19 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // FIX (bug A) — ora, quando il box corretto per l'utente corrente
+  // cambia (es. dopo switchUser), apre/riapre SEMPRE il box giusto
+  // invece di tenere agganciato un riferimento al box del vecchio
+  // utente. Confronta il nome effettivo del box già aperto con
+  // quello atteso per l'utente corrente.
   Future<void> initPauseBox() async {
-    if (_pauseBox == null || !_pauseBox!.isOpen) {
-      _pauseBox = await Hive.openBox(_pauseBoxName);
+    final expectedName = _pauseBoxName;
+    if (_pauseBox == null || !_pauseBox!.isOpen || _pauseBox!.name != expectedName) {
+      if (Hive.isBoxOpen(expectedName)) {
+        _pauseBox = Hive.box(expectedName);
+      } else {
+        _pauseBox = await Hive.openBox(expectedName);
+      }
     }
   }
 
@@ -534,7 +544,14 @@ class SessionProvider extends ChangeNotifier {
     await _pauseBox?.put(_pausedListKey, jsonEncode(_pausedList));
   }
 
+  // FIX (bug A) — tryRestoreSession ora inizia sempre resettando lo
+  // stato in memoria PRIMA di aprire il box dell'utente corrente:
+  // se questo metodo viene chiamato dopo un cambio account senza
+  // passare per un reload completo della pagina, non deve mai
+  // mostrare residui della sessione/lista in pausa dell'utente
+  // precedente mentre il nuovo box viene letto.
   Future<bool> tryRestoreSession() async {
+    _pausedList = [];
     await initPauseBox();
     final rawList = _pauseBox?.get(_pausedListKey);
     if (rawList != null) {
@@ -548,7 +565,7 @@ class SessionProvider extends ChangeNotifier {
     }
     final raw = _pauseBox?.get(_activeSaveKey) ?? _pauseBox?.get(_legacyKey);
     if (raw == null) {
-      if (_pausedList.isNotEmpty) notifyListeners();
+      _resetSession();
       return false;
     }
     try {
@@ -560,11 +577,14 @@ class SessionProvider extends ChangeNotifier {
           await _pauseBox?.delete(_legacyKey);
         }
         notifyListeners();
+      } else {
+        _resetSession();
       }
       return success;
     } catch (e) {
       debugPrint('Errore ripristino sessione: $e');
       await _clearActiveSave();
+      _resetSession();
       return false;
     }
   }
@@ -622,6 +642,7 @@ class SessionProvider extends ChangeNotifier {
         }
       }
       final workoutKey = data['workoutKey'];
+      _currentWorkout = null;
       if (workoutKey != null) {
         final workouts = HiveDatabase.instance.getWorkouts();
         try {
@@ -682,13 +703,6 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // FASE 4 — Sistema Modalità di Allenamento: risolve la struttura
-  // reale (elenco ordinato di TrainingModeSet) della modalità
-  // assegnata a un esercizio, se presente. Ritorna null in ogni
-  // caso non risolvibile (nessuna modalità, modalità non trovata,
-  // modalità senza serie definite): mai un'eccezione, mai un dato
-  // parziale incoerente — in quel caso il chiamante ricade sempre
-  // sul comportamento legacy invariato (Parte 63).
   List<TrainingModeSet>? _resolveModeStructure(dynamic trainingModeKey) {
     if (trainingModeKey == null) return null;
     try {
@@ -701,13 +715,6 @@ class SessionProvider extends ChangeNotifier {
     }
   }
 
-  // Reps iniziale per una singola serie della struttura: valore
-  // fisso se presente, altrimenti il minimo del range (Parte 13:
-  // "il minimo può essere usato come valore iniziale/predefinito
-  // nella sessione, ma la configurazione della modalità deve
-  // continuare a mostrare il range completo" — qui usiamo solo il
-  // valore iniziale per la sessione, la UI di scheda mostra sempre
-  // il range intero separatamente).
   int _initialRepsForSet(TrainingModeSet s, int fallback) {
     if (s.isRange) return s.minReps ?? fallback;
     return s.fixedReps ?? fallback;
@@ -778,9 +785,6 @@ class SessionProvider extends ChangeNotifier {
       if (!topItem.isCircuit) {
         final ex = topItem.data as HiveWorkoutExercise;
         final lastSets = allLastSets[ex.exerciseKey] ?? {};
-        // FASE 4 — la struttura reale della modalità (se presente)
-        // determina numero di serie e reps iniziali per posizione,
-        // invece del vecchio valore uniforme ex.sets/ex.targetReps.
         final structure = _resolveModeStructure(ex.trainingModeKey);
         _sessionExercises.add(SessionExercise(
           exerciseKey: ex.exerciseKey,
@@ -1163,13 +1167,6 @@ class SessionProvider extends ChangeNotifier {
     _restingSetIndex = null;
   }
 
-  // FASE 4 — classifica un esercizio (o un singolo round di un
-  // circuito) confrontando la struttura attesa immutabile
-  // (istantanea presa all'avvio sessione) con le serie
-  // effettivamente presenti al termine. Ritorna null se non esiste
-  // una struttura attesa (esercizio legacy senza modalità): in quel
-  // caso executionStatus resta null, comportamento invariato
-  // rispetto a prima di questa fase.
   String? _classifyExercise(
       List<TrainingModeSet>? expectedStructure, List<ActiveSet> actualSets) {
     if (expectedStructure == null || expectedStructure.isEmpty) return null;
@@ -1247,7 +1244,7 @@ class SessionProvider extends ChangeNotifier {
       }
     }
     await _clearPausedState();
-        SyncTrigger.instance.requestSync();
+    SyncTrigger.instance.requestSync();
     _resetSession();
   }
 
