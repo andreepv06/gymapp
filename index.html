@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/gymapp/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- NUOVO (fix white flash) — il meta viewport era completamente
+       assente. Senza viewport-fit=cover, iOS non garantisce che il
+       contenuto Flutter copra l'intero viewport sotto la status
+       bar/notch, lasciando talvolta visibile il colore di sfondo
+       nativo del browser (bianco di default) proprio nella fascia
+       superiore segnalata nel bug report. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <!-- NUOVO (fix white flash) — controlla il colore della barra del
+       browser/status bar sia in Safari normale sia in modalità PWA
+       standalone. Senza questo meta tag il browser usa un colore di
+       default (tipicamente bianco) durante transizioni e gesture di
+       sistema, causando il flash chiaro quando il back swipe parte
+       dal bordo estremo. Colore allineato al tema cosmico scuro già
+       usato dai dialog/sheet Glass dell'app (es. i valori
+       0xFF0D1117/0xFF060B14 già presenti in _GlassCalendarDialog e
+       nei background di dialog/sheet). -->
+  <meta name="theme-color" content="#060B14">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="app1">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>app1</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- NUOVO (fix white flash) — CSS applicato PRIMA che Flutter
+       inizi a caricare/renderizzare: elimina la finestra in cui il
+       DOM HTML (fuori dal canvas Flutter) può mostrare il proprio
+       sfondo bianco di default durante il caricamento o durante una
+       transizione di navigazione.
+
+       overscroll-behavior-x: none disabilita specificamente il
+       gesto nativo del browser "torna indietro nella cronologia"
+       quando lo swipe parte dal bordo estremo dello schermo — è
+       esattamente questo gesto nativo, in competizione con
+       FullScreenSwipeBack (gestito internamente da Flutter), a
+       causare il flash: il browser intercetta il tocco PRIMA che
+       Flutter lo riceva. Nessuna modifica alla logica di swipe/back
+       già scritta in Dart. -->
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: #060B14;
+      overscroll-behavior-x: none;
+      overscroll-behavior-y: none;
+    }
+  </style>
+</head>
+<body>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
