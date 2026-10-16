@@ -3,8 +3,15 @@ import '../db/goal_database.dart';
 import '../models/goal_models.dart';
 import '../services/sync/sync_trigger.dart';
 import '../services/sync/delete_propagator.dart';
+import '../services/sync/cloud_auth_bridge.dart';
 
 class GoalProvider extends ChangeNotifier {
+  GoalProvider() {
+    CloudAuthBridge.instance.addAccountSwitchedListener(() {
+      loadGoals();
+    });
+  }
+
   List<HiveGoal> _goals = [];
   List<HiveGoal> get goals => _goals;
 

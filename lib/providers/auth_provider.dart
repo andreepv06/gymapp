@@ -88,21 +88,9 @@ class AuthProvider extends ChangeNotifier {
   String? _currentType;
   List<UserAccount> _accounts = [];
 
-  // NUOVO (fix audit sincronizzazione) — registra il canale di
-  // download del profilo: quando BackendAuthProvider scarica un
-  // profilo dal backend (login, restore session, import iniziale
-  // su un nuovo dispositivo), questo provider lo riceve e lo
-  // applica all'account locale corrente. Prima d'ora questo
-  // collegamento non esisteva: un profilo presente sul backend
-  // non veniva mai copiato in locale.
   AuthProvider() {
     CloudAuthBridge.instance.registerProfileDownloadedHandler(_applyRemoteProfile);
-    // NUOVO (fix backfill profilo) — permette a BackendAuthProvider
-    // di leggere lo snapshot del profilo locale corrente, per
-    // capire se contiene dati (es. un avatar) che il backend non ha
-    // ancora ricevuto e propagarli automaticamente ad ogni
-    // connessione riuscita, senza richiedere che l'utente riapra il
-    // form di modifica profilo.
+    // RIPRISTINATO — snapshot del profilo locale per il backfill.
     CloudAuthBridge.instance.registerLocalProfileProvider(_getLocalProfileSnapshot);
   }
 
@@ -196,8 +184,6 @@ class AuthProvider extends ChangeNotifier {
     await prefs.setString('accounts', json);
     debugPrint('[AUTH] _saveAccounts: salvati ${_accounts.length} account: '
         '${_accounts.map((a) => a.identifier).toList()}');
-    final verify = prefs.getString('accounts');
-    debugPrint('[AUTH] verifica disco dopo save: $verify');
   }
 
   bool _isEmail(String value) => value.contains('@');
@@ -218,10 +204,7 @@ class AuthProvider extends ChangeNotifier {
         return 'Password troppo corta (min 6 caratteri)';
       }
       final diskAccounts = await _readAccountsFromDisk();
-      debugPrint('[AUTH] account su disco prima del check: '
-          '${diskAccounts.map((a) => a.identifier).toList()}');
       final exists = diskAccounts.any((a) => a.identifier == id);
-      debugPrint('[AUTH] id "$id" già presente? $exists');
       if (exists) {
         final label = type == 'email' ? 'indirizzo email' : 'username';
         return 'Account già esistente con questo $label';
@@ -246,7 +229,6 @@ class AuthProvider extends ChangeNotifier {
       debugPrint('[AUTH] login con id="$id"');
       final diskAccounts = await _readAccountsFromDisk();
       _accounts = diskAccounts;
-      debugPrint('[AUTH] account disponibili: ${_accounts.map((a) => a.identifier).toList()}');
 
       UserAccount? account;
       try {
@@ -269,6 +251,7 @@ class AuthProvider extends ChangeNotifier {
       await GoalDatabase.instance.switchUser(id);
       await SportDatabase.instance.switchUser(id);
       await TrainingModeDatabase.instance.switchUser(id);
+      CloudAuthBridge.instance.notifyAccountSwitched();
 
       final remoteOk = await CloudAuthBridge.instance.verifyRemoteAccount(id, password);
       if (!remoteOk) {
@@ -300,6 +283,7 @@ class AuthProvider extends ChangeNotifier {
     await GoalDatabase.instance.switchUser(identifier);
     await SportDatabase.instance.switchUser(identifier);
     await TrainingModeDatabase.instance.switchUser(identifier);
+    CloudAuthBridge.instance.notifyAccountSwitched();
     unawaited(CloudAuthBridge.instance.syncIdentity(identifier, password));
     notifyListeners();
   }
@@ -321,13 +305,6 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // MODIFICATO (fix audit sincronizzazione) — dopo il salvataggio
-  // locale (invariato), propaga al backend SOLO i campi
-  // effettivamente passati in questa chiamata (update parziale),
-  // fire-and-forget tramite lo stesso canale già usato per login/
-  // logout. Se nessuna sessione backend è attiva, il canale è no-op
-  // (comportamento offline-first invariato — vedi
-  // CloudAuthBridge.notifyProfileUpdated).
   Future<void> updateProfile({
     String? displayName,
     String? firstName,
@@ -366,11 +343,6 @@ class AuthProvider extends ChangeNotifier {
     }));
   }
 
-  // MODIFICATO (fix audit sincronizzazione) — propaga anche la
-  // rimozione dell'avatar (stringa vuota invece di null: il campo
-  // avatarUrl del backend è opzionale ma inviare esplicitamente ''
-  // sovrascrive in modo pulito un valore precedente senza richiedere
-  // gestione speciale di null lato validazione DTO).
   Future<void> clearAvatar() async {
     _accounts = await _readAccountsFromDisk();
     final idx = _accounts.indexWhere((a) => a.identifier == _currentIdentifier);
@@ -383,44 +355,11 @@ class AuthProvider extends ChangeNotifier {
     }));
   }
 
-  // NUOVO (fix audit sincronizzazione) — applica al profilo locale
-  // dell'utente corrente i dati scaricati dal backend. Chiamato da
-  // BackendAuthProvider subito dopo ogni fetchCurrentUser() riuscito
-  // (login, restore session, e soprattutto durante l'import iniziale
-  // su un nuovo dispositivo). Scrive SOLO localmente (_saveAccounts):
-  // non richiama mai notifyProfileUpdated, altrimenti si creerebbe un
-  // loop upload↔download. Solo i campi remoti effettivamente
-  // valorizzati sovrascrivon il dato locale, così un campo assente
-  // sul backend non cancella un valore locale non ancora propagato.
-  // FIX (bug reale trovato) — PRIMA questo metodo si basava su
-  // _currentIdentifier per sapere "a chi" applicare il profilo
-  // scaricato. Ma nel flusso di login su un telefono NUOVO
-  // (AuthProvider.login() → verifyRemoteAccount() →
-  // verifyRemoteCredentials() → notifyProfileDownloaded()), questa
-  // chiamata avviene PRIMA che _loginInternal() imposti
-  // _currentIdentifier — quindi la guardia "if (_currentIdentifier
-  // == null) return" scartava SEMPRE il profilo appena scaricato, su
-  // ogni telefono nuovo, senza eccezioni. Ora si usa
-  // profile.identifier (già presente nella risposta del backend)
-  // come sorgente di verità su quale account aggiornare, invece di
-  // dipendere da uno stato locale non ancora aggiornato.
   Future<void> _applyRemoteProfile(BackendUserProfile profile) async {
     final targetIdentifier = profile.identifier.trim().toLowerCase();
 
-    // NUOVO — diagnostica temporanea: mostra esattamente cosa arriva
-    // dal backend e se l'account di destinazione esiste già
-    // localmente in questo momento (il bug osservato è un problema
-    // di ORDINE: questo metodo può essere chiamato prima che
-    // l'account sia stato salvato su disco — vedi commento in
-    // AuthProvider.login()).
-    debugPrint('[AUTH] _applyRemoteProfile per "$targetIdentifier": '
-        'displayName=${profile.displayName}, avatarUrl='
-        '${profile.avatarUrl != null ? "presente (${profile.avatarUrl!.length} char)" : "NULL"}');
-
     _accounts = await _readAccountsFromDisk();
     final idx = _accounts.indexWhere((a) => a.identifier == targetIdentifier);
-    debugPrint('[AUTH] _applyRemoteProfile: account "$targetIdentifier" '
-        'trovato localmente? ${idx != -1} (${_accounts.length} account su disco)');
     if (idx == -1) return;
     final account = _accounts[idx];
 
@@ -430,17 +369,9 @@ class AuthProvider extends ChangeNotifier {
     if (profile.bio != null) account.bio = profile.bio;
     if (profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty) {
       account.avatarBase64 = profile.avatarUrl;
-      debugPrint('[AUTH] _applyRemoteProfile: avatarBase64 applicato '
-          'per "$targetIdentifier"');
     }
 
     await _saveAccounts();
-    // Se il profilo scaricato riguarda l'utente attualmente
-    // visualizzato, notifica la UI. Se riguarda un login in corso su
-    // un identifier diverso da quello ancora "attivo" (raro, solo
-    // nella finestra tra verify e _loginInternal), la UI si
-    // aggiornerà comunque al notifyListeners() successivo chiamato
-    // da _loginInternal.
     notifyListeners();
   }
 }

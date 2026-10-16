@@ -3,10 +3,19 @@ import '../models/hive_models.dart';
 import '../db/hive_database.dart';
 import '../services/sync/sync_trigger.dart';
 import '../services/sync/delete_propagator.dart';
+import '../services/sync/cloud_auth_bridge.dart';
 
 void _unawaited(Future<void> future) {}
 
 class WorkoutProvider extends ChangeNotifier {
+  // NUOVO (fix bleeding dati tra account) — vedi commento in
+  // CloudAuthBridge.notifyAccountSwitched().
+  WorkoutProvider() {
+    CloudAuthBridge.instance.addAccountSwitchedListener(() {
+      loadWorkouts();
+    });
+  }
+
   List<HiveWorkout> _workouts = [];
   List<HiveWorkoutExercise> _currentExercises = [];
 
@@ -45,13 +54,6 @@ class WorkoutProvider extends ChangeNotifier {
     SyncTrigger.instance.requestSync();
   }
 
-  // MODIFICATO (fix resurrezione schede eliminate) — il tombstone
-  // viene registrato AWAITED, PRIMA della cancellazione da Hive:
-  // una singola scrittura locale rapida che protegge da un
-  // successivo download che ritrovi ancora la scheda sul backend
-  // (DELETE remoto sempre fire-and-forget, può richiedere secondi
-  // con Render in cold start, o non completarsi mai se l'app viene
-  // chiusa subito dopo l'eliminazione).
   Future<void> deleteWorkout(dynamic key) async {
     final intKey = key is int ? key : null;
     if (intKey != null) {

@@ -3,8 +3,15 @@ import '../db/training_mode_database.dart';
 import '../models/training_mode.dart';
 import '../services/sync/sync_trigger.dart';
 import '../services/sync/delete_propagator.dart';
+import '../services/sync/cloud_auth_bridge.dart';
 
 class TrainingModeProvider extends ChangeNotifier {
+  TrainingModeProvider() {
+    CloudAuthBridge.instance.addAccountSwitchedListener(() {
+      loadModes();
+    });
+  }
+
   List<TrainingMode> _modes = [];
 
   List<TrainingMode> get modes => _modes;

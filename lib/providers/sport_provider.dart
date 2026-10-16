@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../db/sport_database.dart';
 import '../models/sport_models.dart';
 import '../services/sync/sync_trigger.dart';
+import '../services/sync/cloud_auth_bridge.dart';
 
 class SportStats {
   final int count;
@@ -23,6 +24,12 @@ class SportStats {
 }
 
 class SportProvider extends ChangeNotifier {
+  SportProvider() {
+    CloudAuthBridge.instance.addAccountSwitchedListener(() {
+      loadSessions();
+    });
+  }
+
   List<HiveSportSession> _sessions = [];
   List<HiveSportSession> get sessions => _sessions;
 
@@ -54,9 +61,6 @@ class SportProvider extends ChangeNotifier {
   Future<void> deleteSession(dynamic key) async {
     await SportDatabase.instance.deleteSession(key);
     loadSessions();
-    // Nessuna propagazione DELETE al backend in questo blocco (limite
-    // dichiarato): la sessione sportiva resta orfana sul backend fino
-    // a un'estensione futura di DeletePropagator per questo dominio.
   }
 
   SportStats statsFor(SportType type) {

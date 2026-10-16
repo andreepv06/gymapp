@@ -8,9 +8,9 @@ class CloudAuthBridge {
   Future<void> Function(String identifier, String password)? _handler;
   Future<bool> Function(String identifier, String password)? _verifyHandler;
   Future<void> Function()? _logoutHandler;
-  // NUOVO — vedi registerProfileUpdateHandler/registerProfileDownloadedHandler
   Future<void> Function(Map<String, String?> fields)? _profileUpdateHandler;
   Future<void> Function(BackendUserProfile profile)? _profileDownloadedHandler;
+  Future<Map<String, String?>> Function()? _localProfileProvider;
 
   void register(Future<void> Function(String identifier, String password) handler) {
     _handler = handler;
@@ -41,12 +41,6 @@ class CloudAuthBridge {
     _logoutHandler = null;
   }
 
-  // NUOVO (fix audit sincronizzazione) — canale AuthProvider →
-  // BackendAuthProvider: "il profilo locale è appena cambiato,
-  // propagalo al backend". Stesso pattern register/notify già usato
-  // per login/logout, applicato al dominio profilo. `fields` contiene
-  // solo le chiavi effettivamente modificate in quella chiamata
-  // (update parziale).
   void registerProfileUpdateHandler(
       Future<void> Function(Map<String, String?> fields) handler) {
     _profileUpdateHandler = handler;
@@ -71,14 +65,6 @@ class CloudAuthBridge {
     }
   }
 
-  // NUOVO (fix audit sincronizzazione) — canale inverso:
-  // BackendAuthProvider → AuthProvider: "ho appena scaricato il
-  // profilo dal backend (login, restore, o import iniziale su un
-  // nuovo dispositivo), applicalo all'account locale corrente".
-  // Prima d'ora questo canale non esisteva affatto: anche un profilo
-  // correttamente presente sul backend non veniva mai copiato
-  // nell'account locale, quindi la foto/i dati profilo non
-  // comparivano mai su un secondo dispositivo.
   void registerProfileDownloadedHandler(
       Future<void> Function(BackendUserProfile profile) handler) {
     _profileDownloadedHandler = handler;
@@ -100,14 +86,8 @@ class CloudAuthBridge {
     }
   }
 
-  // NUOVO (fix backfill profilo) — canale AuthProvider → chiunque
-  // debba conoscere lo stato attuale del profilo locale, usato da
-  // BackendAuthProvider per il backfill automatico: se il backend
-  // non ha ancora un campo che il dispositivo locale ha invece già
-  // popolato (es. un avatar impostato prima che l'upload esistesse),
-  // questo canale permette di recuperarlo e inviarlo.
-  Future<Map<String, String?>> Function()? _localProfileProvider;
-
+  // RIPRISTINATO — snapshot del profilo locale, usato dal backfill
+  // in BackendAuthProvider._backfillLocalProfileIfNeeded().
   void registerLocalProfileProvider(
       Future<Map<String, String?>> Function() provider) {
     _localProfileProvider = provider;
@@ -139,7 +119,7 @@ class CloudAuthBridge {
       await handler(identifier, password);
       debugPrint('[CLOUD_BRIDGE] syncIdentity($identifier) completato');
     } catch (e) {
-      debugPrint('[CLOUD_BRIDGE] syncIdentity($identifier) ERRORE:$e');
+      debugPrint('[CLOUD_BRIDGE] syncIdentity($identifier) ERRORE: $e');
     }
   }
 
@@ -151,10 +131,10 @@ class CloudAuthBridge {
     }
     try {
       final ok = await handler(identifier, password);
-      debugPrint('[CLOUD_BRIDGE] verifyRemoteAccount($identifier) =$ok');
+      debugPrint('[CLOUD_BRIDGE] verifyRemoteAccount($identifier) = $ok');
       return ok;
     } catch (e) {
-      debugPrint('[CLOUD_BRIDGE] verifyRemoteAccount($identifier) ERRORE:$e');
+      debugPrint('[CLOUD_BRIDGE] verifyRemoteAccount($identifier) ERRORE: $e');
       return false;
     }
   }
@@ -167,6 +147,27 @@ class CloudAuthBridge {
       debugPrint('[CLOUD_BRIDGE] notifyLogout completato');
     } catch (e) {
       debugPrint('[CLOUD_BRIDGE] notifyLogout ERRORE: $e');
+    }
+  }
+
+  // Canale multi-listener: ogni Provider si registra per ricaricare
+  // i propri dati dopo un cambio account (switchUser chiude/riapre
+  // tutti i box Hive, ma i Provider mantengono liste in memoria).
+  final List<void Function()> _accountSwitchedListeners = [];
+
+  void addAccountSwitchedListener(void Function() listener) {
+    _accountSwitchedListeners.add(listener);
+  }
+
+  void notifyAccountSwitched() {
+    debugPrint('[CLOUD_BRIDGE] notifyAccountSwitched: '
+        '${_accountSwitchedListeners.length} listener da avvisare');
+    for (final listener in List<void Function()>.from(_accountSwitchedListeners)) {
+      try {
+        listener();
+      } catch (e) {
+        debugPrint('[CLOUD_BRIDGE] accountSwitched listener ERRORE: $e');
+      }
     }
   }
 }

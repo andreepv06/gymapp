@@ -3,10 +3,17 @@ import '../models/hive_models.dart';
 import '../db/hive_database.dart';
 import '../services/sync/sync_trigger.dart';
 import '../services/sync/delete_propagator.dart';
+import '../services/sync/cloud_auth_bridge.dart';
 
 void _unawaited(Future<void> future) {}
 
 class ExerciseProvider extends ChangeNotifier {
+  ExerciseProvider() {
+    CloudAuthBridge.instance.addAccountSwitchedListener(() {
+      loadExercises();
+    });
+  }
+
   List<HiveExercise> _exercises = [];
   String _selectedMuscleGroup = 'Tutti';
 
@@ -53,11 +60,6 @@ class ExerciseProvider extends ChangeNotifier {
     SyncTrigger.instance.requestSync();
   }
 
-  // MODIFICATO — propaga la cancellazione al backend tramite
-  // DeletePropagator. Nota: il backend usa onDelete: Restrict per
-  // Exercise, quindi se l'esercizio è ancora referenziato da dati
-  // remoti la propagazione fallirà silenziosamente (best-effort) —
-  // il delete locale resta comunque sempre valido.
   Future<void> deleteExercise(dynamic key) async {
     final intKey = key is int ? key : null;
     await HiveDatabase.instance.deleteExercise(key);

@@ -10,6 +10,7 @@ import '../models/training_mode.dart';
 import '../services/notification_service.dart';
 import '../services/session_classification_service.dart';
 import '../services/sync/sync_trigger.dart';
+import '../services/sync/cloud_auth_bridge.dart';
 
 class ActiveSet {
   int setNumber;
@@ -1250,3 +1251,4 @@ class SessionProvider extends ChangeNotifier {
 
   int? _sessionAsIntKeyRef(dynamic k) => _sessionAsIntKey(k);
 }
+void unawaited(Future<void> future) {}
